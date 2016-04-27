@@ -57,6 +57,8 @@ struct stats
 struct client
 {
 	int value_size;
+        int cid;
+        struct client_value v;
 	int outstanding;
 	struct stats stats;
 	struct event_base* base;
@@ -89,12 +91,9 @@ random_string(char *s, const int len)
 static void
 client_submit_value(struct client* c)
 {
-	struct client_value v;
-	gettimeofday(&v.t, NULL);
-	v.size = c->value_size;
-	random_string(v.value, v.size);
-	size_t size = sizeof(struct timeval) + sizeof(size_t) + v.size;
-	paxos_submit(c->bev, (char*)&v, size);
+	gettimeofday(&c->v.t, NULL);
+	size_t size = sizeof(struct timeval) + sizeof(size_t) + c->v.size;
+	paxos_submit(c->bev, (char*)&c->v, size);
 }
 
 // Returns t2 - t1 in microseconds.
@@ -178,7 +177,7 @@ connect_to_proposer(struct client* c, const char* config, int proposer_id)
 }
 
 static struct client*
-make_client(const char* config, int proposer_id, int outstanding, int value_size)
+make_client(const char* config, int proposer_id, int outstanding, int value_size, int cid)
 {
 	struct client* c;
 	c = malloc(sizeof(struct client));
@@ -202,6 +201,9 @@ make_client(const char* config, int proposer_id, int outstanding, int value_size
 	c->sig = evsignal_new(c->base, SIGINT, handle_sigint, c->base);
 	evsignal_add(c->sig, NULL);
 	
+	gettimeofday(&c->v.t, NULL);
+	c->v.size = c->value_size;
+	random_string(c->v.value, c->v.size);
 	return c;
 }
 
@@ -218,10 +220,10 @@ client_free(struct client* c)
 }
 
 static void
-start_client(const char* config, int proposer_id, int outstanding, int value_size)
+start_client(const char* config, int proposer_id, int outstanding, int value_size, int  cid)
 {
 	struct client* client;
-	client = make_client(config, proposer_id, outstanding, value_size);
+	client = make_client(config, proposer_id, outstanding, value_size, cid);
 	signal(SIGPIPE, SIG_IGN);
 	event_base_dispatch(client->base);
 	client_free(client);
@@ -245,6 +247,7 @@ main(int argc, char const *argv[])
 	int proposer_id = 0;
 	int outstanding = 1;
 	int value_size = 64;
+	int cid = 0;
 	const char* config = "../paxos.conf";
 
 	if (argc > 1 && argv[1][0] != '-') {
@@ -261,13 +264,15 @@ main(int argc, char const *argv[])
 			value_size = atoi(argv[++i]);
 		else if (strcmp(argv[i], "-p") == 0 || strcmp(argv[i], "--proposer-id") == 0)
 			proposer_id = atoi(argv[++i]);
+		else if (strcmp(argv[i], "-c") == 0 || strcmp(argv[i], "--client-id") == 0)
+			cid = atoi(argv[++i]);
 		else
 			usage(argv[0]);
 		i++;
 	}
 	
 	srand(time(NULL));
-	start_client(config, proposer_id, outstanding, value_size);
+	start_client(config, proposer_id, outstanding, value_size, cid);
 	
 	return 0;
 }
