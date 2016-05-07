@@ -36,13 +36,21 @@
 #include <event2/event.h>
 #include <netinet/tcp.h>
 
-#define MAX_VALUE_SIZE 8192
+/* levelDB */
+ #include <leveldb/c.h>
+
+#define MAX_KEY_SIZE 16
+#define MAX_VALUE_SIZE 16
 
 
 struct client_value
 {
   struct timeval t;
-  size_t size;
+  int op;
+  int cid;
+  size_t ksize;
+  char key[MAX_KEY_SIZE];
+  size_t vsize;
   char value[MAX_VALUE_SIZE];
 };
 
@@ -57,8 +65,8 @@ struct stats
 struct client
 {
 	int value_size;
-        int cid;
-        struct client_value v;
+    int cid;
+    struct client_value v;
 	int outstanding;
 	struct stats stats;
 	struct event_base* base;
@@ -67,7 +75,77 @@ struct client
 	struct timeval stats_interval;
 	struct event* sig;
 	struct evlearner* learner;
+	FILE *fp;
+    leveldb_t *db;
+    leveldb_options_t *options;
+    leveldb_readoptions_t *roptions;
+    leveldb_writeoptions_t *woptions;
 };
+
+enum command_t {
+    PUT = 1,
+    GET,
+    DELETE
+};
+
+enum boolean { false, true };
+
+void open_db(struct client *ctx, char* db_name) {
+    char *err = NULL;
+    ctx->options = leveldb_options_create();
+    leveldb_options_set_create_if_missing(ctx->options, true);
+    ctx->db = leveldb_open(ctx->options, db_name, &err);    
+    if (err != NULL) {
+        fprintf(stderr, "Open fail.\n");
+        leveldb_free(err);
+        exit (EXIT_FAILURE);
+    }
+}
+
+void destroy_db(struct client *ctx, char* db_name) {
+    char *err = NULL;
+    leveldb_destroy_db(ctx->options, db_name, &err);    
+    if (err != NULL) {
+        fprintf(stderr, "Open fail.\n");
+        leveldb_free(err);
+        exit (EXIT_FAILURE);
+    }
+}
+
+int add_entry(struct client *ctx, int sync, char *key, int ksize, char* val, int vsize) {
+    char *err = NULL;
+    leveldb_writeoptions_set_sync(ctx->woptions, sync);
+    leveldb_put(ctx->db, ctx->woptions, key, ksize, val, vsize, &err);
+    if (err != NULL) {
+        fprintf(stderr, "Write fail.\n");
+        leveldb_free(err); err = NULL;
+        return(1);
+    }
+    return 0;
+}
+
+int get_value(struct client *ctx, char *key, size_t ksize, char** val, size_t* vsize) {
+    char *err = NULL;
+    *val = leveldb_get(ctx->db, ctx->roptions, key, ksize, vsize, &err);
+    if (err != NULL) {
+        fprintf(stderr, "Read fail.\n");
+        leveldb_free(err); err = NULL;
+        return(1);
+    }
+    return 0;
+}
+
+int delete_entry(struct client *ctx, char *key, int ksize) {
+    char *err = NULL;
+    leveldb_delete(ctx->db, ctx->woptions, key, ksize, &err);
+    if (err != NULL) {
+        fprintf(stderr, "Delete fail.\n");
+        leveldb_free(err); err = NULL;
+        return(1);
+    }
+    return 0;
+}
+
 
 static void
 handle_sigint(int sig, short ev, void* arg)
@@ -92,7 +170,7 @@ static void
 client_submit_value(struct client* c)
 {
 	gettimeofday(&c->v.t, NULL);
-	size_t size = sizeof(struct timeval) + sizeof(size_t) + c->v.size;
+	size_t size = sizeof(struct timeval) + sizeof(int) + 2*sizeof(size_t) + c->v.ksize + c->v.vsize;
 	paxos_submit(c->bev, (char*)&c->v, size);
 }
 
@@ -113,8 +191,9 @@ update_stats(struct stats* stats, struct client_value* delivered)
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
 	long lat = timeval_diff(&delivered->t, &tv);
+	printf("%ld\n", lat);
 	stats->delivered++;
-	stats->avg_latency = stats->avg_latency + 
+	stats->avg_latency = stats->avg_latency +
 		((lat - stats->avg_latency) / stats->delivered);
 	if (stats->min_latency == 0 || lat < stats->min_latency)
 		stats->min_latency = lat;
@@ -127,6 +206,27 @@ on_deliver(unsigned iid, char* value, size_t size, void* arg)
 {
 	struct client* c = arg;
 	struct client_value* v = (struct client_value*)value;
+	if (c->cid != v->cid) {
+		return;
+	}
+	switch(v->op) {
+		case PUT: {
+			// printf("PUT: key %s: %zu, value %s: %zu\n", v->key, v->ksize, v->value, v->vsize);
+			add_entry(c, false, v->key, v->ksize, v->value, v->vsize);
+			break;
+		}
+		case GET: {
+			char *value;
+			size_t vsize = 0;
+			get_value(c, v->key, v->ksize, &value, &vsize);
+			// printf("GET: key %s: %zu, RETURN: %s %zu\n", v->key, v->ksize, value, vsize);
+			if (value)
+				free(value);
+			break;
+		}
+	}
+
+
 	update_stats(&c->stats, v);
 	client_submit_value(c);
 }
@@ -136,7 +236,7 @@ on_stats(evutil_socket_t fd, short event, void *arg)
 {
 	struct client* c = arg;
 	double mbps = (double)(c->stats.delivered*c->value_size*8) / (1024*1024);
-	printf("%d value/sec, %.2f Mbps, latency min %ld us max %ld us avg %ld us\n", 
+	fprintf(c->fp, "%d value/sec, %.2f Mbps, latency min %ld us max %ld us avg %ld us\n",
 		c->stats.delivered, mbps, c->stats.min_latency, c->stats.max_latency,
 		c->stats.avg_latency);
 	memset(&c->stats, 0, sizeof(struct stats));
@@ -177,7 +277,7 @@ connect_to_proposer(struct client* c, const char* config, int proposer_id)
 }
 
 static struct client*
-make_client(const char* config, int proposer_id, int outstanding, int value_size, int cid)
+make_client(const char* config, int proposer_id, int outstanding, int cid, int op, char *key, char *value)
 {
 	struct client* c;
 	c = malloc(sizeof(struct client));
@@ -188,9 +288,8 @@ make_client(const char* config, int proposer_id, int outstanding, int value_size
 	if (c->bev == NULL)
 		exit(1);
 	
-	c->value_size = value_size;
 	c->outstanding = outstanding;
-	
+	c->cid = cid;
 	c->stats_interval = (struct timeval){1, 0};
 	c->stats_ev = evtimer_new(c->base, on_stats, c);
 	event_add(c->stats_ev, &c->stats_interval);
@@ -202,8 +301,32 @@ make_client(const char* config, int proposer_id, int outstanding, int value_size
 	evsignal_add(c->sig, NULL);
 	
 	gettimeofday(&c->v.t, NULL);
-	c->v.size = c->value_size;
-	random_string(c->v.value, c->v.size);
+
+	char fname[128];
+	snprintf(fname, 128, "client%d-osd%d.txt", cid, outstanding);
+	c->fp = fopen(fname, "w+");
+	/* craft levelDB request */
+	c->v.op = op;
+	if (key != NULL) {
+		size_t ksize = strlen(key) + 1;
+		c->v.ksize = ksize;
+		memcpy(c->v.key, key, ksize);
+	} else {
+		c->v.ksize = MAX_KEY_SIZE;
+		random_string(c->v.key, c->v.ksize);
+	}
+	if (value != NULL) {
+		size_t vsize = strlen(value) + 1;
+		c->v.vsize = vsize;
+		memcpy(c->v.value, value, vsize);
+	} else {
+		c->v.vsize = MAX_VALUE_SIZE;
+		random_string(c->v.value, c->v.vsize);
+	}
+	c->v.cid = cid;
+	fprintf(c->fp, "key: %s\nvalue: %s\n", c->v.key, c->v.value);
+    c->woptions = leveldb_writeoptions_create();
+    c->roptions = leveldb_readoptions_create();
 	return c;
 }
 
@@ -216,15 +339,21 @@ client_free(struct client* c)
 	event_base_free(c->base);
 	if (c->learner)
 		evlearner_free(c->learner);
+	fclose(c->fp);
+	leveldb_close(c->db);
+    leveldb_writeoptions_destroy(c->woptions);
+    leveldb_readoptions_destroy(c->roptions);
+    leveldb_options_destroy(c->options);
 	free(c);
 }
 
 static void
-start_client(const char* config, int proposer_id, int outstanding, int value_size, int  cid)
+start_client(const char* config, int proposer_id, int outstanding, int  cid, int op, char *key, char *value)
 {
 	struct client* client;
-	client = make_client(config, proposer_id, outstanding, value_size, cid);
+	client = make_client(config, proposer_id, outstanding, cid, op, key, value);
 	signal(SIGPIPE, SIG_IGN);
+    open_db(client, "/tmp/test");
 	event_base_dispatch(client->base);
 	client_free(client);
 }
@@ -235,7 +364,7 @@ usage(const char* name)
 	printf("Usage: %s [path/to/paxos.conf] [-h] [-o] [-v] [-p]\n", name);
 	printf("  %-30s%s\n", "-h, --help", "Output this message and exit");
 	printf("  %-30s%s\n", "-o, --outstanding #", "Number of outstanding client values");
-	printf("  %-30s%s\n", "-v, --value-size #", "Size of client value (in bytes)");
+	// printf("  %-30s%s\n", "-v, --value-size #", "Size of client value (in bytes)");
 	printf("  %-30s%s\n", "-p, --proposer-id #", "d of the proposer to connect to");
 	exit(1);
 }
@@ -246,13 +375,13 @@ main(int argc, char const *argv[])
 	int i = 1;
 	int proposer_id = 0;
 	int outstanding = 1;
-	int value_size = 64;
+	int op = GET;
 	int cid = 0;
-	const char* config = "../paxos.conf";
-
-	if (argc > 1 && argv[1][0] != '-') {
-		config = argv[1];
-		i++;
+	char *key = NULL;
+	char *value = NULL;
+	if (argc < 2) {
+		usage(argv[0]);
+		return 0;
 	}
 
 	while (i != argc) {
@@ -260,19 +389,25 @@ main(int argc, char const *argv[])
 			usage(argv[0]);
 		else if (strcmp(argv[i], "-o") == 0 || strcmp(argv[i], "--outstanding") == 0)
 			outstanding = atoi(argv[++i]);
-		else if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--value-size") == 0)
-			value_size = atoi(argv[++i]);
 		else if (strcmp(argv[i], "-p") == 0 || strcmp(argv[i], "--proposer-id") == 0)
 			proposer_id = atoi(argv[++i]);
 		else if (strcmp(argv[i], "-c") == 0 || strcmp(argv[i], "--client-id") == 0)
 			cid = atoi(argv[++i]);
-		else
-			usage(argv[0]);
+		else if (strcmp(argv[i], "-s") == 0 || strcmp(argv[i], "--set-op") == 0)
+			op = atoi(argv[++i]);
+		else if (strcmp(argv[i], "-k") == 0 || strcmp(argv[i], "--set-key") == 0)
+			key = strdup(argv[++i]);
+		else if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--set-value") == 0)
+			value = strdup(argv[++i]);
 		i++;
 	}
 	
 	srand(time(NULL));
-	start_client(config, proposer_id, outstanding, value_size, cid);
-	
+	start_client(argv[1], proposer_id, outstanding, cid, op, key, value);
+	if (key)
+		free(key);
+	if (value)
+		free(value);
+
 	return 0;
 }

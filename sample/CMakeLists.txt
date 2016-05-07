@@ -2,6 +2,12 @@ include_directories(${CMAKE_SOURCE_DIR}/paxos/include)
 include_directories(${CMAKE_SOURCE_DIR}/evpaxos/include)
 include_directories(${LIBEVENT_INCLUDE_DIRS})
 
+# begin levelDB
+include_directories(/usr/local/include/leveldb/include)
+link_directories(/usr/local/lib)
+set (LIBPAXOS_LINKER_LIBS ${LIBPAXOS_LINKER_LIBS} leveldb)
+# end LevelDB
+
 set(TEST_SOURCES learner.c acceptor.c proposer.c client.c replica.c counter.c)
 
 foreach(p ${TEST_SOURCES})
