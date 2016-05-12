@@ -472,6 +472,8 @@ instance_to_accept(struct instance* inst, paxos_accept* accept)
 	*accept = (paxos_accept) {
 		inst->iid,
 		inst->ballot,
+		inst->ballot,
+		0, // acceptor id field
 		{ v->paxos_value_len,
 		  v->paxos_value_val }
 	};

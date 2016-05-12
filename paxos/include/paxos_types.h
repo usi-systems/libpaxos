@@ -41,16 +41,19 @@ typedef struct paxos_value paxos_value;
 struct paxos_prepare
 {
 	uint32_t iid;
-	uint32_t ballot;
+	uint16_t ballot;
+	uint16_t value_ballot;
+	uint16_t aid;
+	paxos_value value;
 };
 typedef struct paxos_prepare paxos_prepare;
 
 struct paxos_promise
 {
-	uint32_t aid;
 	uint32_t iid;
-	uint32_t ballot;
-	uint32_t value_ballot;
+	uint16_t ballot;
+	uint16_t value_ballot;
+	uint16_t aid;
 	paxos_value value;
 };
 typedef struct paxos_promise paxos_promise;
@@ -58,26 +61,30 @@ typedef struct paxos_promise paxos_promise;
 struct paxos_accept
 {
 	uint32_t iid;
-	uint32_t ballot;
+	uint16_t ballot;
+	uint16_t value_ballot;
+	uint16_t aid;
 	paxos_value value;
 };
 typedef struct paxos_accept paxos_accept;
 
 struct paxos_accepted
 {
-	uint32_t aid;
 	uint32_t iid;
-	uint32_t ballot;
-	uint32_t value_ballot;
+	uint16_t ballot;
+	uint16_t value_ballot;
+	uint16_t aid;
 	paxos_value value;
 };
 typedef struct paxos_accepted paxos_accepted;
 
 struct paxos_preempted
 {
-	uint32_t aid;
 	uint32_t iid;
-	uint32_t ballot;
+	uint16_t ballot;
+	uint16_t value_ballot;
+	uint16_t aid;
+	paxos_value value;
 };
 typedef struct paxos_preempted paxos_preempted;
 

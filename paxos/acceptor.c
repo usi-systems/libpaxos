@@ -161,10 +161,10 @@ paxos_accepted_to_promise(paxos_accepted* acc, paxos_message* out)
 {
 	out->type = PAXOS_PROMISE;
 	out->u.promise = (paxos_promise) {
-		acc->aid,
 		acc->iid,
 		acc->ballot,
 		acc->value_ballot,
+		acc->aid,
 		{acc->value.paxos_value_len, acc->value.paxos_value_val}
 	};
 }
@@ -180,10 +180,10 @@ paxos_accept_to_accepted(int id, paxos_accept* acc, paxos_message* out)
 	}
 	out->type = PAXOS_ACCEPTED;
 	out->u.accepted = (paxos_accepted) {
-		id,
 		acc->iid,
 		acc->ballot,
 		acc->ballot,
+		id,
 		{value_size, value}
 	};
 }
@@ -192,5 +192,5 @@ static void
 paxos_accepted_to_preempted(int id, paxos_accepted* acc, paxos_message* out)
 {
 	out->type = PAXOS_PREEMPTED;
-	out->u.preempted = (paxos_preempted) { id, acc->iid, acc->ballot };
+	out->u.preempted = (paxos_preempted) { acc->iid, acc->ballot, 0, id, {0, NULL} };
 }
