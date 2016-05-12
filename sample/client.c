@@ -47,7 +47,7 @@ struct client_value
 {
   struct timeval t;
   int op;
-  int cid;
+  int client_id;
   size_t ksize;
   char key[MAX_KEY_SIZE];
   size_t vsize;
@@ -56,18 +56,20 @@ struct client_value
 
 struct stats
 {
-	int delivered;
 	long min_latency;
 	long max_latency;
 	long avg_latency;
+	int delivered_count;
+	size_t delivered_bytes;
 };
 
 struct client
 {
-	int value_size;
-    int cid;
+	int id;
+    int client_id;
     struct client_value v;
 	int outstanding;
+	char* send_buffer;
 	struct stats stats;
 	struct event_base* base;
 	struct bufferevent* bev;
@@ -170,8 +172,9 @@ static void
 client_submit_value(struct client* c)
 {
 	gettimeofday(&c->v.t, NULL);
-	size_t size = sizeof(struct timeval) + sizeof(int) + 2*sizeof(size_t) + c->v.ksize + c->v.vsize;
-	paxos_submit(c->bev, (char*)&c->v, size);
+	c->v.client_id = c->client_id;
+    size_t size = sizeof(struct timeval) + sizeof(int) + 2*sizeof(size_t) + c->v.ksize + c->v.vsize;
+    paxos_submit(c->bev, (char*)&c->v, size);
 }
 
 // Returns t2 - t1 in microseconds.
@@ -186,15 +189,16 @@ timeval_diff(struct timeval* t1, struct timeval* t2)
 }
 
 static void
-update_stats(struct stats* stats, struct client_value* delivered)
+update_stats(struct stats* stats, struct client_value* delivered, size_t size)
 {
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
 	long lat = timeval_diff(&delivered->t, &tv);
 	printf("%ld\n", lat);
-	stats->delivered++;
-	stats->avg_latency = stats->avg_latency +
-		((lat - stats->avg_latency) / stats->delivered);
+	stats->delivered_count++;
+	stats->delivered_bytes += size;
+	stats->avg_latency = stats->avg_latency + 
+		((lat - stats->avg_latency) / stats->delivered_count);
 	if (stats->min_latency == 0 || lat < stats->min_latency)
 		stats->min_latency = lat;
 	if (lat > stats->max_latency)
@@ -206,7 +210,7 @@ on_deliver(unsigned iid, char* value, size_t size, void* arg)
 {
 	struct client* c = arg;
 	struct client_value* v = (struct client_value*)value;
-	if (c->cid != v->cid) {
+	if (c->client_id != v->client_id) {
 		return;
 	}
 	switch(v->op) {
@@ -225,9 +229,7 @@ on_deliver(unsigned iid, char* value, size_t size, void* arg)
 			break;
 		}
 	}
-
-
-	update_stats(&c->stats, v);
+	update_stats(&c->stats, v, size);
 	client_submit_value(c);
 }
 
@@ -235,10 +237,10 @@ static void
 on_stats(evutil_socket_t fd, short event, void *arg)
 {
 	struct client* c = arg;
-	double mbps = (double)(c->stats.delivered*c->value_size*8) / (1024*1024);
-	fprintf(c->fp, "%d value/sec, %.2f Mbps, latency min %ld us max %ld us avg %ld us\n",
-		c->stats.delivered, mbps, c->stats.min_latency, c->stats.max_latency,
-		c->stats.avg_latency);
+	double mbps = (double)(c->stats.delivered_bytes * 8) / (1024*1024);
+    fprintf(c->fp, "%d value/sec, %.2f Mbps, latency min %ld us max %ld us avg %ld us\n",
+		c->stats.delivered_count, mbps, c->stats.min_latency,
+		c->stats.max_latency, c->stats.avg_latency);
 	memset(&c->stats, 0, sizeof(struct stats));
 	event_add(c->stats_ev, &c->stats_interval);
 }
@@ -277,7 +279,7 @@ connect_to_proposer(struct client* c, const char* config, int proposer_id)
 }
 
 static struct client*
-make_client(const char* config, int proposer_id, int outstanding, int cid, int op, char *key, char *value)
+make_client(const char* config, int proposer_id, int outstanding, int client_id, int op, char *key, char *value)
 {
 	struct client* c;
 	c = malloc(sizeof(struct client));
@@ -289,7 +291,8 @@ make_client(const char* config, int proposer_id, int outstanding, int cid, int o
 		exit(1);
 	
 	c->outstanding = outstanding;
-	c->cid = cid;
+	c->client_id = client_id;
+	c->send_buffer = malloc(sizeof(struct client_value));
 	c->stats_interval = (struct timeval){1, 0};
 	c->stats_ev = evtimer_new(c->base, on_stats, c);
 	event_add(c->stats_ev, &c->stats_interval);
@@ -303,7 +306,7 @@ make_client(const char* config, int proposer_id, int outstanding, int cid, int o
 	gettimeofday(&c->v.t, NULL);
 
 	char fname[128];
-	snprintf(fname, 128, "client%d-osd%d.txt", cid, outstanding);
+	snprintf(fname, 128, "client%d-osd%d.txt", client_id, outstanding);
 	c->fp = fopen(fname, "w+");
 	/* craft levelDB request */
 	c->v.op = op;
@@ -323,7 +326,7 @@ make_client(const char* config, int proposer_id, int outstanding, int cid, int o
 		c->v.vsize = MAX_VALUE_SIZE;
 		random_string(c->v.value, c->v.vsize);
 	}
-	c->v.cid = cid;
+	c->v.client_id = client_id;
 	fprintf(c->fp, "key: %s\nvalue: %s\n", c->v.key, c->v.value);
     c->woptions = leveldb_writeoptions_create();
     c->roptions = leveldb_readoptions_create();
@@ -333,6 +336,7 @@ make_client(const char* config, int proposer_id, int outstanding, int cid, int o
 static void
 client_free(struct client* c)
 {
+	free(c->send_buffer);
 	bufferevent_free(c->bev);
 	event_free(c->stats_ev);
 	event_free(c->sig);
@@ -348,10 +352,10 @@ client_free(struct client* c)
 }
 
 static void
-start_client(const char* config, int proposer_id, int outstanding, int  cid, int op, char *key, char *value)
+start_client(const char* config, int proposer_id, int outstanding, int  client_id, int op, char *key, char *value)
 {
 	struct client* client;
-	client = make_client(config, proposer_id, outstanding, cid, op, key, value);
+	client = make_client(config, proposer_id, outstanding, client_id, op, key, value);
 	signal(SIGPIPE, SIG_IGN);
     open_db(client, "/tmp/test");
 	event_base_dispatch(client->base);
@@ -376,13 +380,13 @@ main(int argc, char const *argv[])
 	int proposer_id = 0;
 	int outstanding = 1;
 	int op = GET;
-	int cid = 0;
+	int client_id = 0;
 	char *key = NULL;
 	char *value = NULL;
 	if (argc < 2) {
 		usage(argv[0]);
 		return 0;
-	}
+    }
 
 	while (i != argc) {
 		if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0)
@@ -392,7 +396,7 @@ main(int argc, char const *argv[])
 		else if (strcmp(argv[i], "-p") == 0 || strcmp(argv[i], "--proposer-id") == 0)
 			proposer_id = atoi(argv[++i]);
 		else if (strcmp(argv[i], "-c") == 0 || strcmp(argv[i], "--client-id") == 0)
-			cid = atoi(argv[++i]);
+			client_id = atoi(argv[++i]);
 		else if (strcmp(argv[i], "-s") == 0 || strcmp(argv[i], "--set-op") == 0)
 			op = atoi(argv[++i]);
 		else if (strcmp(argv[i], "-k") == 0 || strcmp(argv[i], "--set-key") == 0)
@@ -403,11 +407,10 @@ main(int argc, char const *argv[])
 	}
 	
 	srand(time(NULL));
-	start_client(argv[1], proposer_id, outstanding, cid, op, key, value);
+	start_client(argv[1], proposer_id, outstanding, client_id, op, key, value);
 	if (key)
 		free(key);
 	if (value)
 		free(value);
-
 	return 0;
 }

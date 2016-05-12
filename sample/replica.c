@@ -34,9 +34,10 @@
 
 struct client_value
 {
+	int client_id;
 	struct timeval t;
 	size_t size;
-	char value[];
+	char value[0];
 };
 
 static int verbose = 0;
