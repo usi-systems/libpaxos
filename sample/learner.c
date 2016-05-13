@@ -30,15 +30,94 @@
 #include <stdio.h>
 #include <evpaxos.h>
 #include <signal.h>
+ /* levelDB */
+#include <leveldb/c.h>
 
+#include "application.h"
 
-struct client_value
+struct application_ctx
 {
-	int client_id;
-	struct timeval t;
-	size_t size;
-	char value[0];
+    leveldb_t *db;
+    leveldb_options_t *options;
+    leveldb_readoptions_t *roptions;
+    leveldb_writeoptions_t *woptions;
 };
+
+struct application_ctx* new_application() {
+    struct application_ctx *ctx = malloc(sizeof (struct application_ctx));
+    return ctx;
+}
+
+
+void open_db(struct application_ctx *ctx, char* db_name) {
+    char *err = NULL;
+    leveldb_options_set_create_if_missing(ctx->options, true);
+    ctx->db = leveldb_open(ctx->options, db_name, &err);
+    if (err != NULL) {
+        fprintf(stderr, "Open fail.\n");
+        leveldb_free(err);
+        exit (EXIT_FAILURE);
+    }
+}
+
+void destroy_db(struct application_ctx *ctx, char* db_name) {
+    char *err = NULL;
+    leveldb_destroy_db(ctx->options, db_name, &err);
+    if (err != NULL) {
+        fprintf(stderr, "Open fail.\n");
+        leveldb_free(err);
+        exit (EXIT_FAILURE);
+    }
+}
+
+int add_entry(struct application_ctx *ctx, int sync, char *key, int ksize, char* val, int vsize) {
+    char *err = NULL;
+    leveldb_writeoptions_set_sync(ctx->woptions, sync);
+    leveldb_put(ctx->db, ctx->woptions, key, ksize, val, vsize, &err);
+    if (err != NULL) {
+        fprintf(stderr, "Write fail.\n");
+        leveldb_free(err); err = NULL;
+        return(1);
+    }
+    return 0;
+}
+
+int get_value(struct application_ctx *ctx, char *key, size_t ksize, char** val, size_t* vsize) {
+    char *err = NULL;
+    *val = leveldb_get(ctx->db, ctx->roptions, key, ksize, vsize, &err);
+    if (err != NULL) {
+        fprintf(stderr, "Read fail.\n");
+        leveldb_free(err); err = NULL;
+        return(1);
+    }
+    return 0;
+}
+
+int delete_entry(struct application_ctx *ctx, char *key, int ksize) {
+    char *err = NULL;
+    leveldb_delete(ctx->db, ctx->woptions, key, ksize, &err);
+    if (err != NULL) {
+        fprintf(stderr, "Delete fail.\n");
+        leveldb_free(err); err = NULL;
+        return(1);
+    }
+    return 0;
+}
+
+void init_application(struct application_ctx *ctx) {
+    ctx->options = leveldb_options_create();
+    ctx->woptions = leveldb_writeoptions_create();
+    ctx->roptions = leveldb_readoptions_create();
+    open_db(ctx, "/tmp/libpaxos");
+}
+
+
+void free_application(struct application_ctx *ctx) {
+    leveldb_close(ctx->db);
+    leveldb_writeoptions_destroy(ctx->woptions);
+    leveldb_readoptions_destroy(ctx->roptions);
+    leveldb_options_destroy(ctx->options);
+}
 
 static void
 handle_sigint(int sig, short ev, void* arg)
@@ -51,9 +130,35 @@ handle_sigint(int sig, short ev, void* arg)
 static void
 deliver(unsigned iid, char* value, size_t size, void* arg)
 {
+	struct application_ctx *ctx = arg;
 	struct client_value* val = (struct client_value*)value;
-	printf("%ld.%06ld [%.16s] %ld bytes\n", val->t.tv_sec, val->t.tv_usec,
-		val->value, (long)val->size);
+	if (val->application_type == LEVELDB) {
+		struct leveldb_request *req = (struct leveldb_request *) &val->content;
+		switch(req->op) {
+			case PUT: {
+				 printf("PUT: key %s: %zu, value %s: %zu\n", req->key, req->ksize, req->value, req->vsize);
+				 add_entry(ctx, false, req->key, req->ksize, req->value, req->vsize);
+				 break;
+		}
+			case GET: {
+				 char *value;
+				 size_t vsize = 0;
+				 get_value(ctx, req->key, req->ksize, &value, &vsize);
+				 printf("GET: key %s: %zu, RETURN: %s %zu\n", req->key, req->ksize, value, vsize);
+				 if (value)
+				     free(value);
+				 break;
+		}
+    }
+
+	} else if (val->application_type == SIMPLY_ECHO) {
+		struct echo_request *req = (struct echo_request *)&val->content;
+		printf("%ld.%06ld [%.32s] %ld bytes\n",
+			val->depart_ts.tv_sec,
+			val->depart_ts.tv_usec,
+			req->value,
+			(long)val->size);
+	}
 }
 
 static void
@@ -64,7 +169,11 @@ start_learner(const char* config)
 	struct event_base* base;
 
 	base = event_base_new();
-	lea = evlearner_init(config, deliver, NULL, base);
+
+	struct application_ctx *ctx = new_application();
+	init_application(ctx);
+
+	lea = evlearner_init(config, deliver, ctx, base);
 	if (lea == NULL) {
 		printf("Could not start the learner!\n");
 		exit(1);
@@ -79,6 +188,7 @@ start_learner(const char* config)
 	event_free(sig);
 	evlearner_free(lea);
 	event_base_free(base);
+	free_application(ctx);
 }
 
 int

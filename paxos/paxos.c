@@ -37,6 +37,7 @@ struct paxos_config paxos_config =
 {
 	.verbosity = PAXOS_LOG_INFO,
 	.tcp_nodelay = 1,
+	.netpaxos = 0,
 	.learner_catch_up = 1,
 	.proposer_timeout = 1,
 	.proposer_preexec_window = 128,

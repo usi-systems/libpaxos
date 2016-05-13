@@ -63,7 +63,8 @@ struct paxos_config
 	/* General configuration */
 	paxos_log_level verbosity;
 	int tcp_nodelay;
-	
+	int netpaxos;
+
 	/* Learner */
 	int learner_catch_up;
 	
