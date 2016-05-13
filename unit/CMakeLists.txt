@@ -6,7 +6,7 @@ add_subdirectory(gtest)
 
 add_executable(runtest runtest.cc replica_thread.c test_client.c
 	acceptor_unittest.cc learner_unittest.cc  proposer_unittest.cc 
-	config_unittest.cc storage_unittest.cc) # replica_unittest.cc)
+	config_unittest.cc storage_unittest.cc replica_unittest.cc)
 
 target_link_libraries(runtest evpaxos pthread gtest-all)
 

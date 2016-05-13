@@ -52,13 +52,14 @@ TEST(ReplicaTest, TotalOrderDelivery) {
 	replicas = start_replicas_from_config("config/replicas.conf", 
 		&threads, deliveries);
 	test_client* client = test_client_new("config/replicas.conf", 0);
-
-	for (i = 0; i < deliveries; i++)
+	for (i = 0; i < deliveries; i++) {
 		test_client_submit_value(client, i);
+	}
 	
 	int* values[replicas];
-	for (i = 0; i < replicas; i++)
+	for (i = 0; i < replicas; i++) {
 		values[i] = replica_thread_wait_deliveries(&threads[i]);
+	}
 	
 	for (i = 0; i < replicas; i++)
 		for (j = 0; j < deliveries; j++)
