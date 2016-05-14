@@ -1,6 +1,9 @@
 #ifndef APPLICATION_H_
 #define APPLICATION_H_
 
+ /* levelDB */
+#include <leveldb/c.h>
+
 #define MAX_KEY_SIZE 16
 #define MAX_VALUE_SIZE 16
 
@@ -45,5 +48,6 @@ enum command_t {
 };
 
 enum boolean { false, true };
+
 
 #endif

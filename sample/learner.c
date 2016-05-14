@@ -30,17 +30,31 @@
 #include <stdio.h>
 #include <evpaxos.h>
 #include <signal.h>
- /* levelDB */
-#include <leveldb/c.h>
+#include <string.h>
 
+/* Accept new TCP connection */
+#include <event2/listener.h>
+#include <errno.h>
+#include "net_utils.h"
 #include "application.h"
+#include "application_config.h"
+#include "leveldb_context.h"
+
+
+struct stats
+{
+    int delivered_count;
+    size_t delivered_bytes;
+};
 
 struct application_ctx
 {
-    leveldb_t *db;
-    leveldb_options_t *options;
-    leveldb_readoptions_t *roptions;
-    leveldb_writeoptions_t *woptions;
+    struct leveldb_ctx* leveldb;
+    struct event_base *base;
+    struct event* stats_ev;
+    struct timeval stats_interval;
+    struct stats stats;
+    struct bufferevent *client_bev;
 };
 
 struct application_ctx* new_application() {
@@ -49,87 +63,32 @@ struct application_ctx* new_application() {
 }
 
 
-void open_db(struct application_ctx *ctx, char* db_name) {
-    char *err = NULL;
-    leveldb_options_set_create_if_missing(ctx->options, true);
-    ctx->db = leveldb_open(ctx->options, db_name, &err);
-    if (err != NULL) {
-        fprintf(stderr, "Open fail.\n");
-        leveldb_free(err);
-        exit (EXIT_FAILURE);
-    }
-}
-
-void destroy_db(struct application_ctx *ctx, char* db_name) {
-    char *err = NULL;
-    leveldb_destroy_db(ctx->options, db_name, &err);
-    if (err != NULL) {
-        fprintf(stderr, "Open fail.\n");
-        leveldb_free(err);
-        exit (EXIT_FAILURE);
-    }
-}
-
-int add_entry(struct application_ctx *ctx, int sync, char *key, int ksize, char* val, int vsize) {
-    char *err = NULL;
-    leveldb_writeoptions_set_sync(ctx->woptions, sync);
-    leveldb_put(ctx->db, ctx->woptions, key, ksize, val, vsize, &err);
-    if (err != NULL) {
-        fprintf(stderr, "Write fail.\n");
-        leveldb_free(err); err = NULL;
-        return(1);
-    }
-    return 0;
-}
-
-int get_value(struct application_ctx *ctx, char *key, size_t ksize, char** val, size_t* vsize) {
-    char *err = NULL;
-    *val = leveldb_get(ctx->db, ctx->roptions, key, ksize, vsize, &err);
-    if (err != NULL) {
-        fprintf(stderr, "Read fail.\n");
-        leveldb_free(err); err = NULL;
-        return(1);
-    }
-    return 0;
-}
-
-int delete_entry(struct application_ctx *ctx, char *key, int ksize) {
-    char *err = NULL;
-    leveldb_delete(ctx->db, ctx->woptions, key, ksize, &err);
-    if (err != NULL) {
-        fprintf(stderr, "Delete fail.\n");
-        leveldb_free(err); err = NULL;
-        return(1);
-    }
-    return 0;
-}
-
 void init_application(struct application_ctx *ctx) {
-    ctx->options = leveldb_options_create();
-    ctx->woptions = leveldb_writeoptions_create();
-    ctx->roptions = leveldb_readoptions_create();
-    open_db(ctx, "/tmp/libpaxos");
+    ctx->leveldb = new_leveldb_context();
 }
 
 
 void free_application(struct application_ctx *ctx) {
-    leveldb_close(ctx->db);
-    leveldb_writeoptions_destroy(ctx->woptions);
-    leveldb_readoptions_destroy(ctx->roptions);
-    leveldb_options_destroy(ctx->options);
+    free_leveldb_context(ctx->leveldb);
+    event_free(ctx->stats_ev);
+    event_base_free(ctx->base);
+    free(ctx);
 }
 
-static void
-handle_sigint(int sig, short ev, void* arg)
-{
+static void handle_sigint(int sig, short ev, void* arg) {
 	struct event_base* base = arg;
 	printf("Caught signal %d\n", sig);
 	event_base_loopexit(base, NULL);
 }
 
-static void
-deliver(unsigned iid, char* value, size_t size, void* arg)
-{
+static void on_stats(evutil_socket_t fd, short event, void *arg) {
+    struct application_ctx* ctx = arg;
+    fprintf(stdout, "%d value/sec\n", ctx->stats.delivered_count);
+    memset(&ctx->stats, 0, sizeof(struct stats));
+    event_add(ctx->stats_ev, &ctx->stats_interval);
+}
+
+static void deliver(unsigned iid, char* value, size_t size, void* arg) {
 	struct application_ctx *ctx = arg;
 	struct client_value* val = (struct client_value*)value;
 	if (val->application_type == LEVELDB) {
@@ -137,74 +96,129 @@ deliver(unsigned iid, char* value, size_t size, void* arg)
 		switch(req->op) {
 			case PUT: {
 				 printf("PUT: key %s: %zu, value %s: %zu\n", req->key, req->ksize, req->value, req->vsize);
-				 add_entry(ctx, false, req->key, req->ksize, req->value, req->vsize);
+				 add_entry(ctx->leveldb, false, req->key, req->ksize, req->value, req->vsize);
 				 break;
-		}
+            }
 			case GET: {
 				 char *value;
 				 size_t vsize = 0;
-				 get_value(ctx, req->key, req->ksize, &value, &vsize);
+				 get_value(ctx->leveldb, req->key, req->ksize, &value, &vsize);
 				 printf("GET: key %s: %zu, RETURN: %s %zu\n", req->key, req->ksize, value, vsize);
 				 if (value)
 				     free(value);
 				 break;
-		}
-    }
-
+    		}
+        }
 	} else if (val->application_type == SIMPLY_ECHO) {
+        /*
 		struct echo_request *req = (struct echo_request *)&val->content;
-		printf("%ld.%06ld [%.32s] %ld bytes\n",
-			val->depart_ts.tv_sec,
-			val->depart_ts.tv_usec,
-			req->value,
-			(long)val->size);
+        printf("%ld.%06ld [%.32s] %ld bytes\n", val->depart_ts.tv_sec,
+            val->depart_ts.tv_usec, req->value, (long)val->size);
+        */
 	}
+    ctx->stats.delivered_count++;
+    if (ctx->client_bev)
+        bufferevent_write(ctx->client_bev, (char*)val, size);
+}
+
+
+static void
+handle_conn_events(struct bufferevent *bev, short events, void *arg)
+{
+    struct application_ctx *ctx = arg;
+    if (events & BEV_EVENT_ERROR)
+            perror("Error from bufferevent");
+    if (events & (BEV_EVENT_EOF | BEV_EVENT_ERROR)) {
+            bufferevent_free(bev);
+            ctx->client_bev = NULL;
+    }
 }
 
 static void
-start_learner(const char* config)
+accept_conn_cb(struct evconnlistener *listener,
+    evutil_socket_t fd, struct sockaddr *address, int socklen,
+    void *arg)
 {
+        struct application_ctx *ctx = arg;
+        /* We got a new connection! Set up a bufferevent for it. */
+        printf("We got a new connection! Set up a bufferevent for it.\n");
+        struct event_base *base = evconnlistener_get_base(listener);
+        struct bufferevent *bev = bufferevent_socket_new(
+                base, fd, BEV_OPT_CLOSE_ON_FREE);
+        bufferevent_setcb(bev, NULL, NULL, handle_conn_events, ctx);
+        bufferevent_enable(bev, EV_READ|EV_WRITE);
+        ctx->client_bev = bev;
+}
+
+static void
+accept_error_cb(struct evconnlistener *listener, void *ctx)
+{
+        struct event_base *base = evconnlistener_get_base(listener);
+        int err = EVUTIL_SOCKET_ERROR();
+        fprintf(stderr, "Got an error %d (%s) on the listener. "
+                "Shutting down.\n", err, evutil_socket_error_to_string(err));
+
+        event_base_loopexit(base, NULL);
+}
+
+static void start_server(struct application_ctx *ctx, const char* argv[]) {
+    struct evconnlistener *listener;
+    int learner_id = atoi(argv[3]);
+    application_config *conf = parse_configuration(argv[2]);
+    struct sockaddr_in *learner_sin = address_to_sockaddr_in(&conf->learners[learner_id]);
+
+    listener = evconnlistener_new_bind(ctx->base, accept_conn_cb, ctx,
+            LEV_OPT_CLOSE_ON_FREE|LEV_OPT_REUSEABLE, -1,
+            (struct sockaddr*)learner_sin, sizeof(*learner_sin));
+    if (!listener) {
+            perror("Couldn't create listener");
+            return;
+    }
+    evconnlistener_set_error_cb(listener, accept_error_cb);
+
+    free(learner_sin);
+    free_application_config(conf);
+}
+
+static void start_learner(const char* argv[]) {
 	struct event* sig;
 	struct evlearner* lea;
-	struct event_base* base;
 
-	base = event_base_new();
+    struct application_ctx *ctx = new_application();
+    init_application(ctx);
 
-	struct application_ctx *ctx = new_application();
-	init_application(ctx);
+	ctx->base = event_base_new();
+    memset(&ctx->stats, 0, sizeof(struct stats));
+    ctx->stats_interval = (struct timeval){1, 0};
+    ctx->stats_ev = evtimer_new(ctx->base, on_stats, ctx);
+    event_add(ctx->stats_ev, &ctx->stats_interval);
 
-	lea = evlearner_init(config, deliver, ctx, base);
+	lea = evlearner_init(argv[1], deliver, ctx, ctx->base);
 	if (lea == NULL) {
 		printf("Could not start the learner!\n");
 		exit(1);
 	}
 	
-	sig = evsignal_new(base, SIGINT, handle_sigint, base);
+	sig = evsignal_new(ctx->base, SIGINT, handle_sigint, ctx->base);
 	evsignal_add(sig, NULL);
 
 	signal(SIGPIPE, SIG_IGN);
-	event_base_dispatch(base);
+
+    start_server(ctx, argv);
+
+	event_base_dispatch(ctx->base);
 
 	event_free(sig);
 	evlearner_free(lea);
-	event_base_free(base);
 	free_application(ctx);
 }
 
-int
-main(int argc, char const *argv[])
-{
-	const char* config = "../paxos.conf";
 
-	if (argc != 1 && argc != 2) {
-		printf("Usage: %s [path/to/paxos.conf]\n", argv[0]);
-		exit(1);
-	}
-
-	if (argc == 2)
-		config = argv[1];
-
-	start_learner(config);
-	
+int main(int argc, char const *argv[]) {
+    if (argc != 4) {
+        printf("Usage: %s path/to/paxos.conf path/to/application.conf learner_id\n", argv[0]);
+        exit(1);
+    }
+    start_learner(argv);
 	return 0;
 }
