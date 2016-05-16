@@ -16,6 +16,15 @@ void handle_signal(evutil_socket_t fd, short what, void *arg) {
     event_base_loopbreak(ctx->base);
 }
 
+void init_paxos_ctx(struct paxos_ctx *ctx) {
+    ctx->sock = 0;
+    memset(&ctx->dest, 0, sizeof(struct sockaddr_in));
+    ctx->base = NULL;
+    ctx->ev_send = NULL;
+    ctx->ev_read = NULL;
+    ctx->ev_signal = NULL;
+}
+
 void free_paxos_ctx(struct paxos_ctx *ctx) {
     if (ctx->ev_send)
         event_free(ctx->ev_send);

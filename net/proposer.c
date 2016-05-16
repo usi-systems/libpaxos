@@ -6,10 +6,25 @@
 #include <signal.h>
 #include "netutils.h"
 #include "netpaxos.h"
+#include "message_pack.h"
 
 
 void submit(struct paxos_ctx *ctx, char *value, int size) {
-    int n = sendto(ctx->sock, value, size, 0, (struct sockaddr *)&ctx->dest,
+    struct paxos_message msg = {
+        .type = PAXOS_ACCEPT,
+        .u.accept.iid = 1,
+        .u.accept.ballot = 1,
+        .u.accept.value_ballot = 1,
+        .u.accept.aid = 1,
+        .u.accept.value.paxos_value_len = size,
+        .u.accept.value.paxos_value_val = value
+    };
+
+    char buffer[BUFSIZE];
+    memset(buffer, 0, BUFSIZE);
+    pack_paxos_message(buffer, &msg);
+    size_t msg_len = sizeof(struct paxos_message) + size;
+    int n = sendto(ctx->sock, buffer, msg_len, 0, (struct sockaddr *)&ctx->dest,
         sizeof(ctx->dest));
     if (n < 0) {
         printf("Sent %d bytes\n", n);
@@ -35,6 +50,7 @@ void proposer_read_cb(evutil_socket_t fd, short what, void *arg) {
 struct paxos_ctx *make_proposer(const char *ip_addr, int port)
 {
     struct paxos_ctx *ctx = malloc( sizeof(struct paxos_ctx));
+    init_paxos_ctx(ctx);
     ctx->base = event_base_new();
 
     evutil_socket_t sock = new_dgram_socket();

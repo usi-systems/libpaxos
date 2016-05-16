@@ -15,6 +15,7 @@ struct paxos_ctx {
 
 void submit(struct paxos_ctx *ctx, char *value, int size);
 
+void init_paxos_ctx(struct paxos_ctx *ctx);
 struct paxos_ctx *make_proposer(const char *host, int port);
 struct paxos_ctx *make_learner(int port);
 void start_paxos(struct paxos_ctx *ctx);

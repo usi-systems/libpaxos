@@ -6,6 +6,8 @@
 #include <signal.h>
 #include "netutils.h"
 #include "netpaxos.h"
+#include "message_pack.h"
+#include "paxos.h"
 
 void learner_read_cb(evutil_socket_t fd, short what, void *arg) {
     if (what&EV_READ) {
@@ -20,9 +22,20 @@ void learner_read_cb(evutil_socket_t fd, short what, void *arg) {
             perror("recvfrom");
         printf("%s\n", buffer);
 
-        n = sendto(fd, buffer, n, 0, (struct sockaddr *)&remote, readlen);
-        if (n < 0)
-            perror("sendto");
+        struct paxos_message msg;
+        unpack_paxos_message(&msg, buffer);
+
+        if (msg.type == PAXOS_ACCEPT) {
+            printf("iid %d, ballot %d, value_ballot %d, aid %d, value[%d, %s]\n",
+                msg.u.accept.iid, msg.u.accept.ballot,
+                msg.u.accept.value_ballot, msg.u.accept.aid,
+                msg.u.accept.value.paxos_value_len,
+                msg.u.accept.value.paxos_value_val);
+        }
+        paxos_message_destroy(&msg);
+        // n = sendto(fd, buffer, n, 0, (struct sockaddr *)&remote, readlen);
+        // if (n < 0)
+        //     perror("sendto");
     }
     else if (what&EV_TIMEOUT) {
         printf("Event timeout\n");
@@ -33,6 +46,7 @@ void learner_read_cb(evutil_socket_t fd, short what, void *arg) {
 struct paxos_ctx *make_learner(int port)
 {
     struct paxos_ctx *ctx = malloc( sizeof(struct paxos_ctx));
+    init_paxos_ctx(ctx);
     ctx->base = event_base_new();
 
     evutil_socket_t sock = create_server_socket(port);
