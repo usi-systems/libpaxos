@@ -1,3 +1,4 @@
+#include "learner.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,14 +24,22 @@ void init_paxos_ctx(struct paxos_ctx *ctx) {
     ctx->ev_send = NULL;
     ctx->ev_read = NULL;
     ctx->ev_signal = NULL;
+    ctx->hole_watcher = NULL;
+    ctx->learner_state = NULL;
+
 }
 
 void free_paxos_ctx(struct paxos_ctx *ctx) {
+    if (ctx->learner_state)
+        learner_free(ctx->learner_state);
     if (ctx->ev_send)
         event_free(ctx->ev_send);
-
-    event_free(ctx->ev_read);
-    event_free(ctx->ev_signal);
+    if (ctx->hole_watcher)
+        event_free(ctx->hole_watcher);
+    if (ctx->ev_read)
+        event_free(ctx->ev_read);
+    if (ctx->ev_signal)
+        event_free(ctx->ev_signal);
     event_base_free(ctx->base);
     free(ctx);
 }

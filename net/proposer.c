@@ -13,9 +13,9 @@ void submit(struct paxos_ctx *ctx, char *value, int size) {
     struct paxos_message msg = {
         .type = PAXOS_ACCEPT,
         .u.accept.iid = 1,
-        .u.accept.ballot = 1,
-        .u.accept.value_ballot = 1,
-        .u.accept.aid = 1,
+        .u.accept.ballot = 0,
+        .u.accept.value_ballot = 0,
+        .u.accept.aid = 0,
         .u.accept.value.paxos_value_len = size,
         .u.accept.value.paxos_value_val = value
     };
@@ -24,11 +24,12 @@ void submit(struct paxos_ctx *ctx, char *value, int size) {
     memset(buffer, 0, BUFSIZE);
     pack_paxos_message(buffer, &msg);
     size_t msg_len = sizeof(struct paxos_message) + size;
-
+/*
     int i;
     for (i = 0; i < msg_len; i++)
         printf("%.2x ", buffer[i]);
     printf("\n");
+*/
     int n = sendto(ctx->sock, buffer, msg_len, 0, (struct sockaddr *)&ctx->dest,
         sizeof(ctx->dest));
     if (n < 0) {

@@ -241,7 +241,8 @@ void pack_paxos_message(char* p, paxos_message* v)
 
 void unpack_paxos_message(paxos_message* v, char* p)
 {
-    unpack_uint16((uint16_t *)&v->type, p, MSGTYPE_OFFSET);
+    uint16_t *raw_bytes = (uint16_t *)p;
+    v->type = ntohs(*raw_bytes);
     switch (v->type) {
     case PAXOS_PREPARE:
         unpack_paxos_prepare(&v->u.prepare, p);
