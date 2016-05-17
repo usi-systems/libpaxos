@@ -54,7 +54,7 @@ void proposer_read_cb(evutil_socket_t fd, short what, void *arg) {
     }
 }
 
-struct paxos_ctx *make_proposer(const char *ip_addr, int port)
+struct paxos_ctx *make_proposer(struct netpaxos_configuration *conf)
 {
     struct paxos_ctx *ctx = malloc( sizeof(struct paxos_ctx));
     init_paxos_ctx(ctx);
@@ -63,7 +63,7 @@ struct paxos_ctx *make_proposer(const char *ip_addr, int port)
     evutil_socket_t sock = new_dgram_socket();
     evutil_make_socket_nonblocking(sock);
 
-    ip_to_sockaddr(ip_addr, port, &ctx->dest);
+    ip_to_sockaddr(conf->learner_address, conf->learner_port, &ctx->dest);
 
     ctx->sock = sock;
 

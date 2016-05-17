@@ -1,10 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "netpaxos.h"
+#include "configuration.h"
 
 void usage(char *prog)
 {
-    printf("Usage: %s host port\n", prog);
+    printf("Usage: %s configuration-file\n", prog);
 }
 
 void send_cb(evutil_socket_t fd, short what, void *arg)
@@ -15,13 +16,15 @@ void send_cb(evutil_socket_t fd, short what, void *arg)
 
 int main(int argc, char *argv[])
 {
-    if (argc < 3) {
+    if (argc < 2) {
         usage(argv[0]);
         return 0;
     }
 
-    int port = atoi(argv[2]);
-    struct paxos_ctx *ctx = make_proposer(argv[1], port);
+    struct netpaxos_configuration conf;
+    populate_configuration(argv[1], &conf);
+    dump_configuration(&conf);
+    struct paxos_ctx *ctx = make_proposer(&conf);
 
     struct event* socket_ready;
     socket_ready = event_new(ctx->base, ctx->sock, EV_WRITE, send_cb, ctx);
