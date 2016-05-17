@@ -25,7 +25,7 @@ void check_holes(evutil_socket_t fd, short event, void *arg) {
         };
         pack_paxos_message(buffer, &repeat);
         sendto(ctx->sock, buffer, sizeof(repeat), 0,
-                    (struct sockaddr*)&ctx->dest, sizeof(ctx->dest));
+                (struct sockaddr*)&ctx->acceptor_sin, sizeof(ctx->acceptor_sin));
     }
     event_add(ctx->hole_watcher, &ctx->tv);
 }
@@ -41,7 +41,6 @@ void on_paxos_accepted(paxos_message *msg, struct paxos_ctx *ctx) {
             ctx->deliver_arg);
         paxos_accepted_destroy(&chosen_value);
     }
-
 }
 
 void learner_read_cb(evutil_socket_t fd, short what, void *arg) {
@@ -92,10 +91,11 @@ struct paxos_ctx *make_learner(struct netpaxos_configuration *conf,
 
     evutil_socket_t sock = create_server_socket(conf->learner_port);
     evutil_make_socket_nonblocking(sock);
+    ctx->sock = sock;
 
     subcribe_to_multicast_group(conf->learner_address, sock);
 
-    ip_to_sockaddr(conf->acceptor_address, conf->acceptor_port, &ctx->dest);
+    ip_to_sockaddr(conf->acceptor_address, conf->acceptor_port, &ctx->acceptor_sin);
 
     ctx->ev_read = event_new(ctx->base, sock, EV_TIMEOUT|EV_READ|EV_PERSIST,
         learner_read_cb, ctx);

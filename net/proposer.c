@@ -31,10 +31,10 @@ void submit(struct paxos_ctx *ctx, char *value, int size) {
         printf("%.2x ", buffer[i]);
     printf("\n");
 */
-    int n = sendto(ctx->sock, buffer, msg_len, 0, (struct sockaddr *)&ctx->dest,
-        sizeof(ctx->dest));
+    int n = sendto(ctx->sock, buffer, msg_len, 0,
+                (struct sockaddr *)&ctx->learner_sin, sizeof(ctx->learner_sin));
     if (n < 0) {
-        printf("Sent %d bytes\n", n);
+        perror("submit error");
     }
 }
 
@@ -63,7 +63,7 @@ struct paxos_ctx *make_proposer(struct netpaxos_configuration *conf)
     evutil_socket_t sock = new_dgram_socket();
     evutil_make_socket_nonblocking(sock);
 
-    ip_to_sockaddr(conf->learner_address, conf->learner_port, &ctx->dest);
+    ip_to_sockaddr(conf->learner_address, conf->learner_port, &ctx->learner_sin);
 
     ctx->sock = sock;
 
