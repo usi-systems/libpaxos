@@ -23,10 +23,13 @@ struct netpaxos_configuration {
     int learner_port;
     char *learner_address;
     int acceptor_count;
+    int application_port;
 };
 
 struct paxos_ctx {
     int sock;
+    /* TODO: Mock instance for testing */
+    int mock_instance;
     struct sockaddr_in acceptor_sin;
     struct sockaddr_in learner_sin;
     struct event_base *base;

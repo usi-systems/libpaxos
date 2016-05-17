@@ -13,7 +13,8 @@ void submit(struct paxos_ctx *ctx, char *value, int size) {
     struct paxos_message msg = {
         /* TODO: Change type to PAXOS_ACCEPT */
         .type = PAXOS_ACCEPTED,
-        .u.accept.iid = 1,
+        /* TODO: Replace mock instance by literal integer 1 */
+        .u.accept.iid = ctx->mock_instance++,
         .u.accept.ballot = 0,
         .u.accept.value_ballot = 0,
         .u.accept.aid = 0,
@@ -21,16 +22,25 @@ void submit(struct paxos_ctx *ctx, char *value, int size) {
         .u.accept.value.paxos_value_val = value
     };
 
+    // if (msg.type == PAXOS_ACCEPTED) {
+    //     printf("iid %d, ballot %d, value_ballot %d, aid %d, value[%d, %s]\n",
+    //         msg.u.accepted.iid, msg.u.accepted.ballot,
+    //         msg.u.accepted.value_ballot, msg.u.accept.aid,
+    //         msg.u.accepted.value.paxos_value_len,
+    //         msg.u.accepted.value.paxos_value_val);
+    // }
+
     char buffer[BUFSIZE];
     memset(buffer, 0, BUFSIZE);
     pack_paxos_message(buffer, &msg);
     size_t msg_len = sizeof(struct paxos_message) + size;
-/*
+
     int i;
-    for (i = 0; i < msg_len; i++)
+    for (i = 0; i < msg_len; i++) {
         printf("%.2x ", buffer[i]);
+    }
     printf("\n");
-*/
+
     int n = sendto(ctx->sock, buffer, msg_len, 0,
                 (struct sockaddr *)&ctx->learner_sin, sizeof(ctx->learner_sin));
     if (n < 0) {

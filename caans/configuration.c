@@ -18,6 +18,7 @@ int populate_configuration(char* config, struct netpaxos_configuration *conf)
     conf->acceptor_port = 0;
     conf->acceptor_address = NULL;
     conf->acceptor_count = 1;
+    conf->application_port = 0;
 
     FILE *fp = fopen(config, "r");
     if (fp == NULL)
@@ -48,6 +49,10 @@ int populate_configuration(char* config, struct netpaxos_configuration *conf)
             if (strcmp(token, "num_acceptors") == 0) {
                 token = strtok(NULL, delim);
                 conf->acceptor_count = atoi(token);
+            }
+            if (strcmp(token, "application_port") == 0) {
+                token = strtok(NULL, delim);
+                conf->application_port = atoi(token);
             }
             token = strtok(NULL, delim);
         }

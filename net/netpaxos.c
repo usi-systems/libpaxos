@@ -19,6 +19,8 @@ void handle_signal(evutil_socket_t fd, short what, void *arg) {
 
 void init_paxos_ctx(struct paxos_ctx *ctx) {
     ctx->sock = 0;
+    /* TODO: Remove mock instance */
+    ctx->mock_instance = 1;
     memset(&ctx->acceptor_sin, 0, sizeof(struct sockaddr_in));
     memset(&ctx->learner_sin, 0, sizeof(struct sockaddr_in));
     ctx->base = NULL;

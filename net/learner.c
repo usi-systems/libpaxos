@@ -55,12 +55,12 @@ void learner_read_cb(evutil_socket_t fd, short what, void *arg) {
             &readlen);
         if (n < 0)
             perror("recvfrom");
-/*
+
         int i;
         for (i = 0; i < n; i++)
             printf("%.2x ", buffer[i]);
         printf("\n");
-*/
+
         struct paxos_message msg;
         unpack_paxos_message(&msg, buffer);
 
