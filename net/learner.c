@@ -56,12 +56,12 @@ void learner_read_cb(evutil_socket_t fd, short what, void *arg) {
             &readlen);
         if (n < 0)
             perror("recvfrom");
-
-        // int i;
-        // for (i = 0; i < n; i++)
-        //     printf("%.2x ", buffer[i]);
-        // printf("\n");
-
+/*
+        int i;
+        for (i = 0; i < n; i++)
+            printf("%.2x ", buffer[i]);
+        printf("\n");
+*/
         struct paxos_message msg;
         unpack_paxos_message(&msg, buffer);
 
@@ -92,6 +92,8 @@ struct paxos_ctx *make_learner(struct netpaxos_configuration *conf,
 
     evutil_socket_t sock = create_server_socket(conf->learner_port);
     evutil_make_socket_nonblocking(sock);
+
+    subcribe_to_multicast_group(conf->learner_address, sock);
 
     ip_to_sockaddr(conf->acceptor_address, conf->acceptor_port, &ctx->dest);
 

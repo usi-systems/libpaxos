@@ -11,7 +11,8 @@
 
 void submit(struct paxos_ctx *ctx, char *value, int size) {
     struct paxos_message msg = {
-        .type = PAXOS_ACCEPT,
+        /* TODO: Change type to PAXOS_ACCEPT */
+        .type = PAXOS_ACCEPTED,
         .u.accept.iid = 1,
         .u.accept.ballot = 0,
         .u.accept.value_ballot = 0,

@@ -45,5 +45,6 @@ struct paxos_ctx *make_learner(struct netpaxos_configuration *conf,
 void start_paxos(struct paxos_ctx *ctx);
 void handle_signal(evutil_socket_t fd, short what, void *arg);
 void free_paxos_ctx(struct paxos_ctx *ctx);
+void subcribe_to_multicast_group(char *group, int sockfd);
 
 #endif

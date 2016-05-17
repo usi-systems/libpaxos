@@ -10,8 +10,9 @@ void usage(char *prog) {
     printf("Usage: %s configuration-file\n", prog);
 }
 
-void populate_configuration(char* config_file, struct netpaxos_configuration *conf) {
+void populate_configuration(char* config, struct netpaxos_configuration *conf) {
     conf->learner_port = 34952;
+    conf->learner_address = "224.3.29.73";
     conf->acceptor_port = 34951;
     conf->acceptor_address = "127.0.0.1";
     conf->acceptor_count = 1;
