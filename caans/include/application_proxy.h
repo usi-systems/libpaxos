@@ -27,6 +27,7 @@ struct application_ctx {
     struct request_entry *request_table;
     struct bufferevent *tmpbev;
     char buffer[BUFFER_SIZE];
+    struct sockaddr_in *proxies;
 };
 
 void start_proxy(struct application_ctx *ctx, struct netpaxos_configuration *conf);

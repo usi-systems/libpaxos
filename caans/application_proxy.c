@@ -22,11 +22,6 @@ void handle_request(struct bufferevent *bev, void *arg)
     /* ---------------------------------------------------- */
     if (n <= 0)
         return; /* No data. */
-    int i;
-    for (i = 0; i < 32; i++) {
-        printf("%.2x ", app->buffer[i]);
-    }
-    printf("\n");
 
     submit(app->paxos, app->buffer, total_size);
 
