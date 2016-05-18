@@ -18,12 +18,16 @@ typedef void (*deliver_function)(
 
 
 struct netpaxos_configuration {
+    int *proposer_port;
+    char **proposer_address;
     int acceptor_port;
     char *acceptor_address;
     int learner_port;
     char *learner_address;
     int acceptor_count;
-    int application_port;
+    int proposer_count;
+    int max_num_proposer;
+    int proxy_port;
 };
 
 struct paxos_ctx {

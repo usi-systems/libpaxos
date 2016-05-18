@@ -18,7 +18,19 @@ int populate_configuration(char* config, struct netpaxos_configuration *conf)
     conf->acceptor_port = 0;
     conf->acceptor_address = NULL;
     conf->acceptor_count = 1;
-    conf->application_port = 0;
+    conf->proxy_port = 0;
+    conf->proposer_port = 0;
+    conf->proposer_address = NULL;
+    /* Initialize number of proposers to 5 */
+    conf->proposer_count = 0;
+    conf->max_num_proposer = 5;
+    conf->proposer_port = calloc(conf->max_num_proposer, sizeof(int));
+    conf->proposer_address = calloc(conf->max_num_proposer, sizeof(char*));
+    int i;
+    for (i = 0; i < conf->max_num_proposer; i++) {
+        conf->proposer_port[i] = 0;
+        conf->proposer_address[i] = NULL;
+    }
 
     FILE *fp = fopen(config, "r");
     if (fp == NULL)
@@ -34,6 +46,13 @@ int populate_configuration(char* config, struct netpaxos_configuration *conf)
         char *token;
         token = strtok(line, delim);
         while ( token != NULL) {
+            if (strcmp(token, "proposer") == 0) {
+                token = strtok(NULL, delim);
+                conf->proposer_address[conf->proposer_count] = strdup(token);
+                token = strtok(NULL, delim);
+                conf->proposer_port[conf->proposer_count] = atoi(token);
+                conf->proposer_count++;
+            }
             if (strcmp(token, "acceptor") == 0) {
                 token = strtok(NULL, delim);
                 conf->acceptor_address = strdup(token);
@@ -50,9 +69,9 @@ int populate_configuration(char* config, struct netpaxos_configuration *conf)
                 token = strtok(NULL, delim);
                 conf->acceptor_count = atoi(token);
             }
-            if (strcmp(token, "application_port") == 0) {
+            if (strcmp(token, "proxy_port") == 0) {
                 token = strtok(NULL, delim);
-                conf->application_port = atoi(token);
+                conf->proxy_port = atoi(token);
             }
             token = strtok(NULL, delim);
         }
@@ -69,6 +88,13 @@ int populate_configuration(char* config, struct netpaxos_configuration *conf)
 
 void free_configuration(struct netpaxos_configuration *conf)
 {
+    int i;
+    for (i = 0; i < conf->max_num_proposer; i++) {
+        if (conf->proposer_address[i] != NULL)
+            free(conf->proposer_address[i]);
+    }
+    free(conf->proposer_port);
+    free(conf->proposer_address);
     if (conf->learner_address)
         free(conf->learner_address);
     if (conf->acceptor_address)

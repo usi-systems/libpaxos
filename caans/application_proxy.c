@@ -67,7 +67,7 @@ void start_proxy(struct application_ctx *ctx, struct netpaxos_configuration *con
     struct sockaddr_in server;
     server.sin_family = AF_INET;
     server.sin_addr.s_addr = htonl(0);
-    server.sin_port = htons(conf->application_port);
+    server.sin_port = htons(conf->proxy_port);
 
     ctx->listener = evconnlistener_new_bind(ctx->paxos->base, accept_conn_cb, ctx,
             LEV_OPT_CLOSE_ON_FREE|LEV_OPT_REUSEABLE, -1,
