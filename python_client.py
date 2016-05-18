@@ -41,11 +41,9 @@ class EchoFactory(protocol.ClientFactory):
 
     def clientConnectionFailed(self, connector, reason):
         print "Connection failed - goodbye!"
-        reactor.stop()
 
     def clientConnectionLost(self, connector, reason):
         print "Connection lost - goodbye!"
-        reactor.stop()
 
 # this connects the protocol to a server running on port 8000
 def main():

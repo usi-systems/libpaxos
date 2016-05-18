@@ -49,6 +49,7 @@ void submit(struct paxos_ctx *ctx, char *value, int size) {
 }
 
 void proposer_read_cb(evutil_socket_t fd, short what, void *arg) {
+    struct paxos_ctx *ctx = arg;
     if (what&EV_READ) {
         char buffer[BUFSIZE];
         memset(buffer, 0, BUFSIZE);
@@ -61,21 +62,31 @@ void proposer_read_cb(evutil_socket_t fd, short what, void *arg) {
             return;
         }
         printf("%s\n", buffer);
+        ctx->respond(buffer, n, ctx->respond_arg);
     }
 }
 
-struct paxos_ctx *make_proposer(struct netpaxos_configuration *conf)
+struct paxos_ctx *make_proposer(struct netpaxos_configuration *conf,
+    int proposer_id, respond_callback f, void *arg)
 {
     struct paxos_ctx *ctx = malloc( sizeof(struct paxos_ctx));
     init_paxos_ctx(ctx);
     ctx->base = event_base_new();
 
-    evutil_socket_t sock = new_dgram_socket();
+    int port = conf->proposer_port[proposer_id];
+    evutil_socket_t sock = create_server_socket(port);
     evutil_make_socket_nonblocking(sock);
+
+    ip_to_sockaddr( conf->proposer_address[proposer_id],
+                    conf->proposer_port[proposer_id],
+                    &ctx->proposer_sin );
 
     ip_to_sockaddr(conf->learner_address, conf->learner_port, &ctx->learner_sin);
 
     ctx->sock = sock;
+
+    ctx->respond = f;
+    ctx->respond_arg = arg;
 
     ctx->ev_read = event_new(ctx->base, sock, EV_TIMEOUT|EV_READ|EV_PERSIST,
         proposer_read_cb, ctx);

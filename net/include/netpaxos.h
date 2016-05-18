@@ -10,11 +10,8 @@
  * When starting a learner you must pass a callback to be invoked whenever
  * a value has been learned.
  */
-typedef void (*deliver_function)(
-    unsigned int,
-    char* value,
-    size_t size,
-    void* arg);
+typedef void (*respond_callback)(char* value, size_t size, void* arg);
+typedef void (*deliver_function)(unsigned int, char* value, size_t size, void* arg);
 
 
 struct netpaxos_configuration {
@@ -36,18 +33,22 @@ struct paxos_ctx {
     int mock_instance;
     struct sockaddr_in acceptor_sin;
     struct sockaddr_in learner_sin;
+    struct sockaddr_in proposer_sin;
     struct event_base *base;
     struct event *ev_read, *ev_send, *ev_signal, *hole_watcher;
     struct learner *learner_state;
     deliver_function deliver;
     void* deliver_arg;
+    respond_callback respond;
+    void* respond_arg;
     struct timeval tv;
 };
 
 void submit(struct paxos_ctx *ctx, char *value, int size);
 
 void init_paxos_ctx(struct paxos_ctx *ctx);
-struct paxos_ctx *make_proposer(struct netpaxos_configuration *conf);
+struct paxos_ctx *make_proposer(struct netpaxos_configuration *conf,
+    int proposer_id, respond_callback f, void *arg);
 struct paxos_ctx *make_learner(struct netpaxos_configuration *conf,
                                         deliver_function f, void *arg);
 struct paxos_ctx *make_replica(struct netpaxos_configuration *conf,

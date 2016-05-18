@@ -7,6 +7,12 @@
 
 void deliver(unsigned int inst, char* val, size_t size, void* arg) {
     printf("DELIVERED: %d %s\n", inst, val);
+    // struct application_ctx *app = arg;
+    int *p = (int *) val;
+    int proposer_id = ntohl(*p);
+    p = (int *) (val + 4);
+    int request_id = ntohl(*p);
+    printf("proposer %d, request %d\n", proposer_id, request_id);
 }
 
 void usage(char *prog) {

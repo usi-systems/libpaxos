@@ -9,16 +9,26 @@
 void handle_request(struct bufferevent *bev, void *arg)
 {
     struct application_ctx *app = arg;
-    char tmp[32];
 
-    int *inst = (int *)tmp;
-    *inst = htonl(app->current_request_id);
+    /* TODO: find cleaner way to serialize application request */
+    uint32_t proxy_id = htonl(app->proxy_id);
+    uint32_t net_req_id = htonl(app->current_request_id);
+    memcpy(app->buffer, &proxy_id, 4);
+    memcpy(app->buffer + 4, &net_req_id, 4);
     size_t n;
-    n = bufferevent_read(bev, tmp + 4, sizeof(tmp));
-    tmp[n+4] = '\0';
+    n = bufferevent_read(bev, app->buffer + 8, BUFFER_SIZE - 8);
+    size_t total_size = n + 8;
+    app->buffer[total_size] = '\0';
+    /* ---------------------------------------------------- */
     if (n <= 0)
         return; /* No data. */
-    submit(app->paxos, tmp, n + 4);
+    int i;
+    for (i = 0; i < 32; i++) {
+        printf("%.2x ", app->buffer[i]);
+    }
+    printf("\n");
+
+    submit(app->paxos, app->buffer, total_size);
 
     struct request_entry *s = malloc(sizeof(struct request_entry));
     s->request_id = app->current_request_id;
