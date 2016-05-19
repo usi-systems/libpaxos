@@ -12,11 +12,14 @@ set (LIBPAXOS_LINKER_LIBS ${LIBPAXOS_LINKER_LIBS} leveldb)
 
 message(${SRCS})
 
-add_executable(appserver learner.c ${SRCS})
-target_link_libraries(appserver netpaxos ${LIBPAXOS_LINKER_LIBS})
+add_executable(server_caans learner.c ${SRCS})
+target_link_libraries(server_caans netpaxos ${LIBPAXOS_LINKER_LIBS})
 
-add_executable(appclient proposer.c ${SRCS})
-target_link_libraries(appclient netpaxos ${LIBPAXOS_LINKER_LIBS})
+add_executable(proxy_caans proposer.c ${SRCS})
+target_link_libraries(proxy_caans netpaxos ${LIBPAXOS_LINKER_LIBS})
 
-add_executable(appreplica replica.c ${SRCS})
-target_link_libraries(appreplica netpaxos ${LIBPAXOS_LINKER_LIBS})
+add_executable(replica_caans replica.c ${SRCS})
+target_link_libraries(replica_caans netpaxos ${LIBPAXOS_LINKER_LIBS})
+
+add_executable(client_caans client.c ${SRCS})
+target_link_libraries(client_caans netpaxos ${LIBPAXOS_LINKER_LIBS})
