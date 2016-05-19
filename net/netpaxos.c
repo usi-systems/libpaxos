@@ -1,4 +1,5 @@
 #include "learner.h"
+#include "acceptor.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -34,13 +35,15 @@ void init_paxos_ctx(struct paxos_ctx *ctx)
     ctx->ev_signal = NULL;
     ctx->hole_watcher = NULL;
     ctx->learner_state = NULL;
-
+    ctx->buffer = malloc(BUFSIZE);
 }
 
 void free_paxos_ctx(struct paxos_ctx *ctx)
 {
     if (ctx->learner_state)
         learner_free(ctx->learner_state);
+    if (ctx->acceptor_state)
+        acceptor_free(ctx->acceptor_state);
     if (ctx->ev_send)
         event_free(ctx->ev_send);
     if (ctx->hole_watcher)
@@ -50,5 +53,6 @@ void free_paxos_ctx(struct paxos_ctx *ctx)
     if (ctx->ev_signal)
         event_free(ctx->ev_signal);
     event_base_free(ctx->base);
+    free(ctx->buffer);
     free(ctx);
 }

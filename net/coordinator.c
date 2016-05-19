@@ -10,34 +10,35 @@
 #include "netpaxos.h"
 #include "message_pack.h"
 
+
+void coordinator_handle_proposal(struct paxos_ctx *ctx, struct paxos_message *msg)
+{
+    msg->u.accept.iid = ctx->mock_instance++;
+    pack_paxos_message(ctx->buffer, msg);
+    size_t msg_len = sizeof(struct paxos_message);
+    int n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
+        (struct sockaddr *)&ctx->acceptor_sin, sizeof(ctx->acceptor_sin));
+    if (n < 0)
+        perror("Sendto:");
+}
+
 void received_fast_accept(evutil_socket_t fd, short what, void *arg)
 {
     struct paxos_ctx *ctx = arg;
     if (what&EV_READ) {
-        char buffer[BUFSIZE];
-        memset(buffer, 0, BUFSIZE);
+        memset(ctx->buffer, 0, BUFSIZE);
         struct sockaddr_in remote;
         socklen_t len = sizeof(remote);
-
-        int n = recvfrom(fd, buffer, BUFSIZE, 0, (struct sockaddr *)&remote, &len);
+        int n = recvfrom(fd, ctx->buffer, BUFSIZE, 0,
+                            (struct sockaddr *)&remote, &len);
         if (n < 0)
             perror("recvfrom");
 
         struct paxos_message msg;
-        unpack_paxos_message(&msg, buffer);
+        unpack_paxos_message(&msg, ctx->buffer);
 
         if (msg.type == PAXOS_ACCEPT) {
-            msg.u.accept.iid = ctx->mock_instance++;
-            /* TODO: remove the line below. Acceptor should change
-                PAXOS_ACCEPT to PAXOS_ACCEPTED */
-            msg.type = PAXOS_ACCEPTED;
-
-            pack_paxos_message(buffer, &msg);
-            size_t msg_len = sizeof(struct paxos_message);
-            n = sendto(fd, buffer, msg_len, 0,
-                (struct sockaddr *)&ctx->acceptor_sin, sizeof(ctx->learner_sin));
-            if (n < 0)
-                perror("Sendto:");
+            coordinator_handle_proposal(ctx, &msg);
         }
         paxos_message_destroy(&msg);
     }

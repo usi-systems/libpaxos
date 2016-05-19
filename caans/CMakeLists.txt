@@ -26,3 +26,6 @@ target_link_libraries(client_caans netpaxos ${LIBPAXOS_LINKER_LIBS})
 
 add_executable(coordinator_caans coordinator.c ${SRCS})
 target_link_libraries(coordinator_caans netpaxos ${LIBPAXOS_LINKER_LIBS})
+
+add_executable(acceptor_caans acceptor.c ${SRCS})
+target_link_libraries(acceptor_caans netpaxos ${LIBPAXOS_LINKER_LIBS})

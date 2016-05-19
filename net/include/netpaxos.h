@@ -40,11 +40,13 @@ struct paxos_ctx {
     struct event_base *base;
     struct event *ev_read, *ev_send, *ev_signal, *hole_watcher;
     struct learner *learner_state;
+    struct acceptor *acceptor_state;
     deliver_function deliver;
     void* deliver_arg;
     respond_callback respond;
     void* respond_arg;
     struct timeval tv;
+    char* buffer;
 };
 
 void submit(struct paxos_ctx *ctx, char *value, int size);
@@ -65,5 +67,6 @@ void check_holes(evutil_socket_t fd, short event, void *arg);
 void learner_read_cb(evutil_socket_t fd, short what, void *arg);
 
 struct paxos_ctx *make_coordinator(struct netpaxos_configuration *conf);
+struct paxos_ctx *make_acceptor(struct netpaxos_configuration *conf, int aid);
 
 #endif
