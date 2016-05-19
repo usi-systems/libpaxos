@@ -1,5 +1,6 @@
 #include "learner.h"
 #include "acceptor.h"
+#include "proposer.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -44,6 +45,8 @@ void free_paxos_ctx(struct paxos_ctx *ctx)
         learner_free(ctx->learner_state);
     if (ctx->acceptor_state)
         acceptor_free(ctx->acceptor_state);
+    if (ctx->proposer_state)
+        proposer_free(ctx->proposer_state);
     if (ctx->ev_send)
         event_free(ctx->ev_send);
     if (ctx->hole_watcher)

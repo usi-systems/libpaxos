@@ -27,10 +27,13 @@ struct netpaxos_configuration {
     int proposer_count;
     int max_num_proposer;
     int proxy_port;
+    int preexec_window;
 };
 
 struct paxos_ctx {
+    int my_id;
     int sock;
+    int preexec_window;
     /* TODO: Mock instance for testing */
     int mock_instance;
     struct sockaddr_in coordinator_sin;
@@ -38,9 +41,10 @@ struct paxos_ctx {
     struct sockaddr_in learner_sin;
     struct sockaddr_in proposer_sin;
     struct event_base *base;
-    struct event *ev_read, *ev_send, *ev_signal, *hole_watcher;
+    struct event *ev_read, *ev_send, *ev_signal, *hole_watcher, *timeout_ev;
     struct learner *learner_state;
     struct acceptor *acceptor_state;
+    struct proposer *proposer_state;
     deliver_function deliver;
     void* deliver_arg;
     respond_callback respond;
