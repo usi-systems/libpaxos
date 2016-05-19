@@ -7,22 +7,27 @@
 #include "netpaxos.h"
 
 
-void start_paxos(struct paxos_ctx *ctx) {
+void start_paxos(struct paxos_ctx *ctx)
+{
     event_base_dispatch(ctx->base);
 }
 
-void handle_signal(evutil_socket_t fd, short what, void *arg) {
+void handle_signal(evutil_socket_t fd, short what, void *arg)
+{
     printf("Caught SIGINT\n");
     struct paxos_ctx *ctx = arg;
     event_base_loopbreak(ctx->base);
 }
 
-void init_paxos_ctx(struct paxos_ctx *ctx) {
+void init_paxos_ctx(struct paxos_ctx *ctx)
+{
     ctx->sock = 0;
     /* TODO: Remove mock instance */
     ctx->mock_instance = 1;
     memset(&ctx->acceptor_sin, 0, sizeof(struct sockaddr_in));
     memset(&ctx->learner_sin, 0, sizeof(struct sockaddr_in));
+    memset(&ctx->proposer_sin, 0, sizeof(struct sockaddr_in));
+    memset(&ctx->coordinator_sin, 0, sizeof(struct sockaddr_in));
     ctx->base = NULL;
     ctx->ev_send = NULL;
     ctx->ev_read = NULL;
@@ -32,7 +37,8 @@ void init_paxos_ctx(struct paxos_ctx *ctx) {
 
 }
 
-void free_paxos_ctx(struct paxos_ctx *ctx) {
+void free_paxos_ctx(struct paxos_ctx *ctx)
+{
     if (ctx->learner_state)
         learner_free(ctx->learner_state);
     if (ctx->ev_send)

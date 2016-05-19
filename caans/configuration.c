@@ -21,6 +21,8 @@ int populate_configuration(char* config, struct netpaxos_configuration *conf)
     conf->proxy_port = 0;
     conf->proposer_port = 0;
     conf->proposer_address = NULL;
+    conf->coordinator_port = 0;
+    conf->coordinator_address = NULL;
     /* Initialize number of proposers to 5 */
     conf->proposer_count = 0;
     conf->max_num_proposer = 5;
@@ -65,6 +67,12 @@ int populate_configuration(char* config, struct netpaxos_configuration *conf)
                 token = strtok(NULL, delim);
                 conf->learner_port = atoi(token);
             }
+            if (strcmp(token, "coordinator") == 0) {
+                token = strtok(NULL, delim);
+                conf->coordinator_address = strdup(token);
+                token = strtok(NULL, delim);
+                conf->coordinator_port = atoi(token);
+            }
             if (strcmp(token, "num_acceptors") == 0) {
                 token = strtok(NULL, delim);
                 conf->acceptor_count = atoi(token);
@@ -99,4 +107,6 @@ void free_configuration(struct netpaxos_configuration *conf)
         free(conf->learner_address);
     if (conf->acceptor_address)
         free(conf->acceptor_address);
+    if (conf->coordinator_address)
+        free(conf->coordinator_address);
 }

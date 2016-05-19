@@ -11,10 +11,8 @@
 
 void submit(struct paxos_ctx *ctx, char *value, int size) {
     struct paxos_message msg = {
-        /* TODO: Change type to PAXOS_ACCEPT */
-        .type = PAXOS_ACCEPTED,
-        /* TODO: Replace mock instance by literal integer 1 */
-        .u.accept.iid = ctx->mock_instance++,
+        .type = PAXOS_ACCEPT,
+        .u.accept.iid = 1,
         .u.accept.ballot = 0,
         .u.accept.value_ballot = 0,
         .u.accept.aid = 0,
@@ -41,8 +39,9 @@ void submit(struct paxos_ctx *ctx, char *value, int size) {
     }
     printf("\n");
 
-    int n = sendto(ctx->sock, buffer, msg_len, 0,
-                (struct sockaddr *)&ctx->learner_sin, sizeof(ctx->learner_sin));
+    int n = sendto( ctx->sock, buffer, msg_len, 0,
+                    (struct sockaddr *)&ctx->coordinator_sin,
+                    sizeof(ctx->coordinator_sin) );
     if (n < 0) {
         perror("submit error");
     }
@@ -81,7 +80,9 @@ struct paxos_ctx *make_proposer(struct netpaxos_configuration *conf,
                     conf->proposer_port[proposer_id],
                     &ctx->proposer_sin );
 
-    ip_to_sockaddr(conf->learner_address, conf->learner_port, &ctx->learner_sin);
+    ip_to_sockaddr( conf->coordinator_address,
+                    conf->coordinator_port,
+                    &ctx->coordinator_sin );
 
     ctx->sock = sock;
 

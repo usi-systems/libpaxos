@@ -37,7 +37,7 @@ void readcb(struct bufferevent *bev, void *ptr)
     n = evbuffer_remove(input, &response, sizeof(response));
     if (n < 0)
         return;
-    
+
     struct timespec end, result;
     clock_gettime(CLOCK_REALTIME, &end);
     timespec_diff(&result, &end, &response.ts);

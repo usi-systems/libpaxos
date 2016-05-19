@@ -21,6 +21,8 @@ struct netpaxos_configuration {
     char *acceptor_address;
     int learner_port;
     char *learner_address;
+    int coordinator_port;
+    char *coordinator_address;
     int acceptor_count;
     int proposer_count;
     int max_num_proposer;
@@ -31,6 +33,7 @@ struct paxos_ctx {
     int sock;
     /* TODO: Mock instance for testing */
     int mock_instance;
+    struct sockaddr_in coordinator_sin;
     struct sockaddr_in acceptor_sin;
     struct sockaddr_in learner_sin;
     struct sockaddr_in proposer_sin;
@@ -60,5 +63,7 @@ void subcribe_to_multicast_group(char *group, int sockfd);
 
 void check_holes(evutil_socket_t fd, short event, void *arg);
 void learner_read_cb(evutil_socket_t fd, short what, void *arg);
+
+struct paxos_ctx *make_coordinator(struct netpaxos_configuration *conf);
 
 #endif

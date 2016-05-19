@@ -21,8 +21,9 @@ struct paxos_ctx *make_replica(struct netpaxos_configuration *conf,
     evutil_socket_t sock = create_server_socket(conf->learner_port);
     evutil_make_socket_nonblocking(sock);
     ctx->sock = sock;
-    subcribe_to_multicast_group(conf->learner_address, sock);
-
+    if (net_ip__is_multicast_ip(conf->learner_address)) {
+        subcribe_to_multicast_group(conf->learner_address, sock);
+    }
     ip_to_sockaddr(conf->acceptor_address, conf->acceptor_port, &ctx->acceptor_sin);
 
     ctx->ev_read = event_new(ctx->base, sock, EV_READ|EV_PERSIST,
