@@ -49,3 +49,24 @@ void subcribe_to_multicast_group(char *group, int sockfd)
         exit(EXIT_FAILURE);
     }
 }
+
+/******************************************************************
+ * Checks if specified IP is multicast IP.
+ *
+ * Returns 0 if specified IP is not multicast IP, else non-zero.
+ *
+ * Parameters:
+ * ip IP to check for multicast IP, stored in network byte-order.
+ ******************************************************************/
+int net_ip__is_multicast_ip(char *ip_address)
+{
+    in_addr_t ip_in_addr = inet_addr(ip_address);
+    char *ip = (char *)&ip_in_addr;
+    int i = ip[0] & 0xFF;
+
+    if(i >=  224 && i <= 239){
+        return 1;
+    }
+
+    return 0;
+}

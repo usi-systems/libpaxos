@@ -93,7 +93,9 @@ struct paxos_ctx *make_learner(struct netpaxos_configuration *conf,
     evutil_make_socket_nonblocking(sock);
     ctx->sock = sock;
 
-    subcribe_to_multicast_group(conf->learner_address, sock);
+    if (net_ip__is_multicast_ip(conf->learner_address)) {
+        subcribe_to_multicast_group(conf->learner_address, sock);
+    }
 
     ip_to_sockaddr(conf->acceptor_address, conf->acceptor_port, &ctx->acceptor_sin);
 
