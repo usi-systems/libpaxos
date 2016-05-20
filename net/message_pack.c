@@ -57,9 +57,13 @@ void unpack_value(paxos_value *v, char *p, int offset)
 {
     unpack_uint32((uint32_t *)&v->paxos_value_len, p, offset);
     char *value =  (char *)(p + offset + 4);
-    v->paxos_value_val = malloc(v->paxos_value_len + 1);
-    memcpy(v->paxos_value_val, value, v->paxos_value_len);
-    v->paxos_value_val[v->paxos_value_len] = '\0';
+    if (v->paxos_value_len > 0) {
+        v->paxos_value_val = malloc(v->paxos_value_len + 1);
+        memcpy(v->paxos_value_val, value, v->paxos_value_len);
+        v->paxos_value_val[v->paxos_value_len] = '\0';
+    } else {
+        v->paxos_value_val = NULL;
+    }
 }
 
 void pack_paxos_prepare(char* p, paxos_prepare* v)

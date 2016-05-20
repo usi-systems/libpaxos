@@ -62,6 +62,10 @@ paxos_value_new(const char* value, size_t size)
 	v = malloc(sizeof(paxos_value));
 	v->paxos_value_len = size;
 	v->paxos_value_val = malloc(size);
+	if (v->paxos_value_val == NULL) {
+		perror("Cannot assign memory for value");
+		return NULL;
+	}
 	memcpy(v->paxos_value_val, value, size);
 	return v;
 }
@@ -69,15 +73,20 @@ paxos_value_new(const char* value, size_t size)
 void
 paxos_value_free(paxos_value* v)
 {
-	free(v->paxos_value_val);
-	free(v);
+	if (v) {
+		if (v->paxos_value_val)
+			free(v->paxos_value_val);
+		free(v);
+	}
 }
 
 static void
 paxos_value_destroy(paxos_value* v)
 {
-	if (v->paxos_value_len > 0)
+	if (v->paxos_value_len > 0) {
 		free(v->paxos_value_val);	
+		v->paxos_value_val = NULL;
+	}
 }
 
 void

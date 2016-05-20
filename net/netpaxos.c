@@ -26,6 +26,7 @@ void init_paxos_ctx(struct paxos_ctx *ctx)
     ctx->sock = 0;
     /* TODO: Remove mock instance */
     ctx->mock_instance = 1;
+    ctx->preexec_window = 2;
     memset(&ctx->acceptor_sin, 0, sizeof(struct sockaddr_in));
     memset(&ctx->learner_sin, 0, sizeof(struct sockaddr_in));
     memset(&ctx->proposer_sin, 0, sizeof(struct sockaddr_in));
@@ -34,8 +35,11 @@ void init_paxos_ctx(struct paxos_ctx *ctx)
     ctx->ev_send = NULL;
     ctx->ev_read = NULL;
     ctx->ev_signal = NULL;
+    ctx->timeout_ev = NULL;
     ctx->hole_watcher = NULL;
     ctx->learner_state = NULL;
+    ctx->acceptor_state = NULL;
+    ctx->proposer_state = NULL;
     ctx->buffer = malloc(BUFSIZE);
 }
 
@@ -55,6 +59,8 @@ void free_paxos_ctx(struct paxos_ctx *ctx)
         event_free(ctx->ev_read);
     if (ctx->ev_signal)
         event_free(ctx->ev_signal);
+    if (ctx->timeout_ev)
+        event_free(ctx->timeout_ev);
     event_base_free(ctx->base);
     free(ctx->buffer);
     free(ctx);

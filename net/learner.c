@@ -56,22 +56,10 @@ void learner_read_cb(evutil_socket_t fd, short what, void *arg) {
         if (n < 0)
             perror("recvfrom");
 
-        int i;
-        for (i = 0; i < n; i++)
-            printf("%.2x ", buffer[i]);
-        printf("\n");
-
         struct paxos_message msg;
         unpack_paxos_message(&msg, buffer);
 
         if (msg.type == PAXOS_ACCEPTED) {
-            /*
-            printf("iid %d, ballot %d, value_ballot %d, aid %d, value[%d, %s]\n",
-                msg.u.accepted.iid, msg.u.accepted.ballot,
-                msg.u.accepted.value_ballot, msg.u.accept.aid,
-                msg.u.accepted.value.paxos_value_len,
-                msg.u.accepted.value.paxos_value_val);
-            */
             on_paxos_accepted(&msg, ctx);
         }
         paxos_message_destroy(&msg);

@@ -17,7 +17,12 @@ void acceptor_handle_prepare(struct paxos_ctx *ctx, struct paxos_message *msg,
     paxos_message out;
     paxos_prepare* prepare = &msg->u.prepare;
 
+    printf("Received prepare for instance %d, round %d\n",
+        msg->u.prepare.iid,
+        msg->u.prepare.ballot);
+
     if (acceptor_receive_prepare(ctx->acceptor_state, prepare, &out) != 0) {
+        printf("Respond %d (Promise) for instance %d\n", out.type, out.u.promise.iid);
         pack_paxos_message(ctx->buffer, &out);
         size_t msg_len = sizeof(struct paxos_message);
         int n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
@@ -28,7 +33,8 @@ void acceptor_handle_prepare(struct paxos_ctx *ctx, struct paxos_message *msg,
     }
 }
 
-void acceptor_handle_accept(struct paxos_ctx *ctx, struct paxos_message *msg)
+void acceptor_handle_accept(struct paxos_ctx *ctx, struct paxos_message *msg,
+    struct sockaddr_in *remote, socklen_t socklen)
 {
     paxos_message out;
     paxos_accept* accept = &msg->u.accept;
@@ -39,6 +45,10 @@ void acceptor_handle_accept(struct paxos_ctx *ctx, struct paxos_message *msg)
             size_t msg_len = sizeof(struct paxos_message);
             int n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
                 (struct sockaddr *)&ctx->learner_sin, sizeof(ctx->learner_sin));
+            if (n < 0)
+                perror("Sendto:");
+            n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
+                (struct sockaddr *)remote, socklen);
             if (n < 0)
                 perror("Sendto:");
         }
@@ -63,7 +73,7 @@ void acceptor_read(evutil_socket_t fd, short what, void *arg)
         unpack_paxos_message(&msg, ctx->buffer);
 
         if (msg.type == PAXOS_ACCEPT) {
-            acceptor_handle_accept(ctx, &msg);
+            acceptor_handle_accept(ctx, &msg, &remote, len);
         } else if (msg.type == PAXOS_PREPARE) {
             acceptor_handle_prepare(ctx, &msg, &remote, len);
         }
