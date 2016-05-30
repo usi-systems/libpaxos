@@ -9,6 +9,9 @@
 #include <time.h>
 #include <signal.h>
 
+#define BILLION 1000000000
+
+
 struct client_request {
     struct timespec ts;
 };
@@ -16,9 +19,13 @@ struct client_request {
 int
 timespec_diff(struct timespec *result, struct timespec *end,struct timespec *start)
 {
-  result->tv_sec = end->tv_sec - start->tv_sec;
-  result->tv_nsec = end->tv_nsec - start->tv_nsec;
-
+    if (end->tv_nsec < start->tv_nsec) {
+        result->tv_nsec =  BILLION + end->tv_nsec - start->tv_nsec;
+        result->tv_sec = end->tv_sec - start->tv_sec - 1;
+    } else {
+        result->tv_nsec = end->tv_nsec - start->tv_nsec;
+        result->tv_sec = end->tv_sec - start->tv_sec;
+    }
   /* Return 1 if result is negative. */
   return end->tv_sec < start->tv_sec;
 }
