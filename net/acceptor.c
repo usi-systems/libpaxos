@@ -96,6 +96,10 @@ struct paxos_ctx *make_acceptor(struct netpaxos_configuration *conf, int aid)
     evutil_make_socket_nonblocking(sock);
     ctx->sock = sock;
 
+    if (net_ip__is_multicast_ip(conf->acceptor_address)) {
+        subcribe_to_multicast_group(conf->acceptor_address, sock);
+    }
+
     ip_to_sockaddr(conf->learner_address, conf->learner_port, &ctx->learner_sin);
     ip_to_sockaddr( conf->coordinator_address, conf->coordinator_port,
                     &ctx->coordinator_sin );
