@@ -71,7 +71,7 @@ void eventcb(struct bufferevent *bev, short events, void *ptr)
 }
 
 void handle_signal(evutil_socket_t fd, short what, void *arg) {
-    printf("Caught SIGINT\n");
+    // printf("Caught SIGINT\n");
     struct event_base *base = arg;
     event_base_loopbreak(base);
 }

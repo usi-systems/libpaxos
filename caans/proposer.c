@@ -14,17 +14,17 @@ void usage(char *prog)
 void respond_cb(char *msg, size_t size, void *arg) {
     struct application_ctx *app = arg;
     int *p = (int *) msg;
-    int proposer_id = ntohl(*p);
+    // int proposer_id = ntohl(*p);
     p = (int *) (msg + 4);
     int request_id = ntohl(*p);
-    printf("proposer %d, request %d\n", proposer_id, request_id);
+    // printf("proposer %d, request %d\n", proposer_id, request_id);
     struct request_entry *s;
     HASH_FIND_INT(app->request_table, &request_id, s);
     if (s==NULL) {
         printf("Cannot find the associated buffer event\n");
     } else {
-        printf("Found an entry of request_id %d\n", s->request_id);
-        printf("Address of s->bev %p\n", s->bev);
+        // printf("Found an entry of request_id %d\n", s->request_id);
+        // printf("Address of s->bev %p\n", s->bev);
         bufferevent_write(s->bev, msg + 8, size - 8);
         HASH_DEL(app->request_table, s);
         free(s);

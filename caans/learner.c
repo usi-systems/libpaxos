@@ -8,15 +8,21 @@
 #include "configuration.h"
 #include "application_proxy.h"
 
+void on_perf(evutil_socket_t fd, short event, void *arg) {
+    struct application_ctx *app = arg;
+    printf("%4d %8d\n", app->at_second++, app->message_per_second);
+    app->message_per_second = 0;
+}
+
 void deliver(unsigned int inst, char* val, size_t size, void* arg) {
     struct application_ctx *app = arg;
-    printf("DELIVERED: %d %s\n", inst, val);
-    // struct application_ctx *app = arg;
+    app->message_per_second++;
+    // printf("DELIVERED: %d %s\n", inst, val);
     int *p = (int *) val;
     int proposer_id = ntohl(*p);
     p = (int *) (val + 4);
-    int request_id = ntohl(*p);
-    printf("proposer %d, request %d\n", proposer_id, request_id);
+    // int request_id = ntohl(*p);
+    // printf("proposer %d, request %d\n", proposer_id, request_id);
     int n = sendto(app->paxos->sock, val, size, 0,
                     (struct sockaddr *)&app->proxies[proposer_id],
                     sizeof(app->proxies[proposer_id]));
@@ -41,7 +47,8 @@ int main(int argc, char *argv[]) {
     dump_configuration(&conf);
 
     struct application_ctx *app = malloc( sizeof (struct application_ctx));
-    
+    app->at_second = 0;
+    app->message_per_second = 0;
     app->proxies = calloc(conf.proposer_count, sizeof(struct sockaddr_in));
     int i;
     for (i = 0; i < conf.proposer_count; i++) {
@@ -52,8 +59,11 @@ int main(int argc, char *argv[]) {
     struct paxos_ctx *paxos = make_learner(&conf, deliver, app);
     app->paxos = paxos;
 
+    struct event *ev_perf = event_new(paxos->base, -1, EV_TIMEOUT|EV_PERSIST, on_perf, app);
+    struct timeval one_second = {1, 0};
+    event_add(ev_perf, &one_second);
     start_paxos(app->paxos);
-
+    event_free(ev_perf);
     free_paxos_ctx(app->paxos);
     free(app->proxies);
     free(app);

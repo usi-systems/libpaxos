@@ -34,14 +34,16 @@ void handle_request(struct bufferevent *bev, void *arg)
 
 void handle_conn_events(struct bufferevent *bev, short events, void *arg)
 {
-    struct application_ctx *app = arg;
+    // struct application_ctx *app = arg;
     if (events & BEV_EVENT_ERROR)
             perror("Error from bufferevent");
     if (events & (BEV_EVENT_EOF | BEV_EVENT_ERROR)) {
         bufferevent_free(bev);
+        /*
         unsigned int num_active_connections;
         num_active_connections = HASH_COUNT(app->request_table);
         printf("there are %u open connections\n", num_active_connections);
+        */
     }
 }
 
@@ -52,7 +54,7 @@ void accept_conn_cb(struct evconnlistener *listener, evutil_socket_t fd,
     struct event_base *base = evconnlistener_get_base(listener);
     struct bufferevent *bev = bufferevent_socket_new(
             base, fd, BEV_OPT_CLOSE_ON_FREE);
-    printf("Original bev %p\n", bev);
+    // printf("Original bev %p\n", bev);
     bufferevent_setcb(bev, handle_request, NULL, handle_conn_events, arg);
     bufferevent_enable(bev, EV_READ|EV_WRITE);
 }
@@ -88,7 +90,7 @@ void clean_proxy(struct application_ctx *ctx)
 {
     struct request_entry *s, *tmp;
     HASH_ITER(hh, ctx->request_table, s, tmp) {
-        printf("Free request id : %d\n", s->request_id);
+        // printf("Free request id : %d\n", s->request_id);
         HASH_DEL(ctx->request_table, s);
         free(s);
     }

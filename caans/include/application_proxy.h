@@ -28,6 +28,8 @@ struct application_ctx {
     struct bufferevent *tmpbev;
     char buffer[BUFFER_SIZE];
     struct sockaddr_in *proxies;
+    int at_second;
+    int message_per_second;
 };
 
 void start_proxy(struct application_ctx *ctx, struct netpaxos_configuration *conf);
