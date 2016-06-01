@@ -9,6 +9,10 @@ void dump_configuration(struct netpaxos_configuration *conf)
     printf("learner: %s %d\n", conf->learner_address, conf->learner_port);
     printf("acceptor: %s %d\n", conf->acceptor_address, conf->acceptor_port);
     printf("num_acceptors: %d\n", conf->acceptor_count);
+    int i;
+    for (i = 0; i < conf->proposer_count; i++) {
+        printf("proposer %d: %s %d\n", i, conf->proposer_address[i], conf->proposer_port[i]);
+    }
 }
 
 int populate_configuration(char* config, struct netpaxos_configuration *conf)
