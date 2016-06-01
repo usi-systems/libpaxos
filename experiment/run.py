@@ -38,6 +38,12 @@ def learner(host, path, config, output_dir):
                                 shell=False)
     return ssh
 
+def reset_coordinator(host, path):
+    cmd = "ssh danghu@{0} NOPROGRAM=1 {1}/ubuntu.exe -C -i 0".format(host, path)
+    print cmd
+    ssh = subprocess.Popen(shlex.split(cmd))
+    ssh.wait()
+
 
 def kill_proxies(*proxies):
     for n in proxies:
@@ -90,6 +96,10 @@ if __name__ == "__main__":
 
     args.path   = "/home/danghu/workspace/libpaxos/bin/caans"
     args.config = "/home/danghu/workspace/libpaxos/bin/exp.conf"
+
+    ubuntu_exe_path = "/opt/sonic-lite/p4/examples/paxos/nfsume/bin"
+    reset_coordinator("node97", ubuntu_exe_path)
+    print "Reset finished."
 
     pipes = []
     # nodes = { 'server' : 'node95', 'proxy' : 'node97', 'client' : 'node97' }
