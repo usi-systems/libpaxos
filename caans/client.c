@@ -91,7 +91,7 @@ int main(int argc, char* argv[])
     base = event_base_new();
     dns_base = evdns_base_new(base, 1);
 
-    struct event *ev_signal = evsignal_new(base, SIGINT, handle_signal, base);
+    struct event *ev_signal = evsignal_new(base, SIGINT|SIGTERM, handle_signal, base);
     evsignal_add(ev_signal, NULL);
 
     bev = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE);

@@ -182,7 +182,7 @@ struct paxos_ctx *make_coordinator(struct netpaxos_configuration *conf)
         coordinator_read, ctx);
     event_add(ctx->ev_read, NULL);
 
-    ctx->ev_signal = evsignal_new(ctx->base, SIGINT, handle_signal, ctx);
+    ctx->ev_signal = evsignal_new(ctx->base, SIGINT|SIGTERM, handle_signal, ctx);
     evsignal_add(ctx->ev_signal, NULL);
 
     coordinator_preexecute(ctx);

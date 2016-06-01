@@ -24,8 +24,8 @@ target_link_libraries(replica_caans netpaxos ${LIBPAXOS_LINKER_LIBS})
 add_executable(client_caans client.c ${SRCS})
 target_link_libraries(client_caans netpaxos ${LIBPAXOS_LINKER_LIBS})
 
-add_executable(coordinator_caans coordinator.c ${SRCS})
-target_link_libraries(coordinator_caans netpaxos ${LIBPAXOS_LINKER_LIBS})
+add_executable(sw_coordinator coordinator.c ${SRCS})
+target_link_libraries(sw_coordinator netpaxos ${LIBPAXOS_LINKER_LIBS})
 
-add_executable(acceptor_caans acceptor.c ${SRCS})
-target_link_libraries(acceptor_caans netpaxos ${LIBPAXOS_LINKER_LIBS})
+add_executable(sw_acceptor acceptor.c ${SRCS})
+target_link_libraries(sw_acceptor netpaxos ${LIBPAXOS_LINKER_LIBS})

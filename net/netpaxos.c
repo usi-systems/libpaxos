@@ -16,7 +16,7 @@ void start_paxos(struct paxos_ctx *ctx)
 
 void handle_signal(evutil_socket_t fd, short what, void *arg)
 {
-    printf("Caught SIGINT\n");
+    // printf("Caught SIGINT\n");
     struct paxos_ctx *ctx = arg;
     event_base_loopbreak(ctx->base);
 }

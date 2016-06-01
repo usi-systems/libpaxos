@@ -80,7 +80,7 @@ struct paxos_ctx *make_proposer(struct netpaxos_configuration *conf,
     struct timeval one_second = {5,0};
     event_add(ctx->ev_read, &one_second);
 
-    ctx->ev_signal = evsignal_new(ctx->base, SIGINT, handle_signal, ctx);
+    ctx->ev_signal = evsignal_new(ctx->base, SIGINT|SIGTERM, handle_signal, ctx);
     evsignal_add(ctx->ev_signal, NULL);
 
     return ctx;
