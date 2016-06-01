@@ -44,7 +44,7 @@ int main(int argc, char *argv[]) {
 
     struct netpaxos_configuration conf;
     populate_configuration(argv[1], &conf);
-    dump_configuration(&conf);
+    // dump_configuration(&conf);
 
     struct application_ctx *app = malloc( sizeof (struct application_ctx));
     app->at_second = 0;
@@ -69,6 +69,6 @@ int main(int argc, char *argv[]) {
     free(app);
     free_configuration(&conf);
 
-    printf("Exit properly\n");
+    // printf("Exit properly\n");
     return 0;
 }

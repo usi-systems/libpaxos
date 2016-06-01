@@ -56,7 +56,7 @@ void readcb(struct bufferevent *bev, void *ptr)
 void eventcb(struct bufferevent *bev, short events, void *ptr)
 {
     if (events & BEV_EVENT_CONNECTED) {
-        printf("Connect okay.\n");
+        // printf("Connect okay.\n");
     } else if (events & (BEV_EVENT_ERROR|BEV_EVENT_EOF)) {
         struct event_base *base = ptr;
         if (events & BEV_EVENT_ERROR) {
@@ -64,7 +64,7 @@ void eventcb(struct bufferevent *bev, short events, void *ptr)
             if (err)
                 printf("DNS error: %s\n", evutil_gai_strerror(err));
         }
-        printf("Closing\n");
+        // printf("Closing\n");
         bufferevent_free(bev);
         event_base_loopexit(base, NULL);
     }
