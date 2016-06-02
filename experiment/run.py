@@ -8,7 +8,8 @@ import time
 
 
 def client(cid, host, path, server_addr, port, output_dir):
-    cmd = "ssh danghu@{0} {1}/client_caans {2} {3}".format(host, path, server_addr, port)
+    cmd = "ssh danghu@{0} {1}/client_caans {2} {3}".format(host, path,
+        server_addr, port)
     print cmd
     with open('%s/client-%d.txt' % (output_dir, cid), 'w') as out:
         ssh = subprocess.Popen(shlex.split(cmd),
@@ -17,8 +18,9 @@ def client(cid, host, path, server_addr, port, output_dir):
                                 shell=False)
     return ssh
 
-def proxy(host, path, config, proxy_id, output_dir):
-    cmd = "ssh danghu@{0} {1}/proxy_caans {2} {3}".format(host, path, config, proxy_id)
+def proxy(host, path, config, proxy_id, proxy_port, output_dir):
+    cmd = "ssh danghu@{0} {1}/proxy_caans {2} {3} {4}".format(host, path,
+        config, proxy_id, proxy_port)
     print cmd
     with open('%s/proxy-%d.txt' % (output_dir, proxy_id), 'w') as out:
         ssh = subprocess.Popen(shlex.split(cmd),
@@ -118,12 +120,14 @@ if __name__ == "__main__":
 
     for j in range(n_proxies):
         print "start proxy %d" % j
-        pipes.append(proxy(proxies[j], args.path, args.config, j, args.output))
+        pipes.append(proxy(proxies[j], args.path, args.config, j, 6789,
+            args.output))
 
     time.sleep(1)
     for i in range(args.osd):
         print "start client %d, on proxy %d" % ( i , (i / 4))
-        pipes.append(client(i, proxies[i/4], args.path, proxies[i/4], 6789, args.output))
+        pipes.append(client(i, proxies[i/4], args.path, proxies[i/4], 6789,
+            args.output))
 
     t1 = Timer(args.time, kill_proxies, proxies)
     t2 = Timer(args.time, kill_client, proxies)

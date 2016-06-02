@@ -8,7 +8,7 @@
 
 void usage(char *prog)
 {
-    printf("Usage: %s configuration-file proposer_id\n", prog);
+    printf("Usage: %s configuration-file proposer_id listen_port\n", prog);
 }
 
 void respond_cb(char *msg, size_t size, void *arg) {
@@ -33,13 +33,13 @@ void respond_cb(char *msg, size_t size, void *arg) {
 
 int main(int argc, char *argv[])
 {
-    if (argc < 3) {
+    if (argc < 4) {
         usage(argv[0]);
         return 0;
     }
 
     int proposer_id = atoi(argv[2]);
-
+    int listen_port = atoi(argv[3]);
     struct application_ctx *app = malloc(sizeof(struct application_ctx));
     app->request_table = NULL;
     app->current_request_id = 0;
@@ -47,12 +47,12 @@ int main(int argc, char *argv[])
 
     struct netpaxos_configuration conf;
     populate_configuration(argv[1], &conf);
-    dump_configuration(&conf);
+    // dump_configuration(&conf);
     struct paxos_ctx *paxos = make_proposer(&conf, proposer_id, respond_cb, app);
 
     app->paxos = paxos;
 
-    start_proxy(app, &conf);
+    start_proxy(app, listen_port);
     start_paxos(app->paxos);
 
     clean_proxy(app);

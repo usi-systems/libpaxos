@@ -32,7 +32,7 @@ struct application_ctx {
     int message_per_second;
 };
 
-void start_proxy(struct application_ctx *ctx, struct netpaxos_configuration *conf);
+void start_proxy(struct application_ctx *ctx, int proxy_port);
 void clean_proxy(struct application_ctx *ctx);
 
 #endif
