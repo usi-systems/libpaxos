@@ -47,6 +47,16 @@ def reset_coordinator(host, path):
     ssh.wait()
 
 
+def run_ps(host, output):
+    command = 'ps -C proxy_caans,client_caans,server_caans -o %cpu,%mem,comm --sort %cpu | tail -n4'
+    cmd = "ssh {0} {1}".format(host, command)
+    with open("%s/%s-cpu.txt" % (output, host), "a+") as out:
+        ssh = subprocess.Popen(shlex.split(cmd),
+                stdout=out,
+                stderr=out,
+                shell=False)
+    return ssh
+
 def kill_proxies(*proxies):
     for n in proxies:
         cmd = "ssh danghu@%s pkill proxy_caans" % n
@@ -108,7 +118,7 @@ if __name__ == "__main__":
         # nodes = { 'server' : 'node95', 'proxy' : 'node97', 'client' : 'node97' }
         servers = [ 'node95' ]
         proxies = [ 'node96', 'node97', 'node98', 'node96', 'node97' ]
-        nodes = [ 'node96', 'node97', 'node98' ]
+        nodes = [ 'node95', 'node96', 'node97', 'node98' ]
 
         n_proxies = 0;
         if (args.osd % 4 == 0):
@@ -139,5 +149,9 @@ if __name__ == "__main__":
         t2.start()
         t3.start()
 
+        for i in range(args.time/2):
+            for n in nodes:
+                run_ps(n, args.output)
+            time.sleep(1)
         # for p in pipes:
         #     p.wait()
