@@ -11,7 +11,7 @@ void handle_request(struct bufferevent *bev, void *arg)
     struct application_ctx *app = arg;
 
     /* TODO: find cleaner way to serialize application request */
-    uint32_t proxy_id = htonl(app->proxy_id);
+    uint32_t proxy_id = htonl(app->node_id);
     uint32_t net_req_id = htonl(app->current_request_id);
     memcpy(app->buffer, &proxy_id, 4);
     memcpy(app->buffer + 4, &net_req_id, 4);

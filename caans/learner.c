@@ -17,27 +17,29 @@ void on_perf(evutil_socket_t fd, short event, void *arg) {
 void deliver(unsigned int inst, char* val, size_t size, void* arg) {
     struct application_ctx *app = arg;
     app->message_per_second++;
-    // printf("DELIVERED: %d %s\n", inst, val);
+    printf("DELIVERED: %d %s\n", inst, val);
     int *p = (int *) val;
     int proposer_id = ntohl(*p);
     p = (int *) (val + 4);
-    // int request_id = ntohl(*p);
-    // printf("proposer %d, request %d\n", proposer_id, request_id);
-    int n = sendto(app->paxos->sock, val, size, 0,
-                    (struct sockaddr *)&app->proxies[proposer_id],
-                    sizeof(app->proxies[proposer_id]));
-    if (n < 0)
-        perror("deliver: sendto error");
+    int request_id = ntohl(*p);
+    printf("proposer %d, request %d\n", proposer_id, request_id);
+    if (request_id % app->node_count == app->node_id) {
+        int n = sendto(app->paxos->sock, val, size, 0,
+                        (struct sockaddr *)&app->proxies[proposer_id],
+                        sizeof(app->proxies[proposer_id]));
+        if (n < 0)
+            perror("deliver: sendto error");
+    }
 }
 
 void usage(char *prog) {
-    printf("Usage: %s configuration-file\n", prog);
+    printf("Usage: %s configuration-file learner_id number_of_learner\n", prog);
 }
 
 
 int main(int argc, char *argv[]) {
 
-    if (argc < 2) {
+    if (argc < 4) {
         usage(argv[0]);
         return 0;
     }
@@ -47,6 +49,8 @@ int main(int argc, char *argv[]) {
     // dump_configuration(&conf);
 
     struct application_ctx *app = malloc( sizeof (struct application_ctx));
+    app->node_id = atoi(argv[2]);
+    app->node_count = atoi(argv[3]);
     app->at_second = 0;
     app->message_per_second = 0;
     app->proxies = calloc(conf.proposer_count, sizeof(struct sockaddr_in));

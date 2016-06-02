@@ -20,7 +20,8 @@ struct request_entry {
 
 
 struct application_ctx {
-    int proxy_id;
+    int node_id;
+    int node_count;
     struct paxos_ctx *paxos;
     struct evconnlistener *listener;
     int current_request_id;

@@ -43,7 +43,7 @@ int main(int argc, char *argv[])
     struct application_ctx *app = malloc(sizeof(struct application_ctx));
     app->request_table = NULL;
     app->current_request_id = 0;
-    app->proxy_id = proposer_id;
+    app->node_id = proposer_id;
 
     struct netpaxos_configuration conf;
     populate_configuration(argv[1], &conf);
