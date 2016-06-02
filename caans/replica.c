@@ -41,15 +41,16 @@ void deliver(unsigned int inst, char* val, size_t size, void* arg) {
 
 void usage(char *prog)
 {
-    printf("Usage: %s configuration-file\n", prog);
+    printf("Usage: %s configuration-file port\n", prog);
 }
 
 int main(int argc, char *argv[])
 {
-    if (argc < 2) {
+    if (argc < 3) {
         usage(argv[0]);
         return 0;
     }
+    int proxy_port = atoi(argv[2]);
 
     struct application_ctx *app = malloc(sizeof(struct application_ctx));
     app->request_table = NULL;
@@ -69,7 +70,7 @@ int main(int argc, char *argv[])
 
     app->paxos = paxos;
 
-    start_proxy(app, &conf);
+    start_proxy(app, proxy_port);
     start_paxos(app->paxos);
 
     clean_proxy(app);

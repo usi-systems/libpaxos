@@ -19,7 +19,7 @@ def client(cid, host, path, server_addr, port, output_dir):
     return ssh
 
 def proxy(host, path, config, proxy_id, proxy_port, output_dir):
-    cmd = "ssh danghu@{0} {1}/proxy_caans {2} {3} {4}".format(host, path,
+    cmd = "ssh danghu@{0} taskset -c {3} {1}/proxy_caans {2} {3} {4}".format(host, path,
         config, proxy_id, proxy_port)
     print cmd
     with open('%s/proxy-%d.txt' % (output_dir, proxy_id), 'w') as out:
@@ -30,8 +30,8 @@ def proxy(host, path, config, proxy_id, proxy_port, output_dir):
     return ssh
 
 
-def learner(host, path, config, output_dir):
-    cmd = "ssh danghu@{0} {1}/server_caans {2}".format(host, path, config)
+def learner(host, path, config, server_id, output_dir):
+    cmd = "ssh danghu@{0} taskset -c {3} {1}/server_caans {2}".format(host, path, config, server_id)
     print cmd
     with open('%s/server.txt' % output_dir, 'w') as out:
         ssh = subprocess.Popen(shlex.split(cmd),
@@ -93,48 +93,51 @@ if __name__ == "__main__":
     parser.add_argument('output', help='directory')
     args = parser.parse_args()
 
-    if not os.path.exists(args.output):
-       os.makedirs(args.output)
+    try:
+        if not os.path.exists(args.output):
+           os.makedirs(args.output)
 
-    args.path   = "/home/danghu/workspace/libpaxos/bin/caans"
-    args.config = "/home/danghu/workspace/libpaxos/bin/exp.conf"
+        args.path   = "/home/danghu/workspace/libpaxos/bin/caans"
+        args.config = "/home/danghu/workspace/libpaxos/bin/exp.conf"
 
-    ubuntu_exe_path = "/opt/sonic-lite/p4/examples/paxos/nfsume/bin"
-    reset_coordinator("node97", ubuntu_exe_path)
-    print "Reset finished."
+        ubuntu_exe_path = "/opt/sonic-lite/p4/examples/paxos/nfsume/bin"
+        reset_coordinator("node97", ubuntu_exe_path)
+        print "Reset finished."
 
-    pipes = []
-    # nodes = { 'server' : 'node95', 'proxy' : 'node97', 'client' : 'node97' }
-    servers = [ 'node95' ]
-    proxies = [ 'node96', 'node97', 'node98' ]
+        pipes = []
+        # nodes = { 'server' : 'node95', 'proxy' : 'node97', 'client' : 'node97' }
+        servers = [ 'node95' ]
+        proxies = [ 'node96', 'node97', 'node98', 'node96', 'node97' ]
+        nodes = [ 'node96', 'node97', 'node98' ]
 
-    n_proxies = 0;
-    if (args.osd % 4 == 0):
-        n_proxies = args.osd / 4
-    else:
-        n_proxies = args.osd / 4 + 1
-    print "number of proxies in use: %d" % n_proxies
+        n_proxies = 0;
+        if (args.osd % 4 == 0):
+            n_proxies = args.osd / 4
+        else:
+            n_proxies = args.osd / 4 + 1
+        print "number of proxies in use: %d" % n_proxies
 
-    # start learner
-    pipes.append(learner(servers[0], args.path, args.config, args.output))
+        # start learner
+        pipes.append(learner(servers[0], args.path, args.config, 0, args.output))
 
-    for j in range(n_proxies):
-        print "start proxy %d" % j
-        pipes.append(proxy(proxies[j], args.path, args.config, j, 6789,
-            args.output))
+        for j in range(n_proxies):
+            print "start proxy %d" % j
+            pipes.append(proxy(proxies[j], args.path, args.config, j, 6789+j,
+                args.output))
 
-    time.sleep(1)
-    for i in range(args.osd):
-        print "start client %d, on proxy %d" % ( i , (i / 4))
-        pipes.append(client(i, proxies[i/4], args.path, proxies[i/4], 6789,
-            args.output))
+        time.sleep(1)
+        for i in range(args.osd):
+            proxy_id = (i / 4);
+            print "start client %d, on proxy %d" % ( i , proxy_id)
+            pipes.append(client(i, proxies[i/4], args.path, proxies[proxy_id],
+                6789 + proxy_id, args.output))
+    finally:
+        t1 = Timer(args.time, kill_proxies, nodes)
+        t2 = Timer(args.time, kill_client, nodes)
+        t3 = Timer(args.time, kill_server, servers)
+        t1.start()
+        t2.start()
+        t3.start()
 
-    t1 = Timer(args.time, kill_proxies, proxies)
-    t2 = Timer(args.time, kill_client, proxies)
-    t3 = Timer(args.time, kill_server, servers)
-    t1.start()
-    t2.start()
-    t3.start()
-
-    # for p in pipes:
-    #     p.wait()
+        # for p in pipes:
+        #     p.wait()
