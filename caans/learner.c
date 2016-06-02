@@ -17,12 +17,12 @@ void on_perf(evutil_socket_t fd, short event, void *arg) {
 void deliver(unsigned int inst, char* val, size_t size, void* arg) {
     struct application_ctx *app = arg;
     app->message_per_second++;
-    printf("DELIVERED: %d %s\n", inst, val);
+    // printf("DELIVERED: %d %s\n", inst, val);
     int *p = (int *) val;
     int proposer_id = ntohl(*p);
     p = (int *) (val + 4);
     int request_id = ntohl(*p);
-    printf("proposer %d, request %d\n", proposer_id, request_id);
+    // printf("proposer %d, request %d\n", proposer_id, request_id);
     if (request_id % app->node_count == app->node_id) {
         int n = sendto(app->paxos->sock, val, size, 0,
                         (struct sockaddr *)&app->proxies[proposer_id],
