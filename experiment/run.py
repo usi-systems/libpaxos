@@ -30,10 +30,10 @@ def proxy(host, path, config, proxy_id, proxy_port, output_dir):
     return ssh
 
 
-def learner(host, path, config, server_id, output_dir):
-    cmd = "ssh danghu@{0} taskset -c {3} {1}/server_caans {2}".format(host, path, config, server_id)
+def learner(host, path, config, server_id, number_of_server, output_dir):
+    cmd = "ssh danghu@{0} taskset -c {3} {1}/server_caans {2} {3} {4}".format(host, path, config, server_id, number_of_server)
     print cmd
-    with open('%s/server.txt' % output_dir, 'w') as out:
+    with open('%s/server-%d.txt' % (output_dir, server_id), 'w') as out:
         ssh = subprocess.Popen(shlex.split(cmd),
                                 stdout=out,
                                 stderr=out,
@@ -100,6 +100,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Run experiment.')
     parser.add_argument('--time', type=int, default=30, help='experiment time')
     parser.add_argument('--osd', type=int, default=1, help='number of clients')
+    parser.add_argument('-c', '--clients', type=int, default=4, help='client per proxy')
     parser.add_argument('output', help='directory')
     args = parser.parse_args()
 
@@ -108,7 +109,7 @@ if __name__ == "__main__":
            os.makedirs(args.output)
 
         args.path   = "/home/danghu/workspace/libpaxos/bin/caans"
-        args.config = "/home/danghu/workspace/libpaxos/bin/exp.conf"
+        args.config = "/home/danghu/workspace/libpaxos/bin/multicast.conf"
 
         ubuntu_exe_path = "/opt/sonic-lite/p4/examples/paxos/nfsume/bin"
         reset_coordinator("node97", ubuntu_exe_path)
@@ -116,19 +117,20 @@ if __name__ == "__main__":
 
         pipes = []
         # nodes = { 'server' : 'node95', 'proxy' : 'node97', 'client' : 'node97' }
-        servers = [ 'node95' ]
-        proxies = [ 'node96', 'node97', 'node98', 'node96', 'node97' ]
+        servers = [ 'node95', 'node96', 'node98' ]
+        proxies = [ 'node97', 'node97', 'node97', 'node97', 'node97' ]
         nodes = [ 'node95', 'node96', 'node97', 'node98' ]
 
         n_proxies = 0;
-        if (args.osd % 4 == 0):
-            n_proxies = args.osd / 4
+        if (args.osd % args.clients == 0):
+            n_proxies = args.osd / args.clients
         else:
-            n_proxies = args.osd / 4 + 1
+            n_proxies = args.osd / args.clients + 1
         print "number of proxies in use: %d" % n_proxies
 
         # start learner
-        pipes.append(learner(servers[0], args.path, args.config, 0, args.output))
+        for i in range(len(servers)):
+            pipes.append(learner(servers[i], args.path, args.config, i, len(servers), args.output))
 
         for j in range(n_proxies):
             print "start proxy %d" % j
@@ -137,9 +139,9 @@ if __name__ == "__main__":
 
         time.sleep(1)
         for i in range(args.osd):
-            proxy_id = (i / 4);
+            proxy_id = (i / args.clients);
             print "start client %d, on proxy %d" % ( i , proxy_id)
-            pipes.append(client(i, proxies[i/4], args.path, proxies[proxy_id],
+            pipes.append(client(i, proxies[proxy_id], args.path, proxies[proxy_id],
                 6789 + proxy_id, args.output))
     finally:
         t1 = Timer(args.time, kill_proxies, nodes)
