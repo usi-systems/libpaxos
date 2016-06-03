@@ -20,12 +20,12 @@ endforeach(p)
 add_executable(learner learner.c application_config.c net_utils.c leveldb_context.c)
 target_link_libraries(learner evpaxos ${LIBPAXOS_LINKER_LIBS})
 
-add_executable(client client.c application_config.c net_utils.c)
-target_link_libraries(client evpaxos ${LIBPAXOS_LINKER_LIBS})
+add_executable(proxy proxy.c application_config.c net_utils.c)
+target_link_libraries(proxy evpaxos ${LIBPAXOS_LINKER_LIBS})
 
 INSTALL(PROGRAMS
 	${CMAKE_CURRENT_BINARY_DIR}/acceptor
 	${CMAKE_CURRENT_BINARY_DIR}/proposer
 	${CMAKE_CURRENT_BINARY_DIR}/replica
-	${CMAKE_CURRENT_BINARY_DIR}/client
+	${CMAKE_CURRENT_BINARY_DIR}/proxy
 	DESTINATION bin)

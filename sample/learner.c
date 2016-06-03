@@ -34,17 +34,17 @@
 
 /* Accept new TCP connection */
 #include <event2/listener.h>
+#include <event2/event.h>
 #include <errno.h>
 #include "net_utils.h"
 #include "application.h"
 #include "application_config.h"
 #include "leveldb_context.h"
 
-
 struct stats
 {
     int delivered_count;
-    size_t delivered_bytes;
+    int at_second;
 };
 
 struct application_ctx
@@ -77,15 +77,14 @@ void free_application(struct application_ctx *ctx) {
 
 static void handle_sigint(int sig, short ev, void* arg) {
 	struct event_base* base = arg;
-	printf("Caught signal %d\n", sig);
 	event_base_loopexit(base, NULL);
 }
 
 static void on_stats(evutil_socket_t fd, short event, void *arg) {
     struct application_ctx* ctx = arg;
-    fprintf(stdout, "%d value/sec\n", ctx->stats.delivered_count);
-    memset(&ctx->stats, 0, sizeof(struct stats));
-    event_add(ctx->stats_ev, &ctx->stats_interval);
+    fprintf(stdout, "%d %d\n", ctx->stats.at_second, ctx->stats.delivered_count);
+    ctx->stats.delivered_count = 0;
+    ctx->stats.at_second++;
 }
 
 static void deliver(unsigned iid, char* value, size_t size, void* arg) {
@@ -95,7 +94,7 @@ static void deliver(unsigned iid, char* value, size_t size, void* arg) {
 		struct leveldb_request *req = (struct leveldb_request *) &val->content;
 		switch(req->op) {
 			case PUT: {
-				 printf("PUT: key %s: %zu, value %s: %zu\n", req->key, req->ksize, req->value, req->vsize);
+				 // paxos_log_debug("PUT: key %s: %zu, value %s: %zu", req->key, req->ksize, req->value, req->vsize);
 				 add_entry(ctx->leveldb, false, req->key, req->ksize, req->value, req->vsize);
 				 break;
             }
@@ -103,22 +102,17 @@ static void deliver(unsigned iid, char* value, size_t size, void* arg) {
 				 char *value;
 				 size_t vsize = 0;
 				 get_value(ctx->leveldb, req->key, req->ksize, &value, &vsize);
-				 printf("GET: key %s: %zu, RETURN: %s %zu\n", req->key, req->ksize, value, vsize);
+				 // paxos_log_debug("GET: key %s: %zu, RETURN: %s %zu", req->key, req->ksize, value, vsize);
 				 if (value)
 				     free(value);
 				 break;
     		}
         }
-	} else if (val->application_type == SIMPLY_ECHO) {
-        /*
-		struct echo_request *req = (struct echo_request *)&val->content;
-        printf("%ld.%06ld [%.32s] %ld bytes\n", val->depart_ts.tv_sec,
-            val->depart_ts.tv_usec, req->value, (long)val->size);
-        */
 	}
     ctx->stats.delivered_count++;
-    if (ctx->client_bev)
+    if (ctx->client_bev) {
         bufferevent_write(ctx->client_bev, (char*)val, size);
+    }
 }
 
 
@@ -140,8 +134,6 @@ accept_conn_cb(struct evconnlistener *listener,
     void *arg)
 {
         struct application_ctx *ctx = arg;
-        /* We got a new connection! Set up a bufferevent for it. */
-        printf("We got a new connection! Set up a bufferevent for it.\n");
         struct event_base *base = evconnlistener_get_base(listener);
         struct bufferevent *bev = bufferevent_socket_new(
                 base, fd, BEV_OPT_CLOSE_ON_FREE);
@@ -189,9 +181,9 @@ static void start_learner(const char* argv[]) {
 
 	ctx->base = event_base_new();
     memset(&ctx->stats, 0, sizeof(struct stats));
-    ctx->stats_interval = (struct timeval){1, 0};
-    ctx->stats_ev = evtimer_new(ctx->base, on_stats, ctx);
-    event_add(ctx->stats_ev, &ctx->stats_interval);
+    struct timeval one_second = {1, 0};
+    ctx->stats_ev = event_new(ctx->base, -1, EV_TIMEOUT|EV_PERSIST, on_stats, ctx);
+    event_add(ctx->stats_ev, &one_second);
 
 	lea = evlearner_init(argv[1], deliver, ctx, ctx->base);
 	if (lea == NULL) {
@@ -199,7 +191,7 @@ static void start_learner(const char* argv[]) {
 		exit(1);
 	}
 	
-	sig = evsignal_new(ctx->base, SIGINT, handle_sigint, ctx->base);
+	sig = evsignal_new(ctx->base, SIGINT|SIGTERM, handle_sigint, ctx->base);
 	evsignal_add(sig, NULL);
 
 	signal(SIGPIPE, SIG_IGN);

@@ -9,11 +9,11 @@
 
 struct leveldb_request
 {
-  int op;
-  size_t ksize;
-  char key[MAX_KEY_SIZE];
-  size_t vsize;
-  char value[MAX_VALUE_SIZE];
+    int op;
+    size_t ksize;
+    char key[MAX_KEY_SIZE];
+    size_t vsize;
+    char value[MAX_VALUE_SIZE];
 };
 
 struct echo_request
@@ -34,8 +34,8 @@ union request {
 
 struct client_value
 {
-    int client_id;
-    struct timeval depart_ts;
+    int proxy_id;
+    int request_id;
     enum application_t application_type;
     int size;
     union request content;

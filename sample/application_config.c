@@ -2,7 +2,18 @@
 #include <stdlib.h>
 #include <string.h>
 #include "application_config.h"
+#include "paxos.h"
 
+int parse_verbosity(char* str, paxos_log_level* verbosity)
+{
+    strtok(str, "\n");
+    if (strcasecmp(str, "quiet") == 0) *verbosity = PAXOS_LOG_QUIET;
+    else if (strcasecmp(str, "error") == 0) *verbosity = PAXOS_LOG_ERROR;
+    else if (strcasecmp(str, "info") == 0) *verbosity = PAXOS_LOG_INFO;
+    else if (strcasecmp(str, "debug") == 0) *verbosity = PAXOS_LOG_DEBUG;
+    else return 0;
+    return 1;
+}
 
 void free_application_config(application_config *config) {
     int i;
@@ -38,6 +49,10 @@ application_config *parse_configuration(const char *config_file) {
                 token = strtok(NULL, delim);
                 conf->learners[idx].port = atoi(token);
                 conf->number_of_learners++;
+            }
+            if (strcmp(token, "verbosity") == 0) {
+                token = strtok(NULL, delim);
+                parse_verbosity(token, &paxos_config.verbosity);
             }
             token = strtok(NULL, delim);
         }

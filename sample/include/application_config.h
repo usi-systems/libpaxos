@@ -5,7 +5,7 @@
 
 #define MAX_LEARNER 2
 
-typedef struct application_config {
+typedef struct {
     int number_of_learners;
     struct address learners[MAX_LEARNER];
 } application_config;
