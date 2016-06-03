@@ -3,7 +3,7 @@
 
 #include <event2/event.h>
 #include <sys/socket.h>
-#include "../../paxos/include/paxos.h"
+#include "paxos.h"
 
 #define BUFSIZE 1024
 

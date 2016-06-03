@@ -1,3 +1,4 @@
+include_directories(${CMAKE_SOURCE_DIR}/paxos/include)
 include_directories(${CMAKE_SOURCE_DIR}/net/include)
 include_directories(${CMAKE_SOURCE_DIR}/caans/include)
 include_directories(${LIBEVENT_INCLUDE_DIRS})
