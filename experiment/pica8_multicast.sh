@@ -26,3 +26,6 @@ ovs-ofctl add-flow br0 priority=2,ip,nw_dst=192.168.4.95,action=output:9
 ovs-ofctl add-flow br0 priority=2,ip,nw_dst=192.168.4.96,action=output:23
 ovs-ofctl add-flow br0 priority=2,ip,nw_dst=192.168.4.97,action=output:10
 ovs-ofctl add-flow br0 priority=2,ip,nw_dst=192.168.4.98,action=output:24
+# software coordinator and acceptor rules
+ovs-ofctl add-flow br0 priority=10,in_port=10,udp,nw_dst=224.3.29.73,udp_dst=34954,action=group:3
+ovs-ofctl add-flow br0 priority=10,udp,nw_dst=224.3.29.73,udp_dst=34955,action=group:3
