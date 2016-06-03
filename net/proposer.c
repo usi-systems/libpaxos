@@ -46,7 +46,6 @@ void proposer_read_cb(evutil_socket_t fd, short what, void *arg) {
             perror("recvfrom");
             return;
         }
-        // printf("%s\n", buffer);
         ctx->respond(buffer, n, ctx->respond_arg);
     }
 }

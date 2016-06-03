@@ -17,12 +17,7 @@ void acceptor_handle_prepare(struct paxos_ctx *ctx, struct paxos_message *msg,
     paxos_message out;
     paxos_prepare* prepare = &msg->u.prepare;
 
-    printf("Received prepare for instance %d, round %d\n",
-        msg->u.prepare.iid,
-        msg->u.prepare.ballot);
-
     if (acceptor_receive_prepare(ctx->acceptor_state, prepare, &out) != 0) {
-        printf("Respond %d (Promise) for instance %d\n", out.type, out.u.promise.iid);
         pack_paxos_message(ctx->buffer, &out);
         size_t msg_len = sizeof(struct paxos_message);
         int n = sendto(ctx->sock, ctx->buffer, msg_len, 0,

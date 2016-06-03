@@ -4,14 +4,16 @@
 #include <assert.h>
 #include "configuration.h"
 
+int parse_verbosity(char* str, paxos_log_level* verbosity);
+
 void dump_configuration(struct netpaxos_configuration *conf)
 {
-    printf("learner: %s %d\n", conf->learner_address, conf->learner_port);
-    printf("acceptor: %s %d\n", conf->acceptor_address, conf->acceptor_port);
-    printf("num_acceptors: %d\n", conf->acceptor_count);
+    paxos_log_debug("learner: %s %d", conf->learner_address, conf->learner_port);
+    paxos_log_debug("acceptor: %s %d", conf->acceptor_address, conf->acceptor_port);
+    paxos_log_debug("num_acceptors: %d", conf->acceptor_count);
     int i;
     for (i = 0; i < conf->proposer_count; i++) {
-        printf("proposer %d: %s %d\n", i, conf->proposer_address[i], conf->proposer_port[i]);
+        paxos_log_debug("proposer %d: %s %d", i, conf->proposer_address[i], conf->proposer_port[i]);
     }
 }
 
@@ -85,6 +87,10 @@ int populate_configuration(char* config, struct netpaxos_configuration *conf)
                 token = strtok(NULL, delim);
                 conf->proxy_port = atoi(token);
             }
+            if (strcmp(token, "verbosity") == 0) {
+                token = strtok(NULL, delim);
+                conf->verbosity = parse_verbosity(token, &paxos_config.verbosity);
+            }
             token = strtok(NULL, delim);
         }
     }
@@ -96,6 +102,17 @@ int populate_configuration(char* config, struct netpaxos_configuration *conf)
     assert(conf->acceptor_address != NULL);
 
     return EXIT_SUCCESS;
+}
+
+int parse_verbosity(char* str, paxos_log_level* verbosity)
+{
+    strtok(str, "\n");
+    if (strcasecmp(str, "quiet") == 0) *verbosity = PAXOS_LOG_QUIET;
+    else if (strcasecmp(str, "error") == 0) *verbosity = PAXOS_LOG_ERROR;
+    else if (strcasecmp(str, "info") == 0) *verbosity = PAXOS_LOG_INFO;
+    else if (strcasecmp(str, "debug") == 0) *verbosity = PAXOS_LOG_DEBUG;
+    else return 0;
+    return 1;
 }
 
 void free_configuration(struct netpaxos_configuration *conf)

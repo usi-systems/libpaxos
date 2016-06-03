@@ -56,7 +56,6 @@ void readcb(struct bufferevent *bev, void *ptr)
 void eventcb(struct bufferevent *bev, short events, void *ptr)
 {
     if (events & BEV_EVENT_CONNECTED) {
-        // printf("Connect okay.\n");
     } else if (events & (BEV_EVENT_ERROR|BEV_EVENT_EOF)) {
         struct event_base *base = ptr;
         if (events & BEV_EVENT_ERROR) {
@@ -64,14 +63,12 @@ void eventcb(struct bufferevent *bev, short events, void *ptr)
             if (err)
                 printf("DNS error: %s\n", evutil_gai_strerror(err));
         }
-        // printf("Closing\n");
         bufferevent_free(bev);
         event_base_loopexit(base, NULL);
     }
 }
 
 void handle_signal(evutil_socket_t fd, short what, void *arg) {
-    // printf("Caught SIGINT\n");
     struct event_base *base = arg;
     event_base_loopbreak(base);
 }

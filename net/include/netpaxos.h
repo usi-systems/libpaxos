@@ -3,6 +3,7 @@
 
 #include <event2/event.h>
 #include <sys/socket.h>
+#include "../../paxos/include/paxos.h"
 
 #define BUFSIZE 1024
 
@@ -28,6 +29,7 @@ struct netpaxos_configuration {
     int max_num_proposer;
     int proxy_port;
     int preexec_window;
+    int verbosity;
 };
 
 struct paxos_ctx {

@@ -17,7 +17,7 @@ void check_holes(evutil_socket_t fd, short event, void *arg) {
     if (learner_has_holes(ctx->learner_state, &msg.from, &msg.to)) {
         if ((msg.to - msg.from) > chunks)
             msg.to = msg.from + chunks;
-        // printf("Learner has holes from %d to %d\n", msg.from, msg.to);
+        paxos_log_debug("Learner has holes from %d to %d\n", msg.from, msg.to);
         char buffer[BUFSIZE];
         paxos_message repeat = {
             .type = PAXOS_REPEAT,
@@ -64,9 +64,6 @@ void learner_read_cb(evutil_socket_t fd, short what, void *arg) {
         }
         paxos_message_destroy(&msg);
     }
-    else if (what&EV_TIMEOUT) {
-        // printf("Event timeout\n");
-    }
 }
 
 
@@ -87,10 +84,9 @@ struct paxos_ctx *make_learner(struct netpaxos_configuration *conf,
 
     ip_to_sockaddr(conf->acceptor_address, conf->acceptor_port, &ctx->acceptor_sin);
 
-    ctx->ev_read = event_new(ctx->base, sock, EV_TIMEOUT|EV_READ|EV_PERSIST,
+    ctx->ev_read = event_new(ctx->base, sock, EV_READ|EV_PERSIST,
         learner_read_cb, ctx);
-    struct timeval one_second = {5,0};
-    event_add(ctx->ev_read, &one_second);
+    event_add(ctx->ev_read, NULL);
 
     ctx->ev_signal = evsignal_new(ctx->base, SIGINT|SIGTERM, handle_signal, ctx);
     evsignal_add(ctx->ev_signal, NULL);

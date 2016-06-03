@@ -22,17 +22,17 @@ void deliver(unsigned int inst, char* val, size_t size, void* arg) {
     int *raw_int_bytes = (int *) val;
     int request_id = ntohl(*raw_int_bytes);
 
-    printf("Delivered %d\n", inst);
-    printf("request_id: %d\n", request_id);
-    // printf("content %s\n", val+4);
-    // printf("size %zu\n", size - 4);
+    paxos_log_debug("Delivered %d", inst);
+    paxos_log_debug("request_id: %d", request_id);
+    paxos_log_debug("content %s", val+4);
+    paxos_log_debug("size %zu", size - 4);
     struct request_entry *s;
     HASH_FIND_INT(app->request_table, &request_id, s);
     if (s==NULL) {
-        printf("Cannot find the associated buffer event\n");
+        paxos_log_debug("Cannot find the associated buffer event");
     } else {
-        printf("Found an entry of request_id %d\n", s->request_id);
-        printf("Address of s->bev %p\n", s->bev);
+        paxos_log_debug("Found an entry of request_id %d", s->request_id);
+        paxos_log_debug("Address of s->bev %p", s->bev);
         bufferevent_write(s->bev, val + 4, size - 4);
         HASH_DEL(app->request_table, s);
         free(s);
@@ -79,6 +79,6 @@ int main(int argc, char *argv[])
     free(app);
     free_configuration(&conf);
 
-    printf("Exit properly\n");
+    paxos_log_debug("Exit properly");
     return 0;
 }

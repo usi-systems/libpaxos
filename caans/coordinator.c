@@ -28,6 +28,6 @@ int main(int argc, char *argv[])
     free_paxos_ctx(paxos);
     free_configuration(&conf);
 
-    printf("Exit properly\n");
+    paxos_log_debug("Exit properly");
     return 0;
 }

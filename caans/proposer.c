@@ -14,17 +14,17 @@ void usage(char *prog)
 void respond_cb(char *msg, size_t size, void *arg) {
     struct application_ctx *app = arg;
     int *p = (int *) msg;
-    // int proposer_id = ntohl(*p);
+    int proposer_id = ntohl(*p);
     p = (int *) (msg + 4);
     int request_id = ntohl(*p);
-    // printf("proposer %d, request %d\n", proposer_id, request_id);
+    paxos_log_debug("proposer %d, request %d", proposer_id, request_id);
     struct request_entry *s;
     HASH_FIND_INT(app->request_table, &request_id, s);
     if (s==NULL) {
-        printf("Cannot find the associated buffer event\n");
+        paxos_log_debug("Cannot find the associated buffer event");
     } else {
-        // printf("Found an entry of request_id %d\n", s->request_id);
-        // printf("Address of s->bev %p\n", s->bev);
+        paxos_log_debug("Found an entry of request_id %d", s->request_id);
+        paxos_log_debug("Address of s->bev %p", s->bev);
         bufferevent_write(s->bev, msg + 8, size - 8);
         HASH_DEL(app->request_table, s);
         free(s);
@@ -47,7 +47,7 @@ int main(int argc, char *argv[])
 
     struct netpaxos_configuration conf;
     populate_configuration(argv[1], &conf);
-    // dump_configuration(&conf);
+    dump_configuration(&conf);
     struct paxos_ctx *paxos = make_proposer(&conf, proposer_id, respond_cb, app);
 
     app->paxos = paxos;
@@ -61,6 +61,6 @@ int main(int argc, char *argv[])
     free(app);
     free_configuration(&conf);
 
-    printf("Exit properly\n");
+    paxos_log_debug("Exit properly");
     return 0;
 }

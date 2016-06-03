@@ -49,7 +49,7 @@ void try_accept(struct paxos_ctx *ctx)
             .type = PAXOS_ACCEPT,
             .u.accept = accept
         };
-        printf("Send ACCEPT for instance %d\n", msg.u.accept.iid);
+        paxos_log_debug("Send ACCEPT for instance %d", msg.u.accept.iid);
 
         send_paxos_message(ctx, &msg);
     }
@@ -63,7 +63,7 @@ void coordinator_handle_promise(struct paxos_ctx *ctx, struct paxos_message *msg
     paxos_promise* pro = &msg->u.promise;
     int preempted = proposer_receive_promise(ctx->proposer_state, pro, &prepare);
     if (preempted) {
-        printf("Prepare instance %d ballot %d\n", prepare.iid, prepare.ballot);
+        paxos_log_debug("Prepare instance %d ballot %d", prepare.iid, prepare.ballot);
         struct paxos_message retry_msg = {
             .type = PAXOS_PREPARE,
             .u.prepare = prepare
@@ -89,7 +89,7 @@ void coordinator_read(evutil_socket_t fd, short what, void *arg)
         unpack_paxos_message(&msg, ctx->buffer);
 
         if (msg.type == PAXOS_PROMISE) {
-            printf("Received promise for instance %d ballot %d value len %d ",
+            paxos_log_debug("Received promise for instance %d ballot %d value len %d",
                 msg.u.promise.iid,
                 msg.u.promise.ballot,
                 msg.u.promise.value.paxos_value_len);
@@ -113,7 +113,7 @@ evproposer_check_timeouts(evutil_socket_t fd, short event, void *arg)
 
     paxos_prepare pr;
     while (timeout_iterator_prepare(iter, &pr)) {
-        printf("Instance %d timed out in phase 1.\n", pr.iid);
+        paxos_log_debug("Instance %d timed out in phase 1.", pr.iid);
         struct paxos_message msg = {
             .type = PAXOS_PREPARE,
             .u.prepare = pr
@@ -123,7 +123,7 @@ evproposer_check_timeouts(evutil_socket_t fd, short event, void *arg)
 
     paxos_accept ar;
     while (timeout_iterator_accept(iter, &ar)) {
-        printf("Instance %d timed out in phase 2.\n", ar.iid);
+        paxos_log_debug("Instance %d timed out in phase 2.", ar.iid);
         struct paxos_message msg = {
             .type = PAXOS_ACCEPT,
             .u.accept = ar
@@ -143,7 +143,7 @@ void coordinator_preexecute(struct paxos_ctx* ctx)
     if (count <= 0) return;
     for (i = 0; i < count; i++) {
         proposer_prepare(ctx->proposer_state, &pr);
-        printf("Prepare for instance %d, round %d\n",
+        paxos_log_debug("Prepare for instance %d, round %d",
         pr.iid,
         pr.ballot);
         struct paxos_message msg = {
@@ -152,7 +152,7 @@ void coordinator_preexecute(struct paxos_ctx* ctx)
         };
         send_paxos_message(ctx, &msg);
     }
-    printf("Opened %d new instances\n", count);
+    paxos_log_debug("Opened %d new instances", count);
 }
 
 

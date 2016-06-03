@@ -17,12 +17,12 @@ void on_perf(evutil_socket_t fd, short event, void *arg) {
 void deliver(unsigned int inst, char* val, size_t size, void* arg) {
     struct application_ctx *app = arg;
     app->message_per_second++;
-    // printf("DELIVERED: %d %s\n", inst, val);
+    paxos_log_debug("DELIVERED: %d %s", inst, val);
     int *p = (int *) val;
     int proposer_id = ntohl(*p);
     p = (int *) (val + 4);
     int request_id = ntohl(*p);
-    // printf("proposer %d, request %d\n", proposer_id, request_id);
+    paxos_log_debug("proposer %d, request %d", proposer_id, request_id);
     if (request_id % app->node_count == app->node_id) {
         int n = sendto(app->paxos->sock, val, size, 0,
                         (struct sockaddr *)&app->proxies[proposer_id],
@@ -46,7 +46,7 @@ int main(int argc, char *argv[]) {
 
     struct netpaxos_configuration conf;
     populate_configuration(argv[1], &conf);
-    // dump_configuration(&conf);
+    dump_configuration(&conf);
 
     struct application_ctx *app = malloc( sizeof (struct application_ctx));
     app->node_id = atoi(argv[2]);
@@ -73,6 +73,6 @@ int main(int argc, char *argv[]) {
     free(app);
     free_configuration(&conf);
 
-    // printf("Exit properly\n");
+    paxos_log_debug("Exit properly");
     return 0;
 }
