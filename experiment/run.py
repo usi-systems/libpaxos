@@ -31,7 +31,7 @@ def proxy(host, path, config, proxy_id, proxy_port, output_dir):
 
 
 def learner(host, path, config, server_id, number_of_server, output_dir):
-    cmd = "ssh danghu@{0} taskset -c {3} {1}/server_caans {2} {3} {4}".format(host, path, config, server_id, number_of_server)
+    cmd = "ssh danghu@{0} taskset -c {5} {1}/server_caans {2} {3} {4}".format(host, path, config, server_id, number_of_server, server_id+1)
     print cmd
     with open('%s/server-%d.txt' % (output_dir, server_id), 'w') as out:
         ssh = subprocess.Popen(shlex.split(cmd),
@@ -70,7 +70,7 @@ def reset_coordinator(host, path):
 
 
 def run_ps(host, output):
-    command = 'ps -C proxy_caans,client_caans,server_caans -o %cpu,%mem,comm --sort %cpu | tail -n4'
+    command = 'ps -C proxy_caans,client_caans,server_caans,sw_coordinator,sw_acceptor -o %cpu,%mem,comm --sort %cpu | tail -n4'
     cmd = "ssh {0} {1}".format(host, command)
     with open("%s/%s-cpu.txt" % (output, host), "a+") as out:
         ssh = subprocess.Popen(shlex.split(cmd),

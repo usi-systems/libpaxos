@@ -28,14 +28,11 @@ struct netpaxos_configuration {
     int proposer_count;
     int max_num_proposer;
     int proxy_port;
-    int preexec_window;
-    int verbosity;
 };
 
 struct paxos_ctx {
     int my_id;
     int sock;
-    int preexec_window;
     /* TODO: Mock instance for testing */
     int mock_instance;
     struct sockaddr_in coordinator_sin;

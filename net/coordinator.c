@@ -139,7 +139,7 @@ void coordinator_preexecute(struct paxos_ctx* ctx)
 {
     int i;
     paxos_prepare pr;
-    int count = ctx->preexec_window - proposer_prepared_count(ctx->proposer_state);
+    int count = paxos_config.proposer_preexec_window - proposer_prepared_count(ctx->proposer_state);
     if (count <= 0) return;
     for (i = 0; i < count; i++) {
         proposer_prepare(ctx->proposer_state, &pr);

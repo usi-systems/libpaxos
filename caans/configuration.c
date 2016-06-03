@@ -87,9 +87,13 @@ int populate_configuration(char* config, struct netpaxos_configuration *conf)
                 token = strtok(NULL, delim);
                 conf->proxy_port = atoi(token);
             }
+            if (strcmp(token, "proposer_preexec_window") == 0) {
+                token = strtok(NULL, delim);
+                paxos_config.proposer_preexec_window = atoi(token);
+            }
             if (strcmp(token, "verbosity") == 0) {
                 token = strtok(NULL, delim);
-                conf->verbosity = parse_verbosity(token, &paxos_config.verbosity);
+                parse_verbosity(token, &paxos_config.verbosity);
             }
             token = strtok(NULL, delim);
         }
