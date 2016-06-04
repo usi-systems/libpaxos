@@ -9,8 +9,9 @@ struct sockaddr_in* address_to_sockaddr_in(struct address *a) {
     struct sockaddr_in *addr = malloc( sizeof (struct sockaddr_in));
     memset (addr, 0, sizeof (struct sockaddr_in));
     addr->sin_family = AF_INET;
-    addr->sin_addr.s_addr = htonl(0);
+    inet_pton(AF_INET, a->addr, &addr->sin_addr);
     addr->sin_port = htons(a->port);
+
     return addr;
 }
 

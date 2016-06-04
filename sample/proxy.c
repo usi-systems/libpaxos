@@ -48,6 +48,10 @@
 #include "application_config.h"
 #include "application.h"
 
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
 #define BUFFER_SIZE 1440
 
 struct request_entry {
@@ -191,6 +195,8 @@ void connect_to_learner(struct proxy_server* proxy, const char* config_file) {
     int i;
     for (i = 0; i < config->number_of_learners; i++) {
         struct sockaddr_in *learner_sockaddr = address_to_sockaddr_in(&config->learners[i]);
+        printf("address %s, port %d\n", inet_ntoa(learner_sockaddr->sin_addr), ntohs(learner_sockaddr->sin_port));
+
         proxy->learner_bevs[i] = bufferevent_socket_new(proxy->base, -1, BEV_OPT_CLOSE_ON_FREE);
         bufferevent_setcb(proxy->learner_bevs[i], on_read, NULL, on_connect, proxy);
         bufferevent_enable(proxy->learner_bevs[i], EV_READ);
@@ -199,7 +205,9 @@ void connect_to_learner(struct proxy_server* proxy, const char* config_file) {
         int flag = 1;
         setsockopt(bufferevent_getfd(proxy->learner_bevs[i]), IPPROTO_TCP,
             TCP_NODELAY, &flag, sizeof(int));
+        free(learner_sockaddr);
     }
+    free_application_config(config);
 }
 
 struct bufferevent*
@@ -235,14 +243,17 @@ main(int argc, char const *argv[])
 {
 	int proposer_id = 0;
 	int proxy_id = 0;
-    int proxy_port = 6789;
+    long proxy_port = 6789;
 	if (argc < 2) {
 		usage(argv[0]);
 		return 0;
     }
 
-    if (argc > 3 && isalnum(argv[3])) {
-        proxy_port = atoi(argv[3]);
+    if (argc > 3) {
+        proxy_port = strtol(argv[3], NULL, 10);
+        if (errno != 0) {
+            proxy_port = 6789;
+        }
     }
 
     struct proxy_server *proxy = malloc(sizeof(struct proxy_server));
@@ -264,7 +275,7 @@ main(int argc, char const *argv[])
         client_free(proxy);
         return EXIT_FAILURE;
     }
-    free(conf);
+    evpaxos_config_free(conf);
 
     connect_to_learner(proxy, argv[2]);
 
