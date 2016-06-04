@@ -37,6 +37,7 @@
 #include <netinet/tcp.h>
 #include <stdio.h>
 #include <assert.h>
+#include <ctype.h>
 #include <uthash.h>
  /* Accept new TCP connection */
 #include <event2/listener.h>
@@ -225,7 +226,7 @@ void client_free(struct proxy_server* c)
 }
 
 void usage(const char* name) {
-	printf("Usage: %s path/to/paxos.conf path/to/app.conf [proposer_id]\n", name);
+	printf("Usage: %s path/to/paxos.conf path/to/app.conf [proxy_port]\n", name);
 	exit(EXIT_SUCCESS);
 }
 
@@ -238,6 +239,10 @@ main(int argc, char const *argv[])
 	if (argc < 2) {
 		usage(argv[0]);
 		return 0;
+    }
+
+    if (argc > 3 && isalnum(argv[3])) {
+        proxy_port = atoi(argv[3]);
     }
 
     struct proxy_server *proxy = malloc(sizeof(struct proxy_server));
