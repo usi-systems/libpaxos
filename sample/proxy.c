@@ -47,7 +47,7 @@
 #include "application_config.h"
 #include "application.h"
 
-#define BUFFER_SIZE 128
+#define BUFFER_SIZE 1440
 
 struct request_entry {
     int request_id;
@@ -80,6 +80,7 @@ void handle_request(struct bufferevent *bev, void *arg)
     size_t n = bufferevent_read(bev, buffer, BUFFER_SIZE);
     value.size = n;
     memcpy(&value.content, buffer, n);
+    paxos_log_debug("submit %d %d %p", value.proxy_id, value.request_id, bev);
     paxos_submit(proxy->bev, (char*)&value, sizeof(value));
     struct request_entry *s = malloc(sizeof(struct request_entry));
     s->request_id = proxy->current_request_id;
