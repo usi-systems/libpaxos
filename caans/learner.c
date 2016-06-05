@@ -66,6 +66,10 @@ int main(int argc, char *argv[]) {
     struct event *ev_perf = event_new(paxos->base, -1, EV_TIMEOUT|EV_PERSIST, on_perf, app);
     struct timeval one_second = {1, 0};
     event_add(ev_perf, &one_second);
+
+    event_base_priority_init(paxos->base, 4);
+    event_priority_set(ev_perf, 0);
+
     start_paxos(app->paxos);
     event_free(ev_perf);
     free_paxos_ctx(app->paxos);
