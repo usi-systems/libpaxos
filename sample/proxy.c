@@ -201,6 +201,30 @@ on_connect(struct bufferevent* bev, short events, void* arg) {
     }
 }
 
+
+void
+on_connect_learner(struct bufferevent* bev, short events, void* arg) {
+    if (events & BEV_EVENT_CONNECTED) {
+        struct proxy_server *proxy = arg;
+        printf("Connected\n");
+        bufferevent_write(bev, &proxy->proxy_id, sizeof proxy->proxy_id);
+    }
+    if (events & BEV_EVENT_EOF) {
+        printf("EOF\n");
+    }
+    if (events & BEV_EVENT_TIMEOUT) {
+        printf("TIMEOUT\n");
+    }
+    if (events & BEV_EVENT_ERROR) {
+        printf("ERROR %s\n", evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+    }
+    if (events & BEV_EVENT_READING) {
+        printf("READING\n");
+    }
+    if (events & BEV_EVENT_WRITING) {
+        printf("WRITING\n");
+    }
+}
 void connect_to_learner(struct proxy_server* proxy, const char* config_file) {
     application_config *config = parse_configuration(config_file);
     proxy->learner_bevs = calloc(config->number_of_learners, sizeof(struct bufferevent*));
@@ -215,7 +239,7 @@ void connect_to_learner(struct proxy_server* proxy, const char* config_file) {
         printf("address %s, port %d\n", inet_ntoa(learner_sockaddr->sin_addr), ntohs(learner_sockaddr->sin_port));
 
         proxy->learner_bevs[i] = bufferevent_socket_new(proxy->base, -1, BEV_OPT_CLOSE_ON_FREE);
-        bufferevent_setcb(proxy->learner_bevs[i], on_read, NULL, on_connect, proxy);
+        bufferevent_setcb(proxy->learner_bevs[i], on_read, NULL, on_connect_learner, proxy);
         bufferevent_enable(proxy->learner_bevs[i], EV_READ);
         bufferevent_socket_connect(proxy->learner_bevs[i],
             (struct sockaddr*)learner_sockaddr, sizeof(*learner_sockaddr));
@@ -251,7 +275,7 @@ void client_free(struct proxy_server* c)
 }
 
 void usage(const char* name) {
-	printf("Usage: %s path/to/paxos.conf path/to/app.conf [proxy_port]\n", name);
+	printf("Usage: %s path/to/paxos.conf path/to/app.conf proxy_id [proxy_port]\n", name);
 	exit(EXIT_SUCCESS);
 }
 
@@ -261,13 +285,13 @@ main(int argc, char const *argv[])
 	int proposer_id = 0;
 	int proxy_id = 0;
     long proxy_port = 6789;
-	if (argc < 2) {
+	if (argc < 3) {
 		usage(argv[0]);
 		return 0;
     }
-
-    if (argc > 3) {
-        proxy_port = strtol(argv[3], NULL, 10);
+    proxy_id = atoi(argv[3]);
+    if (argc > 4) {
+        proxy_port = strtol(argv[4], NULL, 10);
         if (errno != 0) {
             proxy_port = 6789;
         }

@@ -41,6 +41,14 @@
 #include "application_config.h"
 #include "leveldb_context.h"
 
+#include "uthash.h"
+
+struct proxy_entry {
+    int proxy_id;
+    struct bufferevent *bev;
+    UT_hash_handle hh;
+};
+
 struct stats
 {
     int delivered_count;
@@ -54,7 +62,7 @@ struct application_ctx
     struct event* stats_ev;
     struct timeval stats_interval;
     struct stats stats;
-    struct bufferevent *client_bev;
+    struct proxy_entry *proxy_table;
 };
 
 struct application_ctx* new_application() {
@@ -110,8 +118,15 @@ static void deliver(unsigned iid, char* value, size_t size, void* arg) {
         }
 	}
     ctx->stats.delivered_count++;
-    if (ctx->client_bev) {
-        bufferevent_write(ctx->client_bev, (char*)val, size);
+    int proxy_id = val->proxy_id;
+    struct proxy_entry *s;
+    HASH_FIND_INT(ctx->proxy_table, &proxy_id, s);
+    if (s==NULL) {
+        printf("Cannot find the associated buffer event\n");
+    } else {
+        printf("Found an entry of proxy %d\n", s->proxy_id);
+        printf("Address of s->bev %p\n", s->bev);
+        bufferevent_write(s->bev,(char*)val, size);
     }
 }
 
@@ -119,13 +134,22 @@ static void deliver(unsigned iid, char* value, size_t size, void* arg) {
 static void
 handle_conn_events(struct bufferevent *bev, short events, void *arg)
 {
-    struct application_ctx *ctx = arg;
     if (events & BEV_EVENT_ERROR)
             perror("Error from bufferevent");
     if (events & (BEV_EVENT_EOF | BEV_EVENT_ERROR)) {
             bufferevent_free(bev);
-            ctx->client_bev = NULL;
     }
+}
+
+void handle_request(struct bufferevent *bev, void *arg)
+{
+    struct application_ctx *ctx = arg;
+    int proxy_id;
+    bufferevent_read(bev, &proxy_id, sizeof proxy_id);
+    struct proxy_entry *s = malloc(sizeof(struct proxy_entry));
+    s->proxy_id = proxy_id;
+    s->bev = bev;
+    HASH_ADD_INT(ctx->proxy_table, proxy_id, s);
 }
 
 static void
@@ -137,9 +161,8 @@ accept_conn_cb(struct evconnlistener *listener,
         struct event_base *base = evconnlistener_get_base(listener);
         struct bufferevent *bev = bufferevent_socket_new(
                 base, fd, BEV_OPT_CLOSE_ON_FREE);
-        bufferevent_setcb(bev, NULL, NULL, handle_conn_events, ctx);
+        bufferevent_setcb(bev, handle_request, NULL, handle_conn_events, ctx);
         bufferevent_enable(bev, EV_READ|EV_WRITE);
-        ctx->client_bev = bev;
 }
 
 static void
