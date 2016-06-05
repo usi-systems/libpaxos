@@ -94,14 +94,6 @@ void handle_request(struct bufferevent *bev, void *arg)
     proxy->current_request_id++;
 }
 
-void handle_conn_events(struct bufferevent *bev, short events, void *arg)
-{
-    if (events & BEV_EVENT_ERROR)
-            perror("Error from bufferevent");
-    if (events & (BEV_EVENT_EOF | BEV_EVENT_ERROR)) {
-        bufferevent_free(bev);
-    }
-}
 
 void accept_conn_cb(struct evconnlistener *listener, evutil_socket_t fd,
     struct sockaddr *address, int socklen, void *arg)
@@ -109,7 +101,7 @@ void accept_conn_cb(struct evconnlistener *listener, evutil_socket_t fd,
     struct event_base *base = evconnlistener_get_base(listener);
     struct bufferevent *bev = bufferevent_socket_new(
             base, fd, BEV_OPT_CLOSE_ON_FREE);
-    bufferevent_setcb(bev, handle_request, NULL, handle_conn_events, arg);
+    bufferevent_setcb(bev, handle_request, NULL, NULL, arg);
     bufferevent_enable(bev, EV_READ|EV_WRITE);
 }
 
