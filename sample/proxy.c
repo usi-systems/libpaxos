@@ -52,7 +52,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-#define BUFFER_SIZE 1440
+#define BUFFER_SIZE 144
 
 struct request_entry {
     int request_id;
@@ -115,6 +115,9 @@ void accept_conn_cb(struct evconnlistener *listener, evutil_socket_t fd,
 
 void accept_error_cb(struct evconnlistener *listener, void *arg)
 {
+    int err = EVUTIL_SOCKET_ERROR();
+    fprintf(stderr, "Got an error %d (%s) on the listener. "
+        "Shutting down.\n", err, evutil_socket_error_to_string(err));
     struct event_base *base = evconnlistener_get_base(listener);
     event_base_loopexit(base, NULL);
 }
@@ -179,9 +182,23 @@ void on_read(struct bufferevent *bev, void *ctx) {
 void
 on_connect(struct bufferevent* bev, short events, void* arg) {
 	if (events & BEV_EVENT_CONNECTED) {
-	} else {
-		printf("%s\n", evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+        printf("Connected\n");
 	}
+    if (events & BEV_EVENT_EOF) {
+        printf("EOF\n");
+    }
+    if (events & BEV_EVENT_TIMEOUT) {
+        printf("TIMEOUT\n");
+    }
+    if (events & BEV_EVENT_ERROR) {
+        printf("ERROR %s\n", evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+    }
+    if (events & BEV_EVENT_READING) {
+        printf("READING\n");
+    }
+    if (events & BEV_EVENT_WRITING) {
+        printf("WRITING\n");
+    }
 }
 
 void connect_to_learner(struct proxy_server* proxy, const char* config_file) {

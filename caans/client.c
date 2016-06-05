@@ -56,6 +56,7 @@ void readcb(struct bufferevent *bev, void *ptr)
 void eventcb(struct bufferevent *bev, short events, void *ptr)
 {
     if (events & BEV_EVENT_CONNECTED) {
+        return;
     } else if (events & (BEV_EVENT_ERROR|BEV_EVENT_EOF)) {
         struct event_base *base = ptr;
         if (events & BEV_EVENT_ERROR) {
@@ -65,6 +66,10 @@ void eventcb(struct bufferevent *bev, short events, void *ptr)
         }
         bufferevent_free(bev);
         event_base_loopexit(base, NULL);
+    }
+    if (events & BEV_EVENT_TIMEOUT) {
+        bufferevent_enable(bev, EV_READ|EV_WRITE);
+        send_request(bev);
     }
 }
 
@@ -94,7 +99,8 @@ int main(int argc, char* argv[])
     bev = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE);
     bufferevent_setcb(bev, readcb, NULL, eventcb, base);
     bufferevent_enable(bev, EV_READ|EV_WRITE);
-
+    struct timeval one_second = {1, 0};
+    bufferevent_set_timeouts(bev, &one_second, NULL);
     send_request(bev);
 
     bufferevent_socket_connect_hostname(
