@@ -40,7 +40,7 @@
 #include "application.h"
 #include "application_config.h"
 #include "leveldb_context.h"
-
+#include "paxos.h"
 #include "uthash.h"
 
 struct proxy_entry {
@@ -122,10 +122,10 @@ static void deliver(unsigned iid, char* value, size_t size, void* arg) {
     struct proxy_entry *s;
     HASH_FIND_INT(ctx->proxy_table, &proxy_id, s);
     if (s==NULL) {
-        printf("Cannot find the associated buffer event\n");
+        paxos_log_debug("Cannot find the associated buffer event");
     } else {
-        printf("Found an entry of proxy %d\n", s->proxy_id);
-        printf("Address of s->bev %p\n", s->bev);
+        paxos_log_debug("Found an entry of proxy %d", s->proxy_id);
+        paxos_log_debug("Address of s->bev %p", s->bev);
         bufferevent_write(s->bev,(char*)val, size);
     }
 }

@@ -19,8 +19,9 @@ def run_client(cid, host, path, server_addr, port, output_dir):
     return ssh
 
 def run_proxy(host, path, config, appconf, proxy_id, proxy_port, output_dir):
-    cmd = "ssh danghu@{0} taskset -c {1} {2}/proxy {3} {4} {5}".format(host,
-        proxy_id, path, config, appconf, proxy_port)
+    cpu_id = proxy_id
+    cmd = "ssh danghu@{0} taskset -c {1} {2}/proxy {3} {4} {5} {6}".format(host,
+        cpu_id, path, config, appconf, proxy_id, proxy_port)
     print cmd
     with open('%s/proxy-%d.txt' % (output_dir, proxy_id), 'w') as out:
         ssh = subprocess.Popen(shlex.split(cmd),
