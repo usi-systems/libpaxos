@@ -66,10 +66,12 @@ struct proxy_server
     int current_request_id;
     int at_second;
     int message_per_second;
+    int number_of_learners;
     struct event_base* base;
     struct bufferevent* bev;
     struct bufferevent* *learner_bevs;
-    struct event* sig;
+    struct event* sigint;
+    struct event* sigterm;
     struct evconnlistener *listener;
     struct request_entry *request_table;
 };
@@ -94,6 +96,16 @@ void handle_request(struct bufferevent *bev, void *arg)
     proxy->current_request_id++;
 }
 
+static void
+event_cb(struct bufferevent *bev, short events, void *ctx)
+{
+        if (events & BEV_EVENT_ERROR)
+                perror("Error from bufferevent");
+        if (events & (BEV_EVENT_EOF | BEV_EVENT_ERROR)) {
+                bufferevent_free(bev);
+        }
+}
+
 
 void accept_conn_cb(struct evconnlistener *listener, evutil_socket_t fd,
     struct sockaddr *address, int socklen, void *arg)
@@ -101,7 +113,7 @@ void accept_conn_cb(struct evconnlistener *listener, evutil_socket_t fd,
     struct event_base *base = evconnlistener_get_base(listener);
     struct bufferevent *bev = bufferevent_socket_new(
             base, fd, BEV_OPT_CLOSE_ON_FREE);
-    bufferevent_setcb(bev, handle_request, NULL, NULL, arg);
+    bufferevent_setcb(bev, handle_request, NULL, event_cb, arg);
     bufferevent_enable(bev, EV_READ|EV_WRITE);
 }
 
@@ -131,16 +143,13 @@ void start_proxy(struct proxy_server *ctx, int proxy_port)
     evconnlistener_set_error_cb(ctx->listener, accept_error_cb);
 }
 
-void clean_proxy(struct proxy_server *ctx)
-{
-    struct request_entry *s, *tmp;
-    HASH_ITER(hh, ctx->request_table, s, tmp) {
-        HASH_DEL(ctx->request_table, s);
-        free(s);
-    }
+void handle_sigint(int sig, short ev, void* arg) {
+    printf("CAUGHT SIGNINT\n");
+    struct event_base* base = arg;
+    event_base_loopexit(base, NULL);
 }
 
-void handle_sigint(int sig, short ev, void* arg) {
+void handle_sigterm(int sig, short ev, void* arg) {
 	struct event_base* base = arg;
 	event_base_loopexit(base, NULL);
 }
@@ -226,7 +235,8 @@ void connect_to_learner(struct proxy_server* proxy, const char* config_file) {
         return;
     }
     int i;
-    for (i = 0; i < config->number_of_learners; i++) {
+    proxy->number_of_learners = config->number_of_learners;
+    for (i = 0; i < proxy->number_of_learners; i++) {
         struct sockaddr_in *learner_sockaddr = address_to_sockaddr_in(&config->learners[i]);
         printf("address %s, port %d\n", inet_ntoa(learner_sockaddr->sin_addr), ntohs(learner_sockaddr->sin_port));
 
@@ -256,11 +266,24 @@ connect_to_proposer(struct proxy_server* proxy, struct evpaxos_config* conf, int
 	return bev;
 }
 
-void client_free(struct proxy_server* c)
+void clean_proxy(struct proxy_server* c)
 {
+    struct request_entry *s, *tmp;
+    HASH_ITER(hh, c->request_table, s, tmp) {
+        HASH_DEL(c->request_table, s);
+        free(s);
+    }
+
 	bufferevent_free(c->bev);
-	event_free(c->sig);
-	event_base_free(c->base);
+    event_free(c->sigterm);
+	event_free(c->sigint);
+    int i;
+    for (i = 0; i < c->number_of_learners; i++) {
+        bufferevent_free(c->learner_bevs[i]);
+    }
+    free(c->learner_bevs);
+    evconnlistener_free(c->listener);
+    event_base_free(c->base);
 	free(c);
     exit(EXIT_FAILURE);
 
@@ -294,29 +317,32 @@ main(int argc, char const *argv[])
     proxy->current_request_id = 0;
     proxy->at_second = 0;
     proxy->message_per_second = 0;
+    proxy->request_table = NULL;
     proxy->base = event_base_new();
 
     struct evpaxos_config* conf = evpaxos_config_read(argv[1]);
     if (conf == NULL) {
         printf("Failed to read config file %s\n", argv[1]);
-        client_free(proxy);
+        clean_proxy(proxy);
         return EXIT_FAILURE;
     }
 
     proxy->bev = connect_to_proposer(proxy, conf, proposer_id);
     if (proxy->bev == NULL) {
-        client_free(proxy);
+        clean_proxy(proxy);
         return EXIT_FAILURE;
     }
     evpaxos_config_free(conf);
 
     connect_to_learner(proxy, argv[2]);
 
-    proxy->sig = evsignal_new(proxy->base, SIGINT|SIGTERM, handle_sigint, proxy->base);
-    evsignal_add(proxy->sig, NULL);
+    proxy->sigint = evsignal_new(proxy->base, SIGINT, handle_sigint, proxy->base);
+    evsignal_add(proxy->sigint, NULL);
+    proxy->sigterm = evsignal_new(proxy->base, SIGTERM, handle_sigterm, proxy->base);
+    evsignal_add(proxy->sigterm, NULL);
     start_proxy(proxy, proxy_port);
     event_base_dispatch(proxy->base);
-    client_free(proxy);
-
+    clean_proxy(proxy);
+    evpaxos_config_free(conf);
 	return EXIT_SUCCESS;
 }
