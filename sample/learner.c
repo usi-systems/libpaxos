@@ -51,6 +51,7 @@ struct stats
 
 struct application_ctx
 {
+    int finished;
     struct event_base *base;
     struct event* stats_ev;
     struct stats stats;
@@ -60,7 +61,12 @@ struct application_ctx
 
 struct application_ctx* new_application() {
     struct application_ctx *ctx = malloc(sizeof (struct application_ctx));
+    ctx->finished = 0;
     ctx->bevs = calloc(NUM_PROPOSERS, sizeof(struct bufferevent *));
+    int i;
+    for (i=0; i < NUM_PROPOSERS; i++) {
+        ctx->bevs[i] = NULL;
+    }
     return ctx;
 }
 
@@ -68,7 +74,8 @@ struct application_ctx* new_application() {
 void free_application(struct application_ctx *ctx) {
     int i;
     for (i=0; i < NUM_PROPOSERS; i++) {
-        bufferevent_free(ctx->bevs[i]);
+        if (ctx->bevs[i])
+            bufferevent_free(ctx->bevs[i]);
     }
     free(ctx->bevs);
     event_free(ctx->stats_ev);
@@ -77,8 +84,9 @@ void free_application(struct application_ctx *ctx) {
 }
 
 static void handle_signal(int sig, short ev, void* arg) {
-	struct event_base* base = arg;
-	event_base_loopexit(base, NULL);
+	struct application_ctx* ctx = arg;
+	event_base_loopexit(ctx->base, NULL);
+    ctx->finished = 1;
 }
 
 static void on_stats(evutil_socket_t fd, short event, void *arg) {
@@ -93,7 +101,8 @@ static void deliver(unsigned iid, char* value, size_t size, void* arg) {
 	struct client_value* val = (struct client_value*)value;
     ctx->stats.delivered_count++;
     int proxy_id = val->proxy_id;
-    bufferevent_write(ctx->bevs[proxy_id], (char*)val, size);
+    if (!ctx->finished)
+        bufferevent_write(ctx->bevs[proxy_id], (char*)val, size);
 }
 
 
@@ -177,9 +186,9 @@ static void start_learner(const char* argv[]) {
 		exit(1);
 	}
 	
-    sigint = evsignal_new(ctx->base, SIGINT, handle_signal, ctx->base);
+    sigint = evsignal_new(ctx->base, SIGINT, handle_signal, ctx);
     evsignal_add(sigint, NULL);
-	sigterm = evsignal_new(ctx->base, SIGTERM, handle_signal, ctx->base);
+	sigterm = evsignal_new(ctx->base, SIGTERM, handle_signal, ctx);
 	evsignal_add(sigterm, NULL);
 
     start_server(ctx, argv);
