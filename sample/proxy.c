@@ -94,6 +94,17 @@ void handle_request(struct bufferevent *bev, void *arg)
     proxy->current_request_id++;
 }
 
+void send_request(struct proxy_server *proxy)
+{
+    struct client_value value;
+    value.proxy_id = proxy->proxy_id;
+    value.request_id = proxy->current_request_id;
+    value.content[TMP_VALUE_SIZE-1] = '\0';
+    value.size = TMP_VALUE_SIZE;
+    paxos_log_debug("submit %d %d", value.proxy_id, value.request_id);
+    paxos_submit(proxy->bev, (char*)&value, sizeof(value));
+}
+
 static void
 event_cb(struct bufferevent *bev, short events, void *ctx)
 {
@@ -148,8 +159,8 @@ void handle_sigint(int sig, short ev, void* arg) {
 }
 
 void handle_sigterm(int sig, short ev, void* arg) {
-	struct event_base* base = arg;
-	event_base_loopexit(base, NULL);
+    struct event_base* base = arg;
+    event_base_loopexit(base, NULL);
 }
 
 void respond_cb(char *msg, size_t size, void *arg) {
@@ -178,11 +189,18 @@ void on_read(struct bufferevent *bev, void *ctx) {
     respond_cb(buffer, n, c);
 }
 
+void on_response(struct bufferevent *bev, void *ctx) {
+    struct proxy_server* proxy = ctx;
+    char buffer[BUFFER_SIZE];
+    size_t n = bufferevent_read(bev, buffer, BUFFER_SIZE);
+    send_request(proxy);
+}
+
 void
 on_connect(struct bufferevent* bev, short events, void* arg) {
-	if (events & BEV_EVENT_CONNECTED) {
+    if (events & BEV_EVENT_CONNECTED) {
         printf("Connected\n");
-	}
+    }
     if (events & BEV_EVENT_EOF) {
         printf("EOF\n");
     }
@@ -239,7 +257,8 @@ void connect_to_learner(struct proxy_server* proxy, const char* config_file) {
         printf("address %s, port %d\n", inet_ntoa(learner_sockaddr->sin_addr), ntohs(learner_sockaddr->sin_port));
 
         proxy->learner_bevs[i] = bufferevent_socket_new(proxy->base, -1, BEV_OPT_CLOSE_ON_FREE);
-        bufferevent_setcb(proxy->learner_bevs[i], on_read, NULL, on_connect_learner, proxy);
+        // bufferevent_setcb(proxy->learner_bevs[i], on_read, NULL, on_connect_learner, proxy);
+        bufferevent_setcb(proxy->learner_bevs[i], on_response, NULL, on_connect_learner, proxy); // TEST: without clients
         bufferevent_enable(proxy->learner_bevs[i], EV_READ);
         bufferevent_socket_connect(proxy->learner_bevs[i],
             (struct sockaddr*)learner_sockaddr, sizeof(*learner_sockaddr));
@@ -253,15 +272,15 @@ void connect_to_learner(struct proxy_server* proxy, const char* config_file) {
 
 struct bufferevent*
 connect_to_proposer(struct proxy_server* proxy, struct evpaxos_config* conf, int proposer_id) {
-	struct bufferevent* bev;
-	struct sockaddr_in addr = evpaxos_proposer_address(conf, proposer_id);
-	bev = bufferevent_socket_new(proxy->base, -1, BEV_OPT_CLOSE_ON_FREE);
-	bufferevent_setcb(bev, NULL, NULL, on_connect, proxy);
-	bufferevent_enable(bev, EV_READ|EV_WRITE);
-	bufferevent_socket_connect(bev, (struct sockaddr*)&addr, sizeof(addr));
-	int flag = 1;
-	setsockopt(bufferevent_getfd(bev), IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(int));
-	return bev;
+    struct bufferevent* bev;
+    struct sockaddr_in addr = evpaxos_proposer_address(conf, proposer_id);
+    bev = bufferevent_socket_new(proxy->base, -1, BEV_OPT_CLOSE_ON_FREE);
+    bufferevent_setcb(bev, NULL, NULL, on_connect, proxy);
+    bufferevent_enable(bev, EV_READ|EV_WRITE);
+    bufferevent_socket_connect(bev, (struct sockaddr*)&addr, sizeof(addr));
+    int flag = 1;
+    setsockopt(bufferevent_getfd(bev), IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(int));
+    return bev;
 }
 
 void clean_proxy(struct proxy_server* c)
@@ -272,35 +291,35 @@ void clean_proxy(struct proxy_server* c)
         free(s);
     }
 
-	bufferevent_free(c->bev);
+    bufferevent_free(c->bev);
     event_free(c->sigterm);
-	event_free(c->sigint);
+    event_free(c->sigint);
     int i;
     for (i = 0; i < c->number_of_learners; i++) {
         bufferevent_free(c->learner_bevs[i]);
     }
     free(c->learner_bevs);
-    evconnlistener_free(c->listener);
+    // evconnlistener_free(c->listener);
     event_base_free(c->base);
-	free(c);
+    free(c);
     exit(EXIT_FAILURE);
 
 }
 
 void usage(const char* name) {
-	printf("Usage: %s path/to/paxos.conf path/to/app.conf proxy_id [proxy_port]\n", name);
-	exit(EXIT_SUCCESS);
+    printf("Usage: %s path/to/paxos.conf path/to/app.conf proxy_id [proxy_port]\n", name);
+    exit(EXIT_SUCCESS);
 }
 
 int
 main(int argc, char const *argv[])
 {
-	int proposer_id = 0;
-	int proxy_id = 0;
+    int proposer_id = 0;
+    int proxy_id = 0;
     long proxy_port = 6789;
-	if (argc < 3) {
-		usage(argv[0]);
-		return 0;
+    if (argc < 3) {
+        usage(argv[0]);
+        return 0;
     }
     proxy_id = atoi(argv[3]);
     if (argc > 4) {
@@ -338,9 +357,10 @@ main(int argc, char const *argv[])
     evsignal_add(proxy->sigint, NULL);
     proxy->sigterm = evsignal_new(proxy->base, SIGTERM, handle_sigterm, proxy->base);
     evsignal_add(proxy->sigterm, NULL);
-    start_proxy(proxy, proxy_port);
+    send_request(proxy);
+    // start_proxy(proxy, proxy_port);
     event_base_dispatch(proxy->base);
     clean_proxy(proxy);
     evpaxos_config_free(conf);
-	return EXIT_SUCCESS;
+    return EXIT_SUCCESS;
 }
