@@ -57,10 +57,8 @@ struct stats
 
 struct application_ctx
 {
-    struct leveldb_ctx* leveldb;
     struct event_base *base;
     struct event* stats_ev;
-    struct timeval stats_interval;
     struct stats stats;
     struct proxy_entry *proxy_table;
 };
@@ -72,18 +70,17 @@ struct application_ctx* new_application() {
 
 
 void init_application(struct application_ctx *ctx) {
-    ctx->leveldb = new_leveldb_context();
+
 }
 
 
 void free_application(struct application_ctx *ctx) {
-    free_leveldb_context(ctx->leveldb);
     event_free(ctx->stats_ev);
     event_base_free(ctx->base);
     free(ctx);
 }
 
-static void handle_sigint(int sig, short ev, void* arg) {
+static void handle_signal(int sig, short ev, void* arg) {
 	struct event_base* base = arg;
 	event_base_loopexit(base, NULL);
 }
@@ -98,25 +95,6 @@ static void on_stats(evutil_socket_t fd, short event, void *arg) {
 static void deliver(unsigned iid, char* value, size_t size, void* arg) {
 	struct application_ctx *ctx = arg;
 	struct client_value* val = (struct client_value*)value;
-	if (val->application_type == LEVELDB) {
-		struct leveldb_request *req = (struct leveldb_request *) &val->content;
-		switch(req->op) {
-			case PUT: {
-				 // paxos_log_debug("PUT: key %s: %zu, value %s: %zu", req->key, req->ksize, req->value, req->vsize);
-				 add_entry(ctx->leveldb, false, req->key, req->ksize, req->value, req->vsize);
-				 break;
-            }
-			case GET: {
-				 char *value;
-				 size_t vsize = 0;
-				 get_value(ctx->leveldb, req->key, req->ksize, &value, &vsize);
-				 // paxos_log_debug("GET: key %s: %zu, RETURN: %s %zu", req->key, req->ksize, value, vsize);
-				 if (value)
-				     free(value);
-				 break;
-    		}
-        }
-	}
     ctx->stats.delivered_count++;
     int proxy_id = val->proxy_id;
     struct proxy_entry *s;
@@ -196,7 +174,8 @@ static void start_server(struct application_ctx *ctx, const char* argv[]) {
 }
 
 static void start_learner(const char* argv[]) {
-	struct event* sig;
+    struct event* sigint;
+	struct event* sigterm;
 	struct evlearner* lea;
 
     struct application_ctx *ctx = new_application();
@@ -214,16 +193,17 @@ static void start_learner(const char* argv[]) {
 		exit(1);
 	}
 	
-	sig = evsignal_new(ctx->base, SIGINT|SIGTERM, handle_sigint, ctx->base);
-	evsignal_add(sig, NULL);
-
-	signal(SIGPIPE, SIG_IGN);
+    sigint = evsignal_new(ctx->base, SIGINT, handle_signal, ctx->base);
+    evsignal_add(sigint, NULL);
+	sigterm = evsignal_new(ctx->base, SIGTERM, handle_signal, ctx->base);
+	evsignal_add(sigterm, NULL);
 
     start_server(ctx, argv);
 
 	event_base_dispatch(ctx->base);
 
-	event_free(sig);
+    event_free(sigint);
+	event_free(sigterm);
 	evlearner_free(lea);
 	free_application(ctx);
 }

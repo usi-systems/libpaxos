@@ -82,11 +82,9 @@ void handle_request(struct bufferevent *bev, void *arg)
     struct client_value value;
     value.proxy_id = proxy->proxy_id;
     value.request_id = proxy->current_request_id;
-    value.application_type = SIMPLY_ECHO;
-    char buffer[BUFFER_SIZE];
-    size_t n = bufferevent_read(bev, buffer, BUFFER_SIZE);
+    size_t n = bufferevent_read(bev, value.content, TMP_VALUE_SIZE-1);
+    value.content[TMP_VALUE_SIZE-1] = '\0';
     value.size = n;
-    memcpy(&value.content, buffer, n);
     paxos_log_debug("submit %d %d %p", value.proxy_id, value.request_id, bev);
     paxos_submit(proxy->bev, (char*)&value, sizeof(value));
     struct request_entry *s = malloc(sizeof(struct request_entry));

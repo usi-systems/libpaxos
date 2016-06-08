@@ -6,6 +6,7 @@
 
 #define MAX_KEY_SIZE 16
 #define MAX_VALUE_SIZE 16
+#define TMP_VALUE_SIZE 32
 
 struct leveldb_request
 {
@@ -36,9 +37,8 @@ struct client_value
 {
     int proxy_id;
     int request_id;
-    enum application_t application_type;
     int size;
-    union request content;
+    char content[TMP_VALUE_SIZE];
 };
 
 enum command_t {
