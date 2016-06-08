@@ -192,7 +192,7 @@ void on_read(struct bufferevent *bev, void *ctx) {
 void on_response(struct bufferevent *bev, void *ctx) {
     struct proxy_server* proxy = ctx;
     char buffer[BUFFER_SIZE];
-    size_t n = bufferevent_read(bev, buffer, BUFFER_SIZE);
+    bufferevent_read(bev, buffer, BUFFER_SIZE);
     send_request(proxy);
 }
 
@@ -225,6 +225,7 @@ on_connect_learner(struct bufferevent* bev, short events, void* arg) {
         struct proxy_server *proxy = arg;
         printf("Connected\n");
         bufferevent_write(bev, &proxy->proxy_id, sizeof proxy->proxy_id);
+        send_request(proxy);
     }
     if (events & BEV_EVENT_EOF) {
         printf("EOF\n");
@@ -316,16 +317,16 @@ main(int argc, char const *argv[])
 {
     int proposer_id = 0;
     int proxy_id = 0;
-    long proxy_port = 6789;
+    // long proxy_port = 6789;
     if (argc < 3) {
         usage(argv[0]);
         return 0;
     }
     proxy_id = atoi(argv[3]);
     if (argc > 4) {
-        proxy_port = strtol(argv[4], NULL, 10);
+        // proxy_port = strtol(argv[4], NULL, 10);
         if (errno != 0) {
-            proxy_port = 6789;
+            // proxy_port = 6789;
         }
     }
 
@@ -357,7 +358,6 @@ main(int argc, char const *argv[])
     evsignal_add(proxy->sigint, NULL);
     proxy->sigterm = evsignal_new(proxy->base, SIGTERM, handle_sigterm, proxy->base);
     evsignal_add(proxy->sigterm, NULL);
-    send_request(proxy);
     // start_proxy(proxy, proxy_port);
     event_base_dispatch(proxy->base);
     clean_proxy(proxy);

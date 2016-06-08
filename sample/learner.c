@@ -41,14 +41,8 @@
 #include "application_config.h"
 #include "leveldb_context.h"
 #include "paxos.h"
-#include "uthash.h"
 
-struct proxy_entry {
-    int proxy_id;
-    struct bufferevent *bev;
-    UT_hash_handle hh;
-};
-
+#define NUM_PROPOSERS 10
 struct stats
 {
     int delivered_count;
@@ -60,21 +54,23 @@ struct application_ctx
     struct event_base *base;
     struct event* stats_ev;
     struct stats stats;
+    struct bufferevent **bevs;
     struct proxy_entry *proxy_table;
 };
 
 struct application_ctx* new_application() {
     struct application_ctx *ctx = malloc(sizeof (struct application_ctx));
+    ctx->bevs = calloc(NUM_PROPOSERS, sizeof(struct bufferevent *));
     return ctx;
 }
 
 
-void init_application(struct application_ctx *ctx) {
-
-}
-
-
 void free_application(struct application_ctx *ctx) {
+    int i;
+    for (i=0; i < NUM_PROPOSERS; i++) {
+        bufferevent_free(ctx->bevs[i]);
+    }
+    free(ctx->bevs);
     event_free(ctx->stats_ev);
     event_base_free(ctx->base);
     free(ctx);
@@ -97,15 +93,7 @@ static void deliver(unsigned iid, char* value, size_t size, void* arg) {
 	struct client_value* val = (struct client_value*)value;
     ctx->stats.delivered_count++;
     int proxy_id = val->proxy_id;
-    struct proxy_entry *s;
-    HASH_FIND_INT(ctx->proxy_table, &proxy_id, s);
-    if (s==NULL) {
-        paxos_log_debug("Cannot find the associated buffer event");
-    } else {
-        paxos_log_debug("Found an entry of proxy %d", s->proxy_id);
-        paxos_log_debug("Address of s->bev %p", s->bev);
-        bufferevent_write(s->bev,(char*)val, size);
-    }
+    bufferevent_write(ctx->bevs[proxy_id], (char*)val, size);
 }
 
 
@@ -124,10 +112,7 @@ void handle_request(struct bufferevent *bev, void *arg)
     struct application_ctx *ctx = arg;
     int proxy_id;
     bufferevent_read(bev, &proxy_id, sizeof proxy_id);
-    struct proxy_entry *s = malloc(sizeof(struct proxy_entry));
-    s->proxy_id = proxy_id;
-    s->bev = bev;
-    HASH_ADD_INT(ctx->proxy_table, proxy_id, s);
+    ctx->bevs[proxy_id] = bev;
 }
 
 static void
@@ -179,7 +164,6 @@ static void start_learner(const char* argv[]) {
 	struct evlearner* lea;
 
     struct application_ctx *ctx = new_application();
-    init_application(ctx);
 
 	ctx->base = event_base_new();
     memset(&ctx->stats, 0, sizeof(struct stats));
