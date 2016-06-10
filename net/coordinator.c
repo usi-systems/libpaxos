@@ -43,12 +43,14 @@ void coordinator_handle_accepted(struct paxos_ctx *ctx, paxos_message* msg)
 
 void try_accept(struct paxos_ctx *ctx)
 {
-    paxos_accept accept;
-    while (proposer_accept(ctx->proposer_state, &accept)) {
-        struct paxos_message msg = {
-            .type = PAXOS_ACCEPT,
-            .u.accept = accept
-        };
+    paxos_message msg;
+//    paxos_accept accept;
+    msg.type = PAXOS_ACCEPT;
+    while (proposer_accept(ctx->proposer_state, &msg.u.accept)) {
+        // struct paxos_message msg = {
+        //     .type = PAXOS_ACCEPT,
+        //     .u.accept = accept
+        // };
         paxos_log_debug("Send ACCEPT for instance %d", msg.u.accept.iid);
 
         send_paxos_message(ctx, &msg);
