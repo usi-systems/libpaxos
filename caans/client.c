@@ -9,12 +9,21 @@
 #include <time.h>
 #include <signal.h>
 
+#include "message.h"
+
 #define BILLION 1000000000
+#define DATA_SIZE 16
 
-
-struct client_request {
-    struct timespec ts;
-};
+static void
+random_string(char *s, const int len)
+{
+    int i;
+    static const char alphanum[] =
+        "0123456789abcdefghijklmnopqrstuvwxyz";
+    for (i = 0; i < len-1; ++i)
+        s[i] = alphanum[rand() % (sizeof(alphanum) - 1)];
+    s[len-1] = 0;
+}
 
 int
 timespec_diff(struct timespec *result, struct timespec *end,struct timespec *start)
@@ -31,23 +40,33 @@ timespec_diff(struct timespec *result, struct timespec *end,struct timespec *sta
 }
 
 void send_request(struct bufferevent *bev) {
-    struct client_request request;
-    clock_gettime(CLOCK_REALTIME, &request.ts);
-    bufferevent_write(bev, &request, sizeof(request));
+    char data_to_send[DATA_SIZE];
+    random_string(data_to_send, DATA_SIZE);
+    struct client_request *request = create_client_request(data_to_send, DATA_SIZE);
+    clock_gettime(CLOCK_REALTIME, &request->ts);
+    bufferevent_write(bev, request, request->length);
+    // printf("%-10s: content: %s -- size: %d\n", "Send", request->content,
+        // message_length(request));
+    // hexdump_message(request);
+    free(request);
 }
 
 void readcb(struct bufferevent *bev, void *ptr)
 {
-    struct client_request response;
+   struct evbuffer *input = bufferevent_get_input(bev);
+    char buffer[128];
     int n;
-    struct evbuffer *input = bufferevent_get_input(bev);
-    n = evbuffer_remove(input, &response, sizeof(response));
+    n = evbuffer_remove(input, buffer, sizeof(buffer));
     if (n < 0)
         return;
+    struct client_request *response = (struct client_request *)buffer;
+    // printf("%-10s: content: %s -- size: %d\n", "Receive", response->content,
+        // message_length(response));
+    // hexdump_message(response);
 
     struct timespec end, result;
     clock_gettime(CLOCK_REALTIME, &end);
-    timespec_diff(&result, &end, &response.ts);
+    timespec_diff(&result, &end, &response->ts);
     printf("%ld.%.9ld\n", result.tv_sec, result.tv_nsec);
 
     send_request(bev);

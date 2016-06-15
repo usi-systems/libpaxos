@@ -5,9 +5,11 @@
 #include <string.h>
 
 #include "application_proxy.h"
+#include "message.h"
 
 void handle_request(struct bufferevent *bev, void *arg)
 {
+
     struct application_ctx *app = arg;
 
     /* TODO: find cleaner way to serialize application request */
@@ -18,8 +20,10 @@ void handle_request(struct bufferevent *bev, void *arg)
     size_t n;
     n = bufferevent_read(bev, app->buffer + 8, BUFFER_SIZE - 8);
     size_t total_size = n + 8;
-    app->buffer[total_size] = '\0';
-    /* ---------------------------------------------------- */
+
+    // struct client_request *request = (struct client_request *)(app->buffer+8);
+    // hexdump_message(request);
+
     if (n <= 0)
         return; /* No data. */
 
@@ -30,6 +34,7 @@ void handle_request(struct bufferevent *bev, void *arg)
     s->bev = bev;
     HASH_ADD_INT(app->request_table, request_id, s);
     app->current_request_id++;
+
 }
 
 void handle_conn_events(struct bufferevent *bev, short events, void *arg)

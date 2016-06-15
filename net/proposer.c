@@ -7,7 +7,7 @@
 #include "netutils.h"
 #include "netpaxos.h"
 #include "message_pack.h"
-
+#include "paxos.h"
 
 void submit(struct paxos_ctx *ctx, char *value, int size) {
     struct paxos_message msg = {
@@ -19,7 +19,17 @@ void submit(struct paxos_ctx *ctx, char *value, int size) {
         .u.accept.value.paxos_value_len = size,
         .u.accept.value.paxos_value_val = value
     };
-
+/*
+    int i;
+    char *raw = (char *)msg.u.accept.value.paxos_value_val;
+    printf("MSG\n");
+    for (i = 0; i < size; i++) {
+        if (i % 16 == 0)
+            printf("\n");
+        printf("%02x ", (unsigned char)raw[i]);
+    }
+    printf("\n");
+*/
     char buffer[BUFSIZE];
     memset(buffer, 0, BUFSIZE);
     pack_paxos_message(buffer, &msg);

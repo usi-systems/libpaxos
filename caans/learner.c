@@ -8,6 +8,8 @@
 #include "configuration.h"
 #include "application_proxy.h"
 
+#include "message.h"
+
 void on_perf(evutil_socket_t fd, short event, void *arg) {
     struct application_ctx *app = arg;
     printf("%4d %8d\n", app->at_second++, app->message_per_second);
@@ -22,6 +24,10 @@ void deliver(unsigned int inst, char* val, size_t size, void* arg) {
     int proposer_id = ntohl(*p);
     p = (int *) (val + 4);
     int request_id = ntohl(*p);
+
+    // struct client_request *request = (struct client_request *)(val+8);
+    // hexdump_message(request);
+
     paxos_log_debug("proposer %d, request %d", proposer_id, request_id);
     if (request_id % app->node_count == app->node_id) {
         int n = sendto(app->paxos->sock, val, size, 0,

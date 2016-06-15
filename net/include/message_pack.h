@@ -11,7 +11,7 @@ void pack_paxos_repeat(char* p, paxos_repeat* v);
 void pack_paxos_trim(char* p, paxos_trim* v);
 void pack_paxos_acceptor_state(char* p, paxos_acceptor_state* v);
 void pack_paxos_client_value(char* p, paxos_client_value* v);
-void pack_paxos_message(char* p, paxos_message* v);
+size_t pack_paxos_message(char* p, paxos_message* v);
 void unpack_paxos_prepare(paxos_prepare* v, char* p);
 void unpack_paxos_promise(paxos_promise* v, char* p);
 void unpack_paxos_accept(paxos_accept* v, char* p);

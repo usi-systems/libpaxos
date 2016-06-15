@@ -3,7 +3,7 @@ include_directories(${CMAKE_SOURCE_DIR}/net/include)
 include_directories(${CMAKE_SOURCE_DIR}/caans/include)
 include_directories(${LIBEVENT_INCLUDE_DIRS})
 
-set (SRCS configuration.c application_proxy.c)
+set (SRCS configuration.c application_proxy.c message.c)
 
 # begin levelDB
 include_directories(/usr/local/include/leveldb/include)

@@ -31,14 +31,14 @@
 
 #include <stdint.h>
 
-struct paxos_value
+struct __attribute__((__packed__)) paxos_value
 {
 	int paxos_value_len;
 	char *paxos_value_val;
 };
 typedef struct paxos_value paxos_value;
 
-struct paxos_prepare
+struct __attribute__((__packed__)) paxos_prepare
 {
 	uint32_t iid;
 	uint16_t ballot;
@@ -48,7 +48,7 @@ struct paxos_prepare
 };
 typedef struct paxos_prepare paxos_prepare;
 
-struct paxos_promise
+struct __attribute__((__packed__)) paxos_promise
 {
 	uint32_t iid;
 	uint16_t ballot;
@@ -58,7 +58,7 @@ struct paxos_promise
 };
 typedef struct paxos_promise paxos_promise;
 
-struct paxos_accept
+struct __attribute__((__packed__)) paxos_accept
 {
 	uint32_t iid;
 	uint16_t ballot;
@@ -68,7 +68,7 @@ struct paxos_accept
 };
 typedef struct paxos_accept paxos_accept;
 
-struct paxos_accepted
+struct __attribute__((__packed__)) paxos_accepted
 {
 	uint32_t iid;
 	uint16_t ballot;
@@ -78,7 +78,7 @@ struct paxos_accepted
 };
 typedef struct paxos_accepted paxos_accepted;
 
-struct paxos_preempted
+struct __attribute__((__packed__)) paxos_preempted
 {
 	uint32_t iid;
 	uint16_t ballot;
@@ -88,27 +88,27 @@ struct paxos_preempted
 };
 typedef struct paxos_preempted paxos_preempted;
 
-struct paxos_repeat
+struct __attribute__((__packed__)) paxos_repeat
 {
 	uint32_t from;
 	uint32_t to;
 };
 typedef struct paxos_repeat paxos_repeat;
 
-struct paxos_trim
+struct __attribute__((__packed__)) paxos_trim
 {
 	uint32_t iid;
 };
 typedef struct paxos_trim paxos_trim;
 
-struct paxos_acceptor_state
+struct __attribute__((__packed__)) paxos_acceptor_state
 {
 	uint32_t aid;
 	uint32_t trim_iid;
 };
 typedef struct paxos_acceptor_state paxos_acceptor_state;
 
-struct paxos_client_value
+struct __attribute__((__packed__)) paxos_client_value
 {
 	paxos_value value;
 };
@@ -128,7 +128,7 @@ enum paxos_message_type
 };
 typedef enum paxos_message_type paxos_message_type;
 
-struct paxos_message
+struct __attribute__((__packed__)) paxos_message
 {
 	paxos_message_type type;
 	union

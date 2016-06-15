@@ -5,7 +5,7 @@
 #include <sys/socket.h>
 #include "paxos.h"
 
-#define BUFSIZE 1024
+#define BUFSIZE 128
 
 /**
  * When starting a learner you must pass a callback to be invoked whenever

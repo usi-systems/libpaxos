@@ -208,39 +208,50 @@ void unpack_paxos_client_value(paxos_client_value* v, char* p)
     unpack_value(&v->value, p, 2);
 }
 
-void pack_paxos_message(char* p, paxos_message* v)
+size_t pack_paxos_message(char* p, paxos_message* v)
 {
+    size_t msglen = 0;
     switch (v->type) {
     case PAXOS_PREPARE:
         pack_paxos_prepare(p, &v->u.prepare);
+        msglen = sizeof(paxos_message);
         break;
     case PAXOS_PROMISE:
         pack_paxos_promise(p, &v->u.promise);
+        msglen = sizeof(paxos_message) + v->u.promise.value.paxos_value_len;
         break;
     case PAXOS_ACCEPT:
         pack_paxos_accept(p, &v->u.accept);
+        msglen = sizeof(paxos_message) + v->u.accept.value.paxos_value_len;
         break;
     case PAXOS_ACCEPTED:
         pack_paxos_accepted(p, &v->u.accepted);
+        msglen = sizeof(paxos_message) + v->u.accepted.value.paxos_value_len;
         break;
     case PAXOS_PREEMPTED:
         pack_paxos_preempted(p, &v->u.preempted);
+        msglen = sizeof(paxos_message);
         break;
     case PAXOS_REPEAT:
         pack_paxos_repeat(p, &v->u.repeat);
+        msglen = sizeof(paxos_message);
         break;
     case PAXOS_TRIM:
         pack_paxos_trim(p, &v->u.trim);
+        msglen = sizeof(paxos_message);
         break;
     case PAXOS_ACCEPTOR_STATE:
         pack_paxos_acceptor_state(p, &v->u.state);
+        msglen = sizeof(paxos_message);
         break;
     case PAXOS_CLIENT_VALUE:
         pack_paxos_client_value(p, &v->u.client_value);
+        msglen = sizeof(paxos_message);
         break;
     default:
         break;
     }
+    return msglen;
 }
 
 void unpack_paxos_message(paxos_message* v, char* p)

@@ -16,8 +16,7 @@ void try_accept(struct paxos_ctx *ctx);
 void send_paxos_message(struct paxos_ctx *ctx, struct paxos_message *msg) {
     char buffer[BUFSIZE];
     memset(buffer, 0, BUFSIZE);
-    pack_paxos_message(buffer, msg);
-    size_t msg_len = sizeof(struct paxos_message);
+    size_t msg_len = pack_paxos_message(buffer, msg);
     int n = sendto(ctx->sock, buffer, msg_len, 0,
         (struct sockaddr *)&ctx->acceptor_sin, sizeof(ctx->acceptor_sin));
     if (n < 0)
@@ -52,7 +51,6 @@ void try_accept(struct paxos_ctx *ctx)
         //     .u.accept = accept
         // };
         paxos_log_debug("Send ACCEPT for instance %d", msg.u.accept.iid);
-
         send_paxos_message(ctx, &msg);
     }
     coordinator_preexecute(ctx);
@@ -87,6 +85,7 @@ void coordinator_read(evutil_socket_t fd, short what, void *arg)
         if (n < 0)
             perror("recvfrom");
 
+
         struct paxos_message msg;
         unpack_paxos_message(&msg, ctx->buffer);
 
@@ -98,6 +97,16 @@ void coordinator_read(evutil_socket_t fd, short what, void *arg)
             coordinator_handle_promise(ctx, &msg);
         }
         else if (msg.type == PAXOS_ACCEPT) {
+/*
+            int i;
+            printf("BUFSIZE=%d, n=%d\n", BUFSIZE, n);
+            for (i = 0; i < n; i++) {
+                if (i % 16 == 0)
+                    printf("\n");
+                printf("%02x ", (unsigned char)ctx->buffer[i]);
+            }
+            printf("\n");
+*/
             coordinator_handle_proposal(ctx, &msg);
         }
         else if (msg.type == PAXOS_ACCEPTED) {

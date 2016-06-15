@@ -18,8 +18,7 @@ void acceptor_handle_prepare(struct paxos_ctx *ctx, struct paxos_message *msg,
     paxos_prepare* prepare = &msg->u.prepare;
 
     if (acceptor_receive_prepare(ctx->acceptor_state, prepare, &out) != 0) {
-        pack_paxos_message(ctx->buffer, &out);
-        size_t msg_len = sizeof(struct paxos_message);
+        size_t msg_len = pack_paxos_message(ctx->buffer, &out);
         int n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
             (struct sockaddr *)remote, socklen);
         if (n < 0)
@@ -36,8 +35,7 @@ void acceptor_handle_accept(struct paxos_ctx *ctx, struct paxos_message *msg,
 
     if (acceptor_receive_accept(ctx->acceptor_state, accept, &out) != 0) {
         if (out.type == PAXOS_ACCEPTED) {
-            pack_paxos_message(ctx->buffer, &out);
-            size_t msg_len = sizeof(struct paxos_message);
+            size_t msg_len = pack_paxos_message(ctx->buffer, &out);
             int n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
                 (struct sockaddr *)&ctx->learner_sin, sizeof(ctx->learner_sin));
             if (n < 0)
@@ -68,7 +66,18 @@ void acceptor_read(evutil_socket_t fd, short what, void *arg)
         unpack_paxos_message(&msg, ctx->buffer);
 
         if (msg.type == PAXOS_ACCEPT) {
+/*
+            int i;
+            printf("BUFSIZE=%d, n=%d\n", BUFSIZE, n);
+            for (i = 0; i < n; i++) {
+                if (i % 16 == 0)
+                    printf("\n");
+                printf("%02x ", (unsigned char)ctx->buffer[i]);
+            }
+            printf("\n");
+*/
             acceptor_handle_accept(ctx, &msg, &remote, len);
+
         } else if (msg.type == PAXOS_PREPARE) {
             acceptor_handle_prepare(ctx, &msg, &remote, len);
         }
