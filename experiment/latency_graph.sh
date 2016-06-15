@@ -6,8 +6,10 @@ mkdir -p figures
 rm -f sample/*
 rm -f csv/*
 
-    
-for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+for i in $1/*/
+do
+    i=${i%*/}
+    i=${i##*/}
     for j in $( find $1/$i -name client* ); do
         sed -e '/[a-zA-Z]/d' $j | awk -v var=$i '{print var, $0}' >> sample/"$i".csv
     done
