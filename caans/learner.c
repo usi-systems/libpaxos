@@ -7,8 +7,8 @@
 #include "netutils.h"
 #include "configuration.h"
 #include "application_proxy.h"
-
 #include "message.h"
+#include "leveldb_context.h"
 
 void on_perf(evutil_socket_t fd, short event, void *arg) {
     struct application_ctx *app = arg;
@@ -24,9 +24,30 @@ void deliver(unsigned int inst, char* val, size_t size, void* arg) {
     int proposer_id = ntohl(*p);
     p = (int *) (val + 4);
     int request_id = ntohl(*p);
+    if (app->enable_leveldb) {
+        struct client_request *request = (struct client_request *)(val+8);
+        // hexdump_message(request);
+        char *key = request->content;
+        char *value = request->content + 16;
+        int res = add_entry(app->leveldb, 0, key, 16, value, 15);
+        if (res) {
+            fprintf(stderr, "Add entry failed.\n");
+        }
+        /* check if the value is stored */
+        /*
+        char *stored_value = NULL;
+        size_t vsize = 0;
+        res = get_value(app->leveldb, key, 16, &stored_value, &vsize);
+        if (res) {
+            fprintf(stderr, "get value failed.\n");
+        } else {
+            printf("Stored value %s, size %zu\n", stored_value, vsize);
+            free(stored_value);
+        }
+        */
+    }
 
-    // struct client_request *request = (struct client_request *)(val+8);
-    // hexdump_message(request);
+
 
     paxos_log_debug("proposer %d, request %d", proposer_id, request_id);
     if (request_id % app->node_count == app->node_id) {
@@ -39,7 +60,7 @@ void deliver(unsigned int inst, char* val, size_t size, void* arg) {
 }
 
 void usage(char *prog) {
-    printf("Usage: %s configuration-file learner_id number_of_learner\n", prog);
+    printf("Usage: %s configuration-file learner_id number_of_learner [enable_leveldb]\n", prog);
 }
 
 
@@ -59,6 +80,10 @@ int main(int argc, char *argv[]) {
     app->node_count = atoi(argv[3]);
     app->at_second = 0;
     app->message_per_second = 0;
+    app->enable_leveldb = 0;
+    if (argc > 4) {
+        app->enable_leveldb = atoi(argv[4]);
+    }
     app->proxies = calloc(conf.proposer_count, sizeof(struct sockaddr_in));
     int i;
     for (i = 0; i < conf.proposer_count; i++) {
@@ -68,6 +93,7 @@ int main(int argc, char *argv[]) {
     }
     struct paxos_ctx *paxos = make_learner(&conf, deliver, app);
     app->paxos = paxos;
+    app->leveldb = new_leveldb_context();
 
     struct event *ev_perf = event_new(paxos->base, -1, EV_TIMEOUT|EV_PERSIST, on_perf, app);
     struct timeval one_second = {1, 0};
@@ -80,6 +106,7 @@ int main(int argc, char *argv[]) {
     event_free(ev_perf);
     free_paxos_ctx(app->paxos);
     free(app->proxies);
+    free_leveldb_context(app->leveldb);
     free(app);
     free_configuration(&conf);
 

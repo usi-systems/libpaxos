@@ -13,7 +13,7 @@ set (LIBPAXOS_LINKER_LIBS ${LIBPAXOS_LINKER_LIBS} leveldb)
 
 message(${SRCS})
 
-add_executable(server_caans learner.c ${SRCS})
+add_executable(server_caans learner.c leveldb_context.c ${SRCS})
 target_link_libraries(server_caans netpaxos ${LIBPAXOS_LINKER_LIBS})
 
 add_executable(proxy_caans proposer.c ${SRCS})

@@ -30,8 +30,10 @@ def proxy(host, path, config, proxy_id, proxy_port, output_dir):
     return ssh
 
 
-def learner(host, path, config, server_id, number_of_server, output_dir):
+def learner(host, path, config, server_id, number_of_server, output_dir, leveldb):
     cmd = "ssh danghu@{0} taskset -c {5} {1}/server_caans {2} {3} {4}".format(host, path, config, server_id, number_of_server, server_id+1)
+    if leveldb:
+        cmd = "ssh danghu@{0} taskset -c {5} {1}/server_caans {2} {3} {4} 1".format(host, path, config, server_id, number_of_server, server_id+1)
     print cmd
     with open('%s/server-%d.txt' % (output_dir, server_id), 'w') as out:
         ssh = subprocess.Popen(shlex.split(cmd),
@@ -139,6 +141,8 @@ if __name__ == "__main__":
     parser.add_argument('-c', '--clients', type=int, default=4, help='client per proxy')
     parser.add_argument('-s', '--software', default=False, action="store_true",
         help='Flag to run software libpaxos')
+    parser.add_argument('-l', '--leveldb', default=False, action="store_true",
+        help='Flag to run leveldb')
     parser.add_argument('output', help='output directory')
     args = parser.parse_args()
 
@@ -181,7 +185,7 @@ if __name__ == "__main__":
 
         # start learner
         for i in range(len(learners)):
-            pipes.append(learner(learners[i], args.path, args.config, i, len(learners), args.output))
+            pipes.append(learner(learners[i], args.path, args.config, i, len(learners), args.output, args.leveldb))
 
         for j in range(n_proxies):
             print "start proxy %d" % j

@@ -12,7 +12,7 @@
 #include "message.h"
 
 #define BILLION 1000000000
-#define DATA_SIZE 16
+#define DATA_SIZE 33
 
 static void
 random_string(char *s, const int len)
