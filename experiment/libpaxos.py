@@ -134,7 +134,8 @@ if __name__ == "__main__":
         # learners = [ 'node95', 'node96', 'node98' ]
         learners = [ 'node95' ]
         acceptors = [ 'node95', 'node96', 'node98' ]
-        proxies = [ 'node97', 'node97', 'node97', 'node97', 'node97' ]
+        proxies = [ 'node97', 'node97', 'node97', 'node97', 'node97' , 'node97',
+                    'node97', 'node97', 'node97', 'node97' ]
         nodes = [ 'node95', 'node96', 'node97', 'node98' ]
 
         n_proxies = 0;

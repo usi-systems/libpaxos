@@ -161,7 +161,8 @@ if __name__ == "__main__":
         # nodes = { 'server' : 'node95', 'proxy' : 'node97', 'client' : 'node97' }
         learners = [ 'node95', 'node96', 'node98' ]
         acceptors = [ 'node95', 'node96', 'node98' ]
-        proxies = [ 'node97', 'node97', 'node97', 'node97', 'node97' ]
+        proxies = [ 'node97', 'node97', 'node97', 'node97', 'node97',
+                     'node97', 'node97', 'node97', 'node97', 'node97' ]
         nodes = [ 'node95', 'node96', 'node97', 'node98' ]
 
         n_proxies = 0;
@@ -176,7 +177,7 @@ if __name__ == "__main__":
             for i in range(len(acceptors)):
                 sw_acceptor(learners[i], args.path, args.config, i, args.output)
             # start coordinators
-            sw_coordinator('node97', args.path, args.config, 7, args.output)
+            sw_coordinator('node97', args.path, args.config, 11, args.output)
 
         # start learner
         for i in range(len(learners)):
