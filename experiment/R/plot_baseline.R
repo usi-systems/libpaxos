@@ -42,8 +42,34 @@ plot_libpaxos_line <- function(latfile) {
     scale_x_continuous(labels=comma)
 }
 
+boxplot_libpaxos <- function(latfile) {
+    df <- read.csv(latfile, header=T, sep="")
+    df$library <- "Libpaxos"
+    df$latency <- df$latency * 10^6
+    df <- na.omit(df)
+    print(summary(df))
+    # data <- ddply(df, c("library", "throughput"), summarise, lat=mean(latency), sd = sd(latency))
+    data <- df
+    print(summary(data))
+    pdf('figures/output.pdf')
+    ggplot(data, aes(x=throughput, y=latency, group=throughput)) +
+    geom_boxplot() +
+    # geom_errorbar(aes(ymin=lat-sd, ymax=lat+sd), width=.2,
+    #              position=position_dodge(.9)) +
+    labs(x="Throughput (Msgs / S) ", y = "Latency (\U00B5s)")+
+    theme_bw() +
+    my_theme() +
+    theme(legend.position = c(.2, .9), legend.title=element_blank()) +
+    # scale_fill_manual(values=c('#d4444a', '#154fa1')) +
+    scale_fill_manual(values=c('#d4444a')) +
+    # scale_y_continuous(labels=comma) + 
+    scale_y_log10(labels=comma) +
+    scale_x_continuous(labels=comma)
+}
+
 
 args <- commandArgs(trailingOnly = TRUE)
 print(args)
 
-plot_libpaxos_line(args[1])
+# plot_libpaxos_line(args[1])
+boxplot_libpaxos(args[1])
