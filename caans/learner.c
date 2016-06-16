@@ -26,25 +26,28 @@ void deliver(unsigned int inst, char* val, size_t size, void* arg) {
     int request_id = ntohl(*p);
     if (app->enable_leveldb) {
         struct client_request *request = (struct client_request *)(val+8);
-        // hexdump_message(request);
         char *key = request->content;
-        char *value = request->content + 16;
-        int res = add_entry(app->leveldb, 0, key, 16, value, 15);
-        if (res) {
-            fprintf(stderr, "Add entry failed.\n");
-        }
-        /* check if the value is stored */
-        /*
-        char *stored_value = NULL;
-        size_t vsize = 0;
-        res = get_value(app->leveldb, key, 16, &stored_value, &vsize);
-        if (res) {
-            fprintf(stderr, "get value failed.\n");
+        if (app->amount_of_write > 0 && request_id % app->amount_of_write == 0) {
+            // hexdump_message(request);
+            char *value = request->content + 16;
+            int res = add_entry(app->leveldb, 0, key, 16, value, 15);
+            if (res) {
+                fprintf(stderr, "Add entry failed.\n");
+            }
         } else {
-            printf("Stored value %s, size %zu\n", stored_value, vsize);
-            free(stored_value);
+            /* check if the value is stored */
+            char *stored_value = NULL;
+            size_t vsize = 0;
+            int res = get_value(app->leveldb, key, 16, &stored_value, &vsize);
+            if (res) {
+                fprintf(stderr, "get value failed.\n");
+            } else {
+                if (stored_value != NULL) {
+                    // printf("Stored value %s, size %zu\n", stored_value, vsize);
+                    free(stored_value);
+                }
+            }
         }
-        */
     }
 
 
@@ -81,9 +84,22 @@ int main(int argc, char *argv[]) {
     app->at_second = 0;
     app->message_per_second = 0;
     app->enable_leveldb = 0;
+
     if (argc > 4) {
         app->enable_leveldb = atoi(argv[4]);
     }
+
+    int percent_write = 5;
+    if (argc > 5) {
+        percent_write = atoi(argv[5]);
+    }
+    if (percent_write == 0) {
+        app->amount_of_write = 0;
+    } else {
+        /* Work for less than 50% of write */
+        app->amount_of_write = 100 / percent_write;
+    }
+
     app->proxies = calloc(conf.proposer_count, sizeof(struct sockaddr_in));
     int i;
     for (i = 0; i < conf.proposer_count; i++) {

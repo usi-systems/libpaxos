@@ -34,6 +34,7 @@ struct application_ctx {
     int message_per_second;
     int enable_leveldb;
     struct leveldb_ctx *leveldb;
+    int amount_of_write;
 };
 
 void start_proxy(struct application_ctx *ctx, int proxy_port);
