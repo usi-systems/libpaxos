@@ -22,7 +22,10 @@ void deliver(unsigned int inst, char* val, size_t size, void* arg) {
     struct application_ctx *app = arg;
     app->message_per_second++;
     struct client_request *req = (struct client_request*)val;
-    struct timespec *ts = (struct timespec*)(val + sizeof(unsigned) + sizeof(struct sockaddr_in));
+    char *retval = (val + sizeof(unsigned) + sizeof(struct sockaddr_in));
+
+    struct command *cmd = (struct command*)(val + sizeof(struct client_request) - 1);
+    // printf("content: %s\n", cmd->content);
     // printf("address %s, port %d\n", inet_ntoa(req->cliaddr.sin_addr),ntohs(req->cliaddr.sin_port));
     // printf("%ld.%09ld\n", ts->tv_sec, ts->tv_nsec);
     // int i;
@@ -67,14 +70,13 @@ void deliver(unsigned int inst, char* val, size_t size, void* arg) {
 
 
 
-    // paxos_log_debug("proposer %d, request %d", proposer_id, request_id);
-    // if (request_id % app->node_count == app->node_id) {
-        int n = sendto(app->paxos->sock, ts, sizeof(struct timespec), 0,
+    if (cmd->command_id % app->node_count == app->node_id) {
+        int n = sendto(app->paxos->sock, retval, content_length(req), 0,
                         (struct sockaddr *)&req->cliaddr,
                         sizeof(req->cliaddr));
         if (n < 0)
             perror("deliver: sendto error");
-    // }
+    }
 }
 
 void usage(char *prog) {

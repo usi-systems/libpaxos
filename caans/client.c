@@ -7,12 +7,14 @@
 #include <signal.h>
 #include <time.h>
 #include <string.h>
+#include "message.h"
 
 #define BILLION 1000000000
 
 struct client_context {
     struct event_base *base;
     struct sockaddr_in server_addr;
+    int command_id;
 };
 
 
@@ -40,10 +42,14 @@ void handle_signal(evutil_socket_t fd, short what, void *arg)
 
 void send_to_addr(int fd, struct client_context *ctx) {
     socklen_t addr_size = sizeof (ctx->server_addr);
-    struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
-    int msg_size = sizeof ts;   
-    int n = sendto(fd , &ts, msg_size, 0, (struct sockaddr *)&ctx->server_addr, addr_size);
+    struct command cmd;
+    cmd.command_id = ctx->command_id++;
+    clock_gettime(CLOCK_REALTIME, &cmd.ts);
+    // memset(cmd.content, 'c', 15);
+    // cmd.content[15] = '\0';
+
+    int msg_size = sizeof cmd;   
+    int n = sendto(fd , &cmd, msg_size, 0, (struct sockaddr *)&ctx->server_addr, addr_size);
     if (n < 0) {
         perror("sendto");
     }
@@ -53,14 +59,14 @@ void on_read(evutil_socket_t fd, short event, void *arg) {
     struct client_context *ctx = arg;
     struct sockaddr_in remote;
     socklen_t addrlen = sizeof(remote);
-    struct timespec start;
-    int n = recvfrom(fd, &start, sizeof(start), 0, (struct sockaddr*)&remote, &addrlen);
+    struct command response;
+    int n = recvfrom(fd, &response, sizeof(response), 0, (struct sockaddr*)&remote, &addrlen);
     if (n < 0)
         perror("recvfrom");
     struct timespec end;
     clock_gettime(CLOCK_REALTIME, &end);
     struct timespec result;
-    if ( timespec_diff(&result, &end, &start) < 1)
+    if ( timespec_diff(&result, &end, &response.ts) < 1)
         printf("%ld.%09ld\n", result.tv_sec, result.tv_nsec);
 
 
@@ -93,7 +99,7 @@ int main(int argc, char *argv[])
     }
 
     struct client_context ctx;
-
+    ctx.command_id = 0;
     memset(&ctx.server_addr, 0, sizeof ctx.server_addr);
     ctx.server_addr.sin_family = AF_INET;
     memcpy((char *)&(ctx.server_addr.sin_addr.s_addr), (char *)server->h_addr, server->h_length);
