@@ -33,7 +33,8 @@ void init_paxos_ctx(struct paxos_ctx *ctx)
     ctx->base = NULL;
     ctx->ev_send = NULL;
     ctx->ev_read = NULL;
-    ctx->ev_signal = NULL;
+    ctx->ev_sigint = NULL;
+    ctx->ev_sigterm = NULL;
     ctx->timeout_ev = NULL;
     ctx->hole_watcher = NULL;
     ctx->learner_state = NULL;
@@ -56,8 +57,10 @@ void free_paxos_ctx(struct paxos_ctx *ctx)
         event_free(ctx->hole_watcher);
     if (ctx->ev_read)
         event_free(ctx->ev_read);
-    if (ctx->ev_signal)
-        event_free(ctx->ev_signal);
+    if (ctx->ev_sigint)
+        event_free(ctx->ev_sigint);
+    if (ctx->ev_sigterm)
+        event_free(ctx->ev_sigterm);
     if (ctx->timeout_ev)
         event_free(ctx->timeout_ev);
     event_base_free(ctx->base);

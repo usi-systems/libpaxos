@@ -33,14 +33,13 @@ struct netpaxos_configuration {
 struct paxos_ctx {
     int my_id;
     int sock;
-    /* TODO: Mock instance for testing */
     int mock_instance;
     struct sockaddr_in coordinator_sin;
     struct sockaddr_in acceptor_sin;
     struct sockaddr_in learner_sin;
     struct sockaddr_in proposer_sin;
     struct event_base *base;
-    struct event *ev_read, *ev_send, *ev_signal, *hole_watcher, *timeout_ev;
+    struct event *ev_read, *ev_send, *ev_sigint, *ev_sigterm, *hole_watcher, *timeout_ev;
     struct learner *learner_state;
     struct acceptor *acceptor_state;
     struct proposer *proposer_state;

@@ -30,8 +30,11 @@ struct paxos_ctx *make_replica(struct netpaxos_configuration *conf,
         learner_read_cb, ctx);
     event_add(ctx->ev_read, NULL);
 
-    ctx->ev_signal = evsignal_new(ctx->base, SIGINT|SIGTERM, handle_signal, ctx);
-    evsignal_add(ctx->ev_signal, NULL);
+    ctx->ev_sigint = evsignal_new(ctx->base, SIGINT, handle_signal, ctx);
+    evsignal_add(ctx->ev_sigint, NULL);
+
+    ctx->ev_sigterm = evsignal_new(ctx->base, SIGTERM, handle_signal, ctx);
+    evsignal_add(ctx->ev_sigterm, NULL);
 
     ctx->learner_state = learner_new(conf->acceptor_count);
     learner_set_instance_id(ctx->learner_state, 0);
