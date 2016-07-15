@@ -19,17 +19,17 @@ void submit(struct paxos_ctx *ctx, char *value, int size) {
         .u.accept.value.paxos_value_len = size,
         .u.accept.value.paxos_value_val = value
     };
-/*
-    int i;
-    char *raw = (char *)msg.u.accept.value.paxos_value_val;
-    printf("MSG\n");
-    for (i = 0; i < size; i++) {
-        if (i % 16 == 0)
-            printf("\n");
-        printf("%02x ", (unsigned char)raw[i]);
-    }
-    printf("\n");
-*/
+
+    // int i;
+    // char *raw = (char *)msg.u.accept.value.paxos_value_val;
+    // printf("MSG\n");
+    // for (i = 0; i < size; i++) {
+    //     if (i % 16 == 0)
+    //         printf("\n");
+    //     printf("%02x ", (unsigned char)raw[i]);
+    // }
+    // printf("\n");
+
     char buffer[BUFSIZE];
     memset(buffer, 0, BUFSIZE);
     pack_paxos_message(buffer, &msg);
@@ -44,7 +44,6 @@ void submit(struct paxos_ctx *ctx, char *value, int size) {
 }
 
 void proposer_read_cb(evutil_socket_t fd, short what, void *arg) {
-    struct paxos_ctx *ctx = arg;
     if (what&EV_READ) {
         char buffer[BUFSIZE];
         memset(buffer, 0, BUFSIZE);
@@ -56,12 +55,11 @@ void proposer_read_cb(evutil_socket_t fd, short what, void *arg) {
             perror("recvfrom");
             return;
         }
-        ctx->respond(buffer, n, ctx->respond_arg);
     }
 }
 
 struct paxos_ctx *make_proposer(struct netpaxos_configuration *conf,
-    int proposer_id, respond_callback f, void *arg)
+    int proposer_id, void *arg)
 {
     struct paxos_ctx *ctx = malloc( sizeof(struct paxos_ctx));
     init_paxos_ctx(ctx);
@@ -80,9 +78,6 @@ struct paxos_ctx *make_proposer(struct netpaxos_configuration *conf,
                     &ctx->coordinator_sin );
 
     ctx->sock = sock;
-
-    ctx->respond = f;
-    ctx->respond_arg = arg;
 
     ctx->ev_read = event_new(ctx->base, sock, EV_TIMEOUT|EV_READ|EV_PERSIST,
         proposer_read_cb, ctx);

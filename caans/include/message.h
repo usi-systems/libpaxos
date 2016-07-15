@@ -1,10 +1,13 @@
 #ifndef _MESSAGE_H_
 #define _MESSAGE_H_
 #include <time.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netinet/ip.h> 
 
 struct __attribute__((__packed__)) client_request {
     unsigned length;
-    struct timespec ts;
+    struct sockaddr_in cliaddr;
     char content[1];
 };
 

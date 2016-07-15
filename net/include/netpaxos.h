@@ -55,7 +55,7 @@ void submit(struct paxos_ctx *ctx, char *value, int size);
 
 void init_paxos_ctx(struct paxos_ctx *ctx);
 struct paxos_ctx *make_proposer(struct netpaxos_configuration *conf,
-    int proposer_id, respond_callback f, void *arg);
+    int proposer_id, void *arg);
 struct paxos_ctx *make_learner(struct netpaxos_configuration *conf,
                                         deliver_function f, void *arg);
 struct paxos_ctx *make_replica(struct netpaxos_configuration *conf,

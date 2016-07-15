@@ -3,6 +3,8 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include "netpaxos.h"
 #include "netutils.h"
 #include "configuration.h"
@@ -19,47 +21,60 @@ void on_perf(evutil_socket_t fd, short event, void *arg) {
 void deliver(unsigned int inst, char* val, size_t size, void* arg) {
     struct application_ctx *app = arg;
     app->message_per_second++;
-    paxos_log_debug("DELIVERED: %d %s", inst, val);
-    int *p = (int *) val;
-    int proposer_id = ntohl(*p);
-    p = (int *) (val + 4);
-    int request_id = ntohl(*p);
-    if (app->enable_leveldb) {
-        struct client_request *request = (struct client_request *)(val+8);
-        char *key = request->content;
-        if (app->amount_of_write > 0 && request_id % app->amount_of_write == 0) {
-            // hexdump_message(request);
-            char *value = request->content + 16;
-            int res = add_entry(app->leveldb, 0, key, 16, value, 15);
-            if (res) {
-                fprintf(stderr, "Add entry failed.\n");
-            }
-        } else {
-            /* check if the value is stored */
-            char *stored_value = NULL;
-            size_t vsize = 0;
-            int res = get_value(app->leveldb, key, 16, &stored_value, &vsize);
-            if (res) {
-                fprintf(stderr, "get value failed.\n");
-            } else {
-                if (stored_value != NULL) {
-                    // printf("Stored value %s, size %zu\n", stored_value, vsize);
-                    free(stored_value);
-                }
-            }
-        }
-    }
+    struct client_request *req = (struct client_request*)val;
+    struct timespec *ts = (struct timespec*)(val + sizeof(unsigned) + sizeof(struct sockaddr_in));
+    // printf("address %s, port %d\n", inet_ntoa(req->cliaddr.sin_addr),ntohs(req->cliaddr.sin_port));
+    // printf("%ld.%09ld\n", ts->tv_sec, ts->tv_nsec);
+    // int i;
+    // printf("MSG\n");
+    // for (i = 0; i < size; i++) {
+    //     if (i % 16 == 0)
+    //         printf("\n");
+    //     printf("%02x ", (unsigned char)val[i]);
+    // }
+    // printf("\n");
+
+    // paxos_log_debug("DELIVERED: %d %s", inst, val);
+    // int *p = (int *) val;
+    // int proposer_id = ntohl(*p);
+    // p = (int *) (val + 4);
+    // int request_id = ntohl(*p);
+    // if (app->enable_leveldb) {
+    //     struct client_request *request = (struct client_request *)(val+8);
+    //     char *key = request->content;
+    //     if (app->amount_of_write > 0 && request_id % app->amount_of_write == 0) {
+    //         // hexdump_message(request);
+    //         char *value = request->content + 16;
+    //         int res = add_entry(app->leveldb, 0, key, 16, value, 15);
+    //         if (res) {
+    //             fprintf(stderr, "Add entry failed.\n");
+    //         }
+    //     } else {
+    //         /* check if the value is stored */
+    //         char *stored_value = NULL;
+    //         size_t vsize = 0;
+    //         int res = get_value(app->leveldb, key, 16, &stored_value, &vsize);
+    //         if (res) {
+    //             fprintf(stderr, "get value failed.\n");
+    //         } else {
+    //             if (stored_value != NULL) {
+    //                 // printf("Stored value %s, size %zu\n", stored_value, vsize);
+    //                 free(stored_value);
+    //             }
+    //         }
+    //     }
+    // }
 
 
 
-    paxos_log_debug("proposer %d, request %d", proposer_id, request_id);
-    if (request_id % app->node_count == app->node_id) {
-        int n = sendto(app->paxos->sock, val, size, 0,
-                        (struct sockaddr *)&app->proxies[proposer_id],
-                        sizeof(app->proxies[proposer_id]));
+    // paxos_log_debug("proposer %d, request %d", proposer_id, request_id);
+    // if (request_id % app->node_count == app->node_id) {
+        int n = sendto(app->paxos->sock, ts, sizeof(struct timespec), 0,
+                        (struct sockaddr *)&req->cliaddr,
+                        sizeof(req->cliaddr));
         if (n < 0)
             perror("deliver: sendto error");
-    }
+    // }
 }
 
 void usage(char *prog) {

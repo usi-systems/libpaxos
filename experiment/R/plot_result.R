@@ -28,7 +28,7 @@ plot_lines <- function(input) {
     print(head(data))
     ggplot(data, aes(x=throughput, y=latency, group=library)) +
     geom_line(aes(linetype=library, color=library), size=1) +
-    geom_errorbar(aes(ymin=latency-se, ymax=latency+se), width=.1, position=pd) +
+    geom_errorbar(aes(ymin=latency-sd, ymax=latency+sd), width=.1, position=pd) +
     geom_point() +
     labs(x="Throughput (Msgs / S) ", y = "Latency (\U00B5s)")+
     theme_bw() +
@@ -36,10 +36,29 @@ plot_lines <- function(input) {
     theme(legend.key.size = unit(2, "lines"),
         legend.position = c(.8, .9), legend.title=element_blank()) +
     scale_colour_manual(values=c('#d4444a', '#154fa1')) +
-    scale_y_continuous(labels=comma) + 
+    scale_y_log10(labels=comma) + 
     scale_x_continuous(labels=comma, breaks=pretty_breaks(n=3))
 }
 
-
+plot_bars <- function(input) {
+    data <- read.csv(input, header = TRUE, sep="")
+    pdf('figures/caans_vs_libpaxos.pdf')
+    pd <- position_dodge(.9)
+    print(head(data))
+    ggplot(data, aes(x=throughput, y=latency, fill=library)) +
+    geom_bar(stat="identity", width=2000, position=pd) +
+    geom_errorbar(aes(ymin=latency, ymax=latency+se), width=.5, position=pd) +
+    geom_point() +
+    labs(x="Throughput (Msgs / S) ", y = "Latency (\U00B5s)")+
+    theme_bw() +
+    my_theme() +
+    theme(legend.key.size = unit(2, "lines"),
+        legend.position = c(.8, .9), legend.title=element_blank()) +
+    scale_fill_manual(values=c('#d4444a', '#154fa1')) +
+    scale_y_continuous(labels=comma) + 
+    scale_x_continuous(labels=comma, breaks=pretty_breaks(n=3))
+}
 args <- commandArgs(trailingOnly = TRUE)
+
+# plot_bars(args[1])
 plot_lines(args[1])

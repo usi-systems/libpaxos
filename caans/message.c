@@ -3,9 +3,14 @@
 #include <stdio.h>
 #include "message.h"
 
-unsigned message_length(struct client_request *request)
+unsigned content_length(struct client_request *request)
 {
     return request->length - (sizeof(struct client_request) - 1);
+}
+
+unsigned message_length(struct client_request *request)
+{
+    return request->length;
 }
 
 struct client_request* create_client_request(const char *data, unsigned data_size)
@@ -20,7 +25,7 @@ struct client_request* create_client_request(const char *data, unsigned data_siz
 void print_message(struct client_request *request)
 {
     printf("Length %d\n", request->length);
-    printf("%ld.%.9ld\n", request->ts.tv_sec, request->ts.tv_nsec);
+    // printf("%ld.%.9ld\n", request->ts.tv_sec, request->ts.tv_nsec);
     printf("Content %s\n", request->content);
 }
 
