@@ -14,6 +14,7 @@
 struct client_context {
     struct event_base *base;
     struct sockaddr_in server_addr;
+    enum Operation op;
     int command_id;
 };
 
@@ -44,9 +45,12 @@ void send_to_addr(int fd, struct client_context *ctx) {
     socklen_t addr_size = sizeof (ctx->server_addr);
     struct command cmd;
     cmd.command_id = ctx->command_id++;
+    cmd.op = ctx->op;
     clock_gettime(CLOCK_REALTIME, &cmd.ts);
-    // memset(cmd.content, 'c', 15);
-    // cmd.content[15] = '\0';
+    memset(cmd.content, 'k', 15);
+    cmd.content[15] = '\0';
+    memset(cmd.content+16, 'v', 15);
+    cmd.content[31] = '\0';
 
     int msg_size = sizeof cmd;   
     int n = sendto(fd , &cmd, msg_size, 0, (struct sockaddr *)&ctx->server_addr, addr_size);
@@ -85,9 +89,9 @@ int new_dgram_socket() {
 
 int main(int argc, char *argv[])
 {
-    if (argc != 3) {
-        printf("Syntax: %s [hostname] [port]\n"
-               "Example: %s 192.168.1.110 6789\n",argv[0], argv[0]);
+    if (argc < 3) {
+        printf("Syntax: %s [hostname] [port] [GET/SET]\n"
+               "Example: %s 192.168.1.110 6789 GET\n",argv[0], argv[0]);
         return 1;
     }
 
@@ -99,6 +103,12 @@ int main(int argc, char *argv[])
     }
 
     struct client_context ctx;
+    ctx.op = GET;
+    if (argc > 3) {
+        if (strcmp(argv[3], "SET") == 0) {
+            ctx.op = SET;
+        }
+    }
     ctx.command_id = 0;
     memset(&ctx.server_addr, 0, sizeof ctx.server_addr);
     ctx.server_addr.sin_family = AF_INET;

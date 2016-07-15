@@ -22,12 +22,9 @@ void deliver(unsigned int inst, char* val, size_t size, void* arg) {
     struct application_ctx *app = arg;
     app->message_per_second++;
     struct client_request *req = (struct client_request*)val;
-    char *retval = (val + sizeof(unsigned) + sizeof(struct sockaddr_in));
+    // printf("address %s, port %d\n", inet_ntoa(req->cliaddr.sin_addr), ntohs(req->cliaddr.sin_port));
 
     struct command *cmd = (struct command*)(val + sizeof(struct client_request) - 1);
-    // printf("content: %s\n", cmd->content);
-    // printf("address %s, port %d\n", inet_ntoa(req->cliaddr.sin_addr),ntohs(req->cliaddr.sin_port));
-    // printf("%ld.%09ld\n", ts->tv_sec, ts->tv_nsec);
     // int i;
     // printf("MSG\n");
     // for (i = 0; i < size; i++) {
@@ -38,37 +35,34 @@ void deliver(unsigned int inst, char* val, size_t size, void* arg) {
     // printf("\n");
 
     // paxos_log_debug("DELIVERED: %d %s", inst, val);
-    // int *p = (int *) val;
-    // int proposer_id = ntohl(*p);
-    // p = (int *) (val + 4);
-    // int request_id = ntohl(*p);
-    // if (app->enable_leveldb) {
-    //     struct client_request *request = (struct client_request *)(val+8);
-    //     char *key = request->content;
-    //     if (app->amount_of_write > 0 && request_id % app->amount_of_write == 0) {
-    //         // hexdump_message(request);
-    //         char *value = request->content + 16;
-    //         int res = add_entry(app->leveldb, 0, key, 16, value, 15);
-    //         if (res) {
-    //             fprintf(stderr, "Add entry failed.\n");
-    //         }
-    //     } else {
-    //         /* check if the value is stored */
-    //         char *stored_value = NULL;
-    //         size_t vsize = 0;
-    //         int res = get_value(app->leveldb, key, 16, &stored_value, &vsize);
-    //         if (res) {
-    //             fprintf(stderr, "get value failed.\n");
-    //         } else {
-    //             if (stored_value != NULL) {
-    //                 // printf("Stored value %s, size %zu\n", stored_value, vsize);
-    //                 free(stored_value);
-    //             }
-    //         }
-    //     }
-    // }
+    if (app->enable_leveldb) {
+        char *key = cmd->content;
+        if (cmd->op == SET) {
+            char *value = cmd->content + 16;
+            paxos_log_debug("SET(%s, %s)", key, value);
+            int res = add_entry(app->leveldb, 0, key, 16, value, 16);
+            if (res) {
+                fprintf(stderr, "Add entry failed.\n");
+            }
+        }
+        else if (cmd->op == GET) {
+            /* check if the value is stored */
+            char *stored_value = NULL;
+            size_t vsize = 0;
+            int res = get_value(app->leveldb, key, 16, &stored_value, &vsize);
+            if (res) {
+                fprintf(stderr, "get value failed.\n");
+            } 
+            else {
+                if (stored_value != NULL) {
+                    paxos_log_debug("Stored value %s, size %zu", stored_value, vsize);
+                    free(stored_value);
+                }
+            }
+        }
+    }
 
-
+    char *retval = (val + sizeof(unsigned) + sizeof(struct sockaddr_in));
 
     if (cmd->command_id % app->node_count == app->node_id) {
         int n = sendto(app->paxos->sock, retval, content_length(req), 0,

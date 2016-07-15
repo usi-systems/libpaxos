@@ -5,10 +5,16 @@
 #include <netinet/in.h>
 #include <netinet/ip.h> 
 
+enum Operation {
+    GET,
+    SET
+};
+
 struct command {
     struct timespec ts;
     int command_id;
-    char content[16];
+    enum Operation op;
+    char content[32];
 };
 
 

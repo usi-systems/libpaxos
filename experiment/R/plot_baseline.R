@@ -39,7 +39,7 @@ plot_libpaxos_line <- function(latfile) {
         legend.position = c(.2, .9), legend.title=element_blank()) +
     scale_colour_manual(values=c('#d4444a', '#154fa1')) +
     scale_y_continuous(labels=comma) + 
-    scale_x_continuous(labels=comma, breaks = c(50000, 100000))
+    scale_x_continuous(labels=comma)
 }
 
 boxplot_libpaxos <- function(latfile) {
@@ -50,17 +50,16 @@ boxplot_libpaxos <- function(latfile) {
     print(summary(df))
     data <- df
     print(summary(data))
-    ylim1 = boxplot.stats(data$latency)$stats[c(1, 5)]
     pdf('figures/output.pdf')
     ggplot(data, aes(x=throughput, y=latency, group=throughput)) +
-    geom_boxplot(outlier.shape = NA) +
+    geom_boxplot() +
     labs(x="Throughput (Msgs / S) ", y = "Latency (\U00B5s)")+
     theme_bw() +
     my_theme() +
     theme(legend.position = c(.2, .9), legend.title=element_blank()) +
     # scale_fill_manual(values=c('#d4444a', '#154fa1')) +
     scale_fill_manual(values=c('#d4444a')) +
-    # scale_y_continuous(labels=comma) + 
+    scale_y_continuous(labels=comma) + 
     scale_y_continuous(labels=comma, limits = quantile(data$latency, c(0.1, 0.9))) +
     scale_x_continuous(labels=comma)
 }
@@ -69,5 +68,5 @@ boxplot_libpaxos <- function(latfile) {
 args <- commandArgs(trailingOnly = TRUE)
 print(args)
 
-# plot_libpaxos_line(args[1])
-boxplot_libpaxos(args[1])
+plot_libpaxos_line(args[1])
+# boxplot_libpaxos(args[1])
