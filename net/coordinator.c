@@ -35,6 +35,7 @@ void coordinator_handle_proposal(struct paxos_ctx *ctx, struct paxos_message *ms
 void coordinator_handle_accepted(struct paxos_ctx *ctx, paxos_message* msg)
 {
     paxos_accepted* acc = &msg->u.accepted;
+    paxos_log_debug("Handle ACCEPTED for instance %d", acc->iid);
     if (proposer_receive_accepted(ctx->proposer_state, acc))
         try_accept(ctx);
 }

@@ -49,6 +49,26 @@ void acceptor_handle_accept(struct paxos_ctx *ctx, struct paxos_message *msg,
     }
 }
 
+void acceptor_handle_repeat(struct paxos_ctx *ctx, struct paxos_message* msg,
+    struct sockaddr_in *remote, socklen_t socklen)
+{
+    iid_t iid;
+    paxos_message out;
+    out.type = PAXOS_ACCEPTED;
+    paxos_repeat* repeat = &msg->u.repeat;
+    paxos_log_debug("Handle repeat for iids %d-%d", repeat->from, repeat->to);
+    for (iid = repeat->from; iid <= repeat->to; ++iid) {
+        if (acceptor_receive_repeat(ctx->acceptor_state, iid, &out.u.accepted)) {
+            size_t msg_len = pack_paxos_message(ctx->buffer, &out);
+            int n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
+                (struct sockaddr *)remote, socklen);
+            if (n < 0)
+                perror("Sendto:");
+            paxos_message_destroy(&out);
+        }
+    }
+}
+
 void acceptor_read(evutil_socket_t fd, short what, void *arg)
 {
     struct paxos_ctx *ctx = arg;
@@ -80,6 +100,8 @@ void acceptor_read(evutil_socket_t fd, short what, void *arg)
 
         } else if (msg.type == PAXOS_PREPARE) {
             acceptor_handle_prepare(ctx, &msg, &remote, len);
+        } else if (msg.type == PAXOS_REPEAT) {
+            acceptor_handle_repeat(ctx, &msg, &remote, len);
         }
 
         paxos_message_destroy(&msg);
