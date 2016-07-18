@@ -78,42 +78,47 @@ void coordinator_read(evutil_socket_t fd, short what, void *arg)
 {
     struct paxos_ctx *ctx = arg;
     if (what&EV_READ) {
-        memset(ctx->buffer, 0, BUFSIZE);
-        struct sockaddr_in remote;
-        socklen_t len = sizeof(remote);
-        int n = recvfrom(fd, ctx->buffer, BUFSIZE, 0,
-                            (struct sockaddr *)&remote, &len);
-        if (n < 0)
-            perror("recvfrom");
+        if (what&EV_READ) {
+            memset(ctx->buffer, 0, BUFSIZE);
+            struct sockaddr_in remote;
+            socklen_t len = sizeof(remote);
+            int n = recvfrom(fd, ctx->buffer, BUFSIZE, 0,
+                                (struct sockaddr *)&remote, &len);
+            if (n < 0)
+                perror("recvfrom");
 
 
-        struct paxos_message msg;
-        unpack_paxos_message(&msg, ctx->buffer);
+            struct paxos_message msg;
+            unpack_paxos_message(&msg, ctx->buffer);
 
-        if (msg.type == PAXOS_PROMISE) {
-            paxos_log_debug("Received promise for instance %d ballot %d value len %d",
-                msg.u.promise.iid,
-                msg.u.promise.ballot,
-                msg.u.promise.value.paxos_value_len);
-            coordinator_handle_promise(ctx, &msg);
-        }
-        else if (msg.type == PAXOS_ACCEPT) {
-/*
-            int i;
-            printf("BUFSIZE=%d, n=%d\n", BUFSIZE, n);
-            for (i = 0; i < n; i++) {
-                if (i % 16 == 0)
-                    printf("\n");
-                printf("%02x ", (unsigned char)ctx->buffer[i]);
+            if (msg.type == PAXOS_PROMISE) {
+                paxos_log_debug("Received promise for instance %d ballot %d value len %d",
+                    msg.u.promise.iid,
+                    msg.u.promise.ballot,
+                    msg.u.promise.value.paxos_value_len);
+                coordinator_handle_promise(ctx, &msg);
             }
-            printf("\n");
-*/
-            coordinator_handle_proposal(ctx, &msg);
+            else if (msg.type == PAXOS_ACCEPT) {
+    /*
+                int i;
+                printf("BUFSIZE=%d, n=%d\n", BUFSIZE, n);
+                for (i = 0; i < n; i++) {
+                    if (i % 16 == 0)
+                        printf("\n");
+                    printf("%02x ", (unsigned char)ctx->buffer[i]);
+                }
+                printf("\n");
+    */
+                coordinator_handle_proposal(ctx, &msg);
+            }
+            else if (msg.type == PAXOS_ACCEPTED) {
+                coordinator_handle_accepted(ctx, &msg);
+            }
+            paxos_message_destroy(&msg);
         }
-        else if (msg.type == PAXOS_ACCEPTED) {
-            coordinator_handle_accepted(ctx, &msg);
-        }
-        paxos_message_destroy(&msg);
+    }
+    if (what&EV_TIMEOUT) {
+        coordinator_preexecute(ctx);
     }
 }
 
@@ -190,17 +195,15 @@ struct paxos_ctx *make_coordinator(struct netpaxos_configuration *conf, int my_i
 
     ip_to_sockaddr(conf->acceptor_address, conf->acceptor_port, &ctx->acceptor_sin);
 
-    ctx->ev_read = event_new(ctx->base, sock, EV_READ|EV_PERSIST,
+    ctx->ev_read = event_new(ctx->base, sock, EV_TIMEOUT|EV_READ|EV_PERSIST,
         coordinator_read, ctx);
-    event_add(ctx->ev_read, NULL);
+    event_add(ctx->ev_read, &ctx->tv);
 
     ctx->ev_sigint = evsignal_new(ctx->base, SIGINT, handle_signal, ctx);
     evsignal_add(ctx->ev_sigint, NULL);
 
     ctx->ev_sigterm = evsignal_new(ctx->base, SIGTERM, handle_signal, ctx);
     evsignal_add(ctx->ev_sigterm, NULL);
-
-    coordinator_preexecute(ctx);
 
     return ctx;
 }
