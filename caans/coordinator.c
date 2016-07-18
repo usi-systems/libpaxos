@@ -9,7 +9,7 @@
 
 void usage(char *prog)
 {
-    printf("Usage: %s configuration-file\n", prog);
+    printf("Usage: %s configuration-file [id]\n", prog);
 }
 
 int main(int argc, char *argv[])
@@ -18,10 +18,15 @@ int main(int argc, char *argv[])
         usage(argv[0]);
         return 0;
     }
+    int my_id = 0;
+    if (argc > 2) {
+        my_id = atoi(argv[2]);
+    }
+
     struct netpaxos_configuration conf;
     populate_configuration(argv[1], &conf);
     dump_configuration(&conf);
-    struct paxos_ctx *paxos = make_coordinator(&conf);
+    struct paxos_ctx *paxos = make_coordinator(&conf, my_id);
 
     start_paxos(paxos);
 

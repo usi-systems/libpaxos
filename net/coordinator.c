@@ -168,12 +168,12 @@ void coordinator_preexecute(struct paxos_ctx* ctx)
 }
 
 
-struct paxos_ctx *make_coordinator(struct netpaxos_configuration *conf)
+struct paxos_ctx *make_coordinator(struct netpaxos_configuration *conf, int my_id)
 {
     struct paxos_ctx *ctx = malloc( sizeof(struct paxos_ctx));
     init_paxos_ctx(ctx);
 
-    ctx->my_id = 0;
+    ctx->my_id = my_id;
     ctx->proposer_state = proposer_new(ctx->my_id, conf->acceptor_count);
 
     ctx->base = event_base_new();
