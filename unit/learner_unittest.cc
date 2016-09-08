@@ -290,3 +290,59 @@ TEST_F(LearnerTest, test_receive_promises_with_value) {
 	ASSERT_EQ(6, accept.value.paxos_value_len);
 	ASSERT_STREQ("Value", accept.value.paxos_value_val);
 }
+
+TEST_F(LearnerTest, test_learner_recovery) {
+	int delivered;
+	paxos_accepted a, deliver;
+	iid_t from, to;
+	ballot_t pbal = 102;
+	a =	(paxos_accepted) {1, pbal, pbal, 1, {0, NULL}};
+	learner_receive_accepted(l, &a);
+	a =	(paxos_accepted) {1, pbal, pbal, 2, {0, NULL}};
+	learner_receive_accepted(l, &a);
+	delivered = learner_deliver_next(l, &deliver);
+	paxos_accepted_destroy(&deliver);
+
+	a =	(paxos_accepted) {4, pbal, pbal, 1, {0, NULL}};
+	learner_receive_accepted(l, &a);
+	a =	(paxos_accepted) {4, pbal, pbal, 2, {0, NULL}};
+	learner_receive_accepted(l, &a);
+	delivered = learner_deliver_next(l, &deliver);
+	ASSERT_FALSE(delivered);
+
+	ASSERT_EQ(1, learner_has_holes(l, &from, &to));
+	ASSERT_EQ(2, from);
+	ASSERT_EQ(4, to);
+
+	int rv;
+	paxos_prepare out;
+	paxos_accept accept;
+
+	/* run phase 1 for the missing instance */
+	learner_prepare(l, &out, 2);
+	char v[] = "Value";
+	/* inst: 2, bal : 3, vbal : 1, aid : 1, val {0, NULL} */
+	paxos_promise promise = {2, 3, 1, 1, {6, v}};
+	rv = learner_receive_promise(l, &promise,  &accept);
+	ASSERT_EQ(0, rv);
+
+	/* promise from another acceptor */
+	promise.aid = 2;
+	rv = learner_receive_promise(l, &promise, &accept);
+	ASSERT_EQ(1, rv);
+	ASSERT_EQ(2, accept.iid);
+	ASSERT_EQ(3, accept.ballot);
+	ASSERT_EQ(6, accept.value.paxos_value_len);
+	ASSERT_STREQ("Value", accept.value.paxos_value_val);
+
+	a =	(paxos_accepted) {2, 3, 3, 1, {6, v}};
+	learner_receive_accepted(l, &a);
+	a =	(paxos_accepted) {2, 3, 3, 2, {6, v}};
+	learner_receive_accepted(l, &a);
+	delivered = learner_deliver_next(l, &deliver);
+	paxos_accepted_destroy(&deliver);
+	ASSERT_EQ(1, learner_has_holes(l, &from, &to));
+	ASSERT_EQ(3, from);
+	ASSERT_EQ(4, to);
+
+}
