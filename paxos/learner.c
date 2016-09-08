@@ -47,7 +47,7 @@ struct gap
 	ballot_t ballot;
 	ballot_t highest_accepted_ballot;
 	paxos_value* highest_accepted_value;
-	int count;
+	uint8_t acceptor_bitmap;
 	int majority;
 };
 KHASH_MAP_INIT_INT(gap, struct gap*);
@@ -81,6 +81,11 @@ static struct gap* get_gap_or_create(struct learner* l, iid_t iid);
 static struct gap* learner_new_gap(struct learner* l, iid_t iid);
 static struct gap* learner_get_gap(struct learner* l, iid_t iid);
 static void gap_free(struct gap* gap);
+static void gap_reset(struct gap* gap);
+static int update_gap(struct gap* gap, paxos_promise* promise);
+static int is_duplicated(uint8_t *acceptor_bitmap, int acceptor_id);
+static void update_accepted_value(struct gap* gap, paxos_promise* promise);
+static int is_majority_promised(struct gap* gap);
 
 
 struct learner*
@@ -175,6 +180,58 @@ learner_prepare(struct learner* l, paxos_prepare* out, iid_t iid)
 	*out = (paxos_prepare) {gap->iid, gap->ballot};
 }
 
+/* Check if it is waiting for promises for a gap instance */
+int
+learner_receive_promise(struct learner* l, paxos_promise* promise)
+{
+	struct gap* gap = learner_get_gap(l, promise->iid);
+	if (gap == NULL)
+		return 0;
+	return update_gap(gap, promise);
+}
+
+static int
+update_gap(struct gap* gap, paxos_promise* promise)
+{
+	// Check if this promise has been processed (same acceptor id)
+	if (is_duplicated(&gap->acceptor_bitmap, promise->aid))
+		return 0;
+	// update highest value
+	update_accepted_value(gap, promise);
+	// Reach quorum?
+	return is_majority_promised(gap);
+}
+
+static int
+is_majority_promised(struct gap* gap)
+{
+	return __builtin_popcount(gap->acceptor_bitmap) >= gap->majority;
+}
+
+static void
+update_accepted_value(struct gap* gap, paxos_promise* promise)
+{
+	if (gap->highest_accepted_ballot < promise->value_ballot) {
+		gap->highest_accepted_ballot = promise->value_ballot;
+		if (gap->highest_accepted_value == NULL)
+			gap->highest_accepted_value = malloc(sizeof(paxos_value*));
+		paxos_value_copy(gap->highest_accepted_value, &promise->value);
+	}
+}
+
+/* Check if the acceptor id has been included */
+static int
+is_duplicated(uint8_t *acceptor_bitmap, int acceptor_id)
+{
+	uint8_t mask = 1 << acceptor_id;
+	/* if true, the acceptor_id existed */
+	if (*acceptor_bitmap & mask)
+		return 1;
+	/* else, include the acceptor id */
+	*acceptor_bitmap |= mask;
+	return 0;
+}
+
 static struct gap*
 get_gap_or_create(struct learner* l, iid_t iid)
 {
@@ -182,7 +239,7 @@ get_gap_or_create(struct learner* l, iid_t iid)
 	if (gap == NULL) {
 		gap = learner_new_gap(l, iid);
 	} else {
-		gap->ballot += 7;
+		gap_reset(gap);
 	}
 	return gap;
 }
@@ -208,6 +265,7 @@ learner_new_gap(struct learner* l, iid_t iid)
 	return gap;
 }
 
+/* Initialize an prepare instance with a starting ballot of 3. */
 static struct gap*
 gap_new(iid_t iid, int acceptors)
 {
@@ -215,9 +273,22 @@ gap_new(iid_t iid, int acceptors)
 	gap = malloc(sizeof(struct gap));
 	memset(gap, 0, sizeof(struct gap));
 	gap->iid = iid;
+	gap->ballot = 3;
 	gap->highest_accepted_value = NULL;
 	gap->majority = paxos_quorum(acceptors);
 	return gap;
+}
+
+/* Reset an prepare instance and increase the ballot by 11. */
+static void
+gap_reset(struct gap* gap)
+{
+	gap->ballot += 11; // MAXIMUM 11 Learner
+	if (gap->highest_accepted_value)
+		paxos_value_free(gap->highest_accepted_value);
+	gap->highest_accepted_value = NULL;
+	gap->highest_accepted_ballot = 0;
+	gap->acceptor_bitmap = 0;
 }
 
 static void

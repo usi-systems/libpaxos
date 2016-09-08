@@ -225,4 +225,39 @@ TEST_F(LearnerTest, LearnerPrepare) {
 	paxos_prepare out;
 	learner_prepare(l, &out, 10);
 	ASSERT_EQ(10, out.iid);
+	ASSERT_EQ(3, out.ballot);
+}
+
+TEST_F(LearnerTest, LearnerPrepareRetry) {
+	paxos_prepare out;
+	learner_prepare(l, &out, 10);
+	learner_prepare(l, &out, 10);
+	ASSERT_EQ(10, out.iid);
+	ASSERT_EQ(14, out.ballot);
+}
+
+TEST_F(LearnerTest, TestReceiveDuplicatedPromise) {
+	/* inst: 10, bal : 3, vbal : 0, aid : 0, val {0, NULL} */
+	paxos_prepare out;
+	paxos_promise promise = {10, 3, 0, 1, {0, NULL}};
+	learner_prepare(l, &out, 10);
+	int rv = learner_receive_promise(l, &promise);
+	ASSERT_EQ(0, rv);
+	rv = learner_receive_promise(l, &promise);
+	ASSERT_EQ(0, rv);
+}
+
+TEST_F(LearnerTest, TestReceiveMajorityPromise) {
+	/* inst: 10, bal : 3, vbal : 0, aid : 0, val {0, NULL} */
+	int rv;
+	paxos_prepare out;
+	learner_prepare(l, &out, 10);
+	paxos_promise promise = {10, 3, 0, 1, {0, NULL}};
+	rv = learner_receive_promise(l, &promise);
+	ASSERT_EQ(0, rv);
+
+	/* promise from another acceptor */
+	promise.aid = 2;
+	rv = learner_receive_promise(l, &promise);
+	ASSERT_EQ(1, rv);
 }
