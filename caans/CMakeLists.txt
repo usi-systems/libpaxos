@@ -30,3 +30,6 @@ target_link_libraries(sw_coordinator netpaxos ${LIBPAXOS_LINKER_LIBS})
 
 add_executable(sw_acceptor acceptor.c ${SRCS})
 target_link_libraries(sw_acceptor netpaxos ${LIBPAXOS_LINKER_LIBS})
+
+add_executable(sequencer sequencer.c ${SRCS})
+target_link_libraries(sequencer netpaxos ${LIBPAXOS_LINKER_LIBS})

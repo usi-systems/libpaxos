@@ -70,3 +70,15 @@ int net_ip__is_multicast_ip(char *ip_address)
 
     return 0;
 }
+
+void
+hexdump(char *buf, int size)
+{
+    int i;
+    for (i = 0; i < size; i++) {
+        if (i % 16 == 0)
+            printf("\n");
+        printf("%02x ", (unsigned char)buf[i]);
+    }
+    printf("\n");
+}

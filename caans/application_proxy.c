@@ -25,17 +25,11 @@ void handle_request(evutil_socket_t fd, short event, void *arg) {
 
     struct client_request *req = create_client_request(app->buffer, recv_bytes);
     req->cliaddr = remote;
-    // printf("address %s, port %d\n", inet_ntoa(req->cliaddr.sin_addr),ntohs(req->cliaddr.sin_port));
-
-    // int i;
-    // char *raw = (char *)req;
-    // printf("MSG\n");
-    // for (i = 0; i < req->length; i++) {
-    //     if (i % 16 == 0)
-    //         printf("\n");
-    //     printf("%02x ", (unsigned char)raw[i]);
-    // }
-    // printf("\n");
+    /*
+    printf("address %s, port %d\n", inet_ntoa(req->cliaddr.sin_addr),
+        ntohs(req->cliaddr.sin_port));
+    */
+    hexdump((char*)req, req->length);
 
     submit(app->paxos, (char*)req, message_length(req));
     app->current_request_id++;

@@ -14,6 +14,9 @@
 typedef void (*respond_callback)(char* value, size_t size, void* arg);
 typedef void (*deliver_function)(unsigned int, char* value, size_t size, void* arg);
 
+struct sequencer {
+    uint32_t current_instance;
+};
 
 struct netpaxos_configuration {
     int *proposer_port;
@@ -33,16 +36,16 @@ struct netpaxos_configuration {
 struct paxos_ctx {
     int my_id;
     int sock;
-    int mock_instance;
     struct sockaddr_in coordinator_sin;
     struct sockaddr_in acceptor_sin;
     struct sockaddr_in learner_sin;
     struct sockaddr_in proposer_sin;
     struct event_base *base;
     struct event *ev_read, *ev_send, *ev_sigint, *ev_sigterm, *hole_watcher, *timeout_ev;
-    struct learner *learner_state;
-    struct acceptor *acceptor_state;
-    struct proposer *proposer_state;
+    struct learner* learner_state;
+    struct acceptor* acceptor_state;
+    struct proposer* proposer_state;
+    struct sequencer* sequencer;
     deliver_function deliver;
     void* deliver_arg;
     respond_callback respond;
@@ -70,5 +73,5 @@ void learner_read_cb(evutil_socket_t fd, short what, void *arg);
 
 struct paxos_ctx *make_coordinator(struct netpaxos_configuration *conf, int my_id);
 struct paxos_ctx *make_acceptor(struct netpaxos_configuration *conf, int aid);
-
+struct paxos_ctx* make_sequencer(struct netpaxos_configuration *conf);
 #endif

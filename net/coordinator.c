@@ -111,9 +111,11 @@ void coordinator_read(evutil_socket_t fd, short what, void *arg)
     */
                 coordinator_handle_proposal(ctx, &msg);
             }
+
             else if (msg.type == PAXOS_ACCEPTED) {
                 coordinator_handle_accepted(ctx, &msg);
             }
+
             paxos_message_destroy(&msg);
         }
     }

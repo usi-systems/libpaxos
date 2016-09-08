@@ -8,6 +8,8 @@
 #include "netutils.h"
 #include "netpaxos.h"
 
+static void sequencer_free(struct sequencer* sq);
+
 
 void start_paxos(struct paxos_ctx *ctx)
 {
@@ -24,8 +26,6 @@ void handle_signal(evutil_socket_t fd, short what, void *arg)
 void init_paxos_ctx(struct paxos_ctx *ctx)
 {
     ctx->sock = 0;
-    /* TODO: Remove mock instance */
-    ctx->mock_instance = 1;
     memset(&ctx->acceptor_sin, 0, sizeof(struct sockaddr_in));
     memset(&ctx->learner_sin, 0, sizeof(struct sockaddr_in));
     memset(&ctx->proposer_sin, 0, sizeof(struct sockaddr_in));
@@ -40,6 +40,7 @@ void init_paxos_ctx(struct paxos_ctx *ctx)
     ctx->learner_state = NULL;
     ctx->acceptor_state = NULL;
     ctx->proposer_state = NULL;
+    ctx->sequencer = NULL;
     ctx->buffer = malloc(BUFSIZE);
 }
 
@@ -51,6 +52,8 @@ void free_paxos_ctx(struct paxos_ctx *ctx)
         acceptor_free(ctx->acceptor_state);
     if (ctx->proposer_state)
         proposer_free(ctx->proposer_state);
+    if (ctx->sequencer)
+        sequencer_free(ctx->sequencer);
     if (ctx->ev_send)
         event_free(ctx->ev_send);
     if (ctx->hole_watcher)
@@ -66,4 +69,10 @@ void free_paxos_ctx(struct paxos_ctx *ctx)
     event_base_free(ctx->base);
     free(ctx->buffer);
     free(ctx);
+}
+
+static void
+sequencer_free(struct sequencer* sq)
+{
+    free(sq);
 }
