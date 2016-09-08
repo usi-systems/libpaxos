@@ -182,12 +182,26 @@ learner_prepare(struct learner* l, paxos_prepare* out, iid_t iid)
 
 /* Check if it is waiting for promises for a gap instance */
 int
-learner_receive_promise(struct learner* l, paxos_promise* promise)
+learner_receive_promise(struct learner* l, paxos_promise* promise,
+	paxos_accept* accept)
 {
 	struct gap* gap = learner_get_gap(l, promise->iid);
 	if (gap == NULL)
 		return 0;
-	return update_gap(gap, promise);
+	int reached_majority = update_gap(gap, promise);
+	if (!reached_majority)
+		return 0;
+	accept->iid = gap->iid;
+	accept->ballot = gap->ballot;
+	if (gap->highest_accepted_value) {
+		paxos_value_copy(&accept->value, gap->highest_accepted_value);
+		assert(accept->value.paxos_value_len ==
+			gap->highest_accepted_value->paxos_value_len);
+	} else {
+		accept->value.paxos_value_len = 0;
+		accept->value.paxos_value_val = NULL;
+	}
+	return 1;
 }
 
 static int

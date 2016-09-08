@@ -221,14 +221,14 @@ TEST_F(LearnerTest, ManyHoles) {
 	ASSERT_EQ(100, to);
 }
 
-TEST_F(LearnerTest, LearnerPrepare) {
+TEST_F(LearnerTest, learner_prepare) {
 	paxos_prepare out;
 	learner_prepare(l, &out, 10);
 	ASSERT_EQ(10, out.iid);
 	ASSERT_EQ(3, out.ballot);
 }
 
-TEST_F(LearnerTest, LearnerPrepareRetry) {
+TEST_F(LearnerTest, learner_prepare_retry) {
 	paxos_prepare out;
 	learner_prepare(l, &out, 10);
 	learner_prepare(l, &out, 10);
@@ -236,28 +236,57 @@ TEST_F(LearnerTest, LearnerPrepareRetry) {
 	ASSERT_EQ(14, out.ballot);
 }
 
-TEST_F(LearnerTest, TestReceiveDuplicatedPromise) {
+TEST_F(LearnerTest, test_receive_duplicated_promise) {
 	/* inst: 10, bal : 3, vbal : 0, aid : 0, val {0, NULL} */
 	paxos_prepare out;
+	paxos_accept accept;
 	paxos_promise promise = {10, 3, 0, 1, {0, NULL}};
 	learner_prepare(l, &out, 10);
-	int rv = learner_receive_promise(l, &promise);
+	int rv = learner_receive_promise(l, &promise, &accept);
 	ASSERT_EQ(0, rv);
-	rv = learner_receive_promise(l, &promise);
+	rv = learner_receive_promise(l, &promise, &accept);
 	ASSERT_EQ(0, rv);
 }
 
-TEST_F(LearnerTest, TestReceiveMajorityPromise) {
-	/* inst: 10, bal : 3, vbal : 0, aid : 0, val {0, NULL} */
+TEST_F(LearnerTest, test_receive_promises_without_value) {
+	/* inst: 10, bal : 3, vbal : 0, aid : 1, val {0, NULL} */
 	int rv;
 	paxos_prepare out;
+	paxos_accept accept;
+
 	learner_prepare(l, &out, 10);
 	paxos_promise promise = {10, 3, 0, 1, {0, NULL}};
-	rv = learner_receive_promise(l, &promise);
+	rv = learner_receive_promise(l, &promise,  &accept);
 	ASSERT_EQ(0, rv);
 
 	/* promise from another acceptor */
 	promise.aid = 2;
-	rv = learner_receive_promise(l, &promise);
+	rv = learner_receive_promise(l, &promise, &accept);
 	ASSERT_EQ(1, rv);
+	ASSERT_EQ(10, accept.iid);
+	ASSERT_EQ(3, accept.ballot);
+	ASSERT_EQ(0, accept.value.paxos_value_len);
+	ASSERT_EQ(NULL, accept.value.paxos_value_val);
+}
+
+TEST_F(LearnerTest, test_receive_promises_with_value) {
+	int rv;
+	paxos_prepare out;
+	paxos_accept accept;
+
+	learner_prepare(l, &out, 10);
+	char v[] = "Value";
+	/* inst: 10, bal : 3, vbal : 1, aid : 1, val {0, NULL} */
+	paxos_promise promise = {10, 3, 1, 1, {6, v}};
+	rv = learner_receive_promise(l, &promise,  &accept);
+	ASSERT_EQ(0, rv);
+
+	/* promise from another acceptor */
+	promise.aid = 2;
+	rv = learner_receive_promise(l, &promise, &accept);
+	ASSERT_EQ(1, rv);
+	ASSERT_EQ(10, accept.iid);
+	ASSERT_EQ(3, accept.ballot);
+	ASSERT_EQ(6, accept.value.paxos_value_len);
+	ASSERT_STREQ("Value", accept.value.paxos_value_val);
 }
