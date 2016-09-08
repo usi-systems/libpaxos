@@ -185,6 +185,8 @@ int
 learner_receive_promise(struct learner* l, paxos_promise* promise,
 	paxos_accept* accept)
 {
+	paxos_log_debug("promise for iid %u.", promise->iid);
+
 	struct gap* gap = learner_get_gap(l, promise->iid);
 	if (gap == NULL)
 		return 0;
@@ -227,9 +229,11 @@ update_accepted_value(struct gap* gap, paxos_promise* promise)
 {
 	if (gap->highest_accepted_ballot < promise->value_ballot) {
 		gap->highest_accepted_ballot = promise->value_ballot;
-		if (gap->highest_accepted_value == NULL)
-			gap->highest_accepted_value = malloc(sizeof(paxos_value*));
-		paxos_value_copy(gap->highest_accepted_value, &promise->value);
+		if (promise->value.paxos_value_len) {
+			if (gap->highest_accepted_value == NULL)
+				gap->highest_accepted_value = malloc(sizeof(paxos_value*));
+			paxos_value_copy(gap->highest_accepted_value, &promise->value);
+		}
 	}
 }
 
