@@ -19,9 +19,9 @@ endif()
 
 add_subdirectory(paxos)
 add_subdirectory(evpaxos)
-add_subdirectory(sample)
-add_subdirectory(net)
-add_subdirectory(caans)
+#add_subdirectory(sample)
+#add_subdirectory(net)
+#add_subdirectory(caans)
 
 enable_testing()
 add_subdirectory(unit)

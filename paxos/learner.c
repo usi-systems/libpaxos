@@ -39,7 +39,19 @@ struct instance
 	paxos_accepted** acks;
 	paxos_accepted* final_value;
 };
-KHASH_MAP_INIT_INT(instance, struct instance*)
+KHASH_MAP_INIT_INT(instance, struct instance*);
+
+struct gap
+{
+	iid_t iid;
+	ballot_t ballot;
+	ballot_t highest_accepted_ballot;
+	paxos_value* highest_accepted_value;
+	int count;
+	int majority;
+};
+KHASH_MAP_INIT_INT(gap, struct gap*);
+
 
 struct learner
 {
@@ -48,6 +60,7 @@ struct learner
 	iid_t current_iid;
 	iid_t highest_iid_closed;
 	khash_t(instance)* instances;
+	khash_t(gap)* gaps;	/* Learner starts Paxos for missing instances */
 };
 
 static struct instance* learner_get_instance(struct learner* l, iid_t iid);
@@ -62,6 +75,12 @@ static int instance_has_quorum(struct instance* i, int acceptors);
 static void instance_add_accept(struct instance* i, paxos_accepted* ack);
 static paxos_accepted* paxos_accepted_dup(paxos_accepted* ack);
 static void paxos_value_copy(paxos_value* dst, paxos_value* src);
+/* Extend learner to run phase 1 and phase 2 in recovery */
+static struct gap* gap_new(iid_t iid, int acceptors);
+static struct gap* get_gap_or_create(struct learner* l, iid_t iid);
+static struct gap* learner_new_gap(struct learner* l, iid_t iid);
+static struct gap* learner_get_gap(struct learner* l, iid_t iid);
+static void gap_free(struct gap* gap);
 
 
 struct learner*
@@ -74,6 +93,7 @@ learner_new(int acceptors)
 	l->highest_iid_closed = 1;
 	l->late_start = !paxos_config.learner_catch_up;
 	l->instances = kh_init(instance);
+	l->gaps = kh_init(gap);
 	return l;
 }
 
@@ -83,6 +103,11 @@ learner_free(struct learner* l)
 	struct instance* inst;
 	kh_foreach_value(l->instances, inst, instance_free(inst, l->acceptors));
 	kh_destroy(instance, l->instances);
+
+	struct gap* gap;
+	kh_foreach_value(l->gaps, gap, gap_free(gap));
+	kh_destroy(gap, l->gaps);
+
 	free(l);
 }
 
@@ -139,6 +164,68 @@ learner_has_holes(struct learner* l, iid_t* from, iid_t* to)
 		return 1;
 	}
 	return 0;
+}
+
+
+void
+learner_prepare(struct learner* l, paxos_prepare* out, iid_t iid)
+{
+	struct gap* gap = get_gap_or_create(l, iid);
+	assert(gap != NULL);
+	*out = (paxos_prepare) {gap->iid, gap->ballot};
+}
+
+static struct gap*
+get_gap_or_create(struct learner* l, iid_t iid)
+{
+	struct gap* gap = learner_get_gap(l, iid);
+	if (gap == NULL) {
+		gap = learner_new_gap(l, iid);
+	} else {
+		gap->ballot += 7;
+	}
+	return gap;
+}
+
+static struct gap*
+learner_get_gap(struct learner* l, iid_t iid)
+{
+	khiter_t k;
+	k = kh_get_gap(l->gaps, iid);
+	if (k == kh_end(l->gaps))
+		return NULL;
+	return kh_value(l->gaps, k);
+}
+
+static struct gap*
+learner_new_gap(struct learner* l, iid_t iid)
+{
+	int absent;
+	khiter_t k = kh_put_gap(l->gaps, iid, &absent);
+	assert(absent);
+	struct gap* gap = gap_new(iid, l->acceptors);
+	kh_value(l->gaps, k) = gap;
+	return gap;
+}
+
+static struct gap*
+gap_new(iid_t iid, int acceptors)
+{
+	struct gap* gap;
+	gap = malloc(sizeof(struct gap));
+	memset(gap, 0, sizeof(struct gap));
+	gap->iid = iid;
+	gap->highest_accepted_value = NULL;
+	gap->majority = paxos_quorum(acceptors);
+	return gap;
+}
+
+static void
+gap_free(struct gap* gap)
+{
+	if (gap->highest_accepted_value != NULL)
+		paxos_value_free(gap->highest_accepted_value);
+	free(gap);
 }
 
 static struct instance*

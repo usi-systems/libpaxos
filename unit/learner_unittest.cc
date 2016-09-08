@@ -220,3 +220,9 @@ TEST_F(LearnerTest, ManyHoles) {
 	ASSERT_EQ(1, from);
 	ASSERT_EQ(100, to);
 }
+
+TEST_F(LearnerTest, LearnerPrepare) {
+	paxos_prepare out;
+	learner_prepare(l, &out, 10);
+	ASSERT_EQ(10, out.iid);
+}

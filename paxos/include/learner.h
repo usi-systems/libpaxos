@@ -43,6 +43,8 @@ void learner_set_instance_id(struct learner* l, iid_t iid);
 void learner_receive_accepted(struct learner* l, paxos_accepted* ack);
 int learner_deliver_next(struct learner* l, paxos_accepted* out);
 int learner_has_holes(struct learner* l, iid_t* from, iid_t* to);
+/* Extend learner to run phase 1 and phase 2 in recovery */
+void learner_prepare(struct learner* l, paxos_prepare* out, iid_t iid);
 
 #ifdef __cplusplus
 }
