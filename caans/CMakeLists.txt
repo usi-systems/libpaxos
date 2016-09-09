@@ -9,7 +9,7 @@ set (SRCS configuration.c application_proxy.c message.c)
 #include_directories(/usr/local/include/leveldb/include)
 #link_directories(/usr/local/lib)
 find_package(LevelDB REQUIRED)
-set (LIBPAXOS_LINKER_LIBS ${LIBPAXOS_LINKER_LIBS} leveldb)
+set (LIBPAXOS_LINKER_LIBS ${LIBPAXOS_LINKER_LIBS} ${LEVELDB_LIBS})
 # end LevelDB
 
 message(${SRCS})
