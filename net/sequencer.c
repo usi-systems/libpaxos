@@ -16,7 +16,7 @@ sequencer_handle_proposal(struct paxos_ctx *ctx, char* buf, int size)
 {
     uint32_t* inst_be = (uint32_t *)(buf + sizeof(uint16_t));
     *inst_be = htonl(ctx->sequencer->current_instance++);
-    hexdump(buf, size);
+    // hexdump(buf, size);
     int n = sendto(ctx->sock, buf, size, 0,
         (struct sockaddr *)&ctx->acceptor_sin, sizeof(ctx->acceptor_sin));
     if (n < 0)
@@ -37,7 +37,7 @@ handle_packet_in(evutil_socket_t fd, short what, void *arg)
             perror("recvfrom");
         uint16_t* msgtype_be = (uint16_t *)buf;
         uint16_t msgtype = ntohs(*msgtype_be);
-        hexdump(buf, n);
+        // hexdump(buf, n);
         switch(msgtype) {
             case PAXOS_ACCEPT:
                 sequencer_handle_proposal(ctx, buf, n);
