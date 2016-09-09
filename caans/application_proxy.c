@@ -29,7 +29,7 @@ void handle_request(evutil_socket_t fd, short event, void *arg) {
     printf("address %s, port %d\n", inet_ntoa(req->cliaddr.sin_addr),
         ntohs(req->cliaddr.sin_port));
     */
-    hexdump((char*)req, req->length);
+    // hexdump((char*)req, req->length);
 
     submit(app->paxos, (char*)req, message_length(req));
     app->current_request_id++;
