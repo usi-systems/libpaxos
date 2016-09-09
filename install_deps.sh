@@ -22,3 +22,10 @@ cmake ..
 make
 make install
 ldconfig
+
+cd /tmp && git clone https://github.com/google/leveldb.git
+cd leveldb
+make
+cp --preserve=links out-shared/libleveldb.* /usr/local/lib
+cp -r include/leveldb /usr/local/include/
+ldconfig

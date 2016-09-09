@@ -6,8 +6,9 @@ include_directories(${LIBEVENT_INCLUDE_DIRS})
 set (SRCS configuration.c application_proxy.c message.c)
 
 # begin levelDB
-include_directories(/usr/local/include/leveldb/include)
-link_directories(/usr/local/lib)
+#include_directories(/usr/local/include/leveldb/include)
+#link_directories(/usr/local/lib)
+find_package(LevelDB REQUIRED)
 set (LIBPAXOS_LINKER_LIBS ${LIBPAXOS_LINKER_LIBS} leveldb)
 # end LevelDB
 
