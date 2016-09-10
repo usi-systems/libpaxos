@@ -395,6 +395,10 @@ instance_update(struct instance* inst, paxos_accepted* accepted, int acceptors)
 		return;
 	}
 	
+	if (accepted->aid > acceptors - 1) {
+		paxos_log_debug("Invalid acceptor id: %d", accepted->aid);
+		return;
+	}
 	paxos_accepted* prev_accepted = inst->acks[accepted->aid];
 	if (prev_accepted != NULL && prev_accepted->ballot >= accepted->ballot) {
 		paxos_log_debug("Dropped paxos_accepted for iid %u."

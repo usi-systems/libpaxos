@@ -21,6 +21,8 @@ void on_perf(evutil_socket_t fd, short event, void *arg) {
 void deliver(unsigned int inst, char* val, size_t size, void* arg) {
     struct application_ctx *app = arg;
     app->message_per_second++;
+    if (size <= 0)
+        return;
     struct client_request *req = (struct client_request*)val;
     // printf("address %s, port %d\n", inet_ntoa(req->cliaddr.sin_addr), ntohs(req->cliaddr.sin_port));
 
