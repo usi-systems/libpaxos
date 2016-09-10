@@ -8,7 +8,7 @@ import time
 
 
 def client(cid, host, path, server_addr, port, output_dir):
-    cmd = "ssh danghu@{0} {1}/client_caans {2} {3}".format(host, path,
+    cmd = "ssh danghu@{0} {1}/client_caans {2} {3} SET".format(host, path,
         server_addr, port)
     print cmd
     with open('%s/client-%d.txt' % (output_dir, cid), 'w') as out:
@@ -42,11 +42,11 @@ def learner(host, path, config, server_id, number_of_server, output_dir, leveldb
                                 shell=False)
     return ssh
 
-def sw_coordinator(host, path, config, cpu_id, output_dir):
-    cmd = "ssh danghu@{0} taskset -c {3} {1}/sw_coordinator {2}".format(host, path,
+def sequencer(host, path, config, cpu_id, output_dir):
+    cmd = "ssh danghu@{0} taskset -c {3} {1}/sequencer {2}".format(host, path,
         config, cpu_id)
     print cmd
-    with open('%s/coordinator-%d.txt' % (output_dir, cpu_id), 'w') as out:
+    with open('%s/sequencer-%d.txt' % (output_dir, cpu_id), 'w') as out:
         ssh = subprocess.Popen(shlex.split(cmd),
                                 stdout=out,
                                 stderr=out,
@@ -64,7 +64,7 @@ def sw_acceptor(host, path, config, acceptor_id, output_dir):
                                 shell=False)
     return ssh
 
-def reset_coordinator(host, path):
+def reset_sequencer(host, path):
     cmd = "ssh danghu@{0} NOPROGRAM=1 {1}/ubuntu.exe -C -i 0".format(host, path)
     print cmd
     ssh = subprocess.Popen(shlex.split(cmd))
@@ -72,7 +72,7 @@ def reset_coordinator(host, path):
 
 
 def run_ps(host, output):
-    command = 'ps -C proxy_caans,client_caans,server_caans,sw_coordinator,sw_acceptor -o %cpu,%mem,comm --sort %cpu | tail -n4'
+    command = 'ps -C proxy_caans,client_caans,server_caans,sequencer,sw_acceptor -o %cpu,%mem,comm --sort %cpu | tail -n4'
     cmd = "ssh {0} {1}".format(host, command)
     with open("%s/%s-cpu.txt" % (output, host), "a+") as out:
         ssh = subprocess.Popen(shlex.split(cmd),
@@ -102,9 +102,9 @@ def kill_learners(*learners):
         ssh = subprocess.Popen(shlex.split(cmd))
         ssh.wait()
 
-def kill_sw_coordinator(*coordinators):
-    for n in coordinators:
-        cmd = "ssh danghu@%s pkill sw_coordinator" % n
+def kill_sequencer(*sequencers):
+    for n in sequencers:
+        cmd = "ssh danghu@%s pkill sequencer" % n
         print cmd
         ssh = subprocess.Popen(shlex.split(cmd))
         ssh.wait()
@@ -157,7 +157,7 @@ if __name__ == "__main__":
         else:
             args.config = "/home/danghu/workspace/libpaxos/bin/multicast.conf"
             ubuntu_exe_path = "/opt/sonic-lite/p4/examples/paxos/nfsume/bin"
-            reset_coordinator("node97", ubuntu_exe_path)
+            reset_sequencer("node97", ubuntu_exe_path)
             print "Reset finished."
 
 
@@ -180,8 +180,8 @@ if __name__ == "__main__":
             # start acceptors
             for i in range(len(acceptors)):
                 sw_acceptor(learners[i], args.path, args.config, i, args.output)
-            # start coordinators
-            sw_coordinator('node97', args.path, args.config, 11, args.output)
+            # start sequencers
+            sequencer('node97', args.path, args.config, 11, args.output)
 
         # start learner
         for i in range(len(learners)):
@@ -207,7 +207,7 @@ if __name__ == "__main__":
         t3.start()
         if args.software:
             t4 = Timer(args.time, kill_sw_acceptor, acceptors)
-            t5 = Timer(args.time, kill_sw_coordinator, ['node97'])
+            t5 = Timer(args.time, kill_sequencer, ['node97'])
             t4.start()
             t5.start()
 
