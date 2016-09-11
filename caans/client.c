@@ -16,6 +16,7 @@ struct client_context {
     struct sockaddr_in server_addr;
     enum Operation op;
     int command_id;
+    int sock;
 };
 
 
@@ -41,7 +42,7 @@ void handle_signal(evutil_socket_t fd, short what, void *arg)
     event_base_loopbreak(ctx->base);
 }
 
-void send_to_addr(int fd, struct client_context *ctx) {
+void send_to_addr(struct client_context *ctx) {
     socklen_t addr_size = sizeof (ctx->server_addr);
     struct command cmd;
     cmd.command_id = ctx->command_id++;
@@ -53,7 +54,7 @@ void send_to_addr(int fd, struct client_context *ctx) {
     cmd.content[31] = '\0';
 
     int msg_size = sizeof cmd;   
-    int n = sendto(fd , &cmd, msg_size, 0, (struct sockaddr *)&ctx->server_addr, addr_size);
+    int n = sendto(ctx->sock , &cmd, msg_size, 0, (struct sockaddr *)&ctx->server_addr, addr_size);
     if (n < 0) {
         perror("sendto");
     }
@@ -61,20 +62,20 @@ void send_to_addr(int fd, struct client_context *ctx) {
 
 void on_read(evutil_socket_t fd, short event, void *arg) {
     struct client_context *ctx = arg;
-    struct sockaddr_in remote;
-    socklen_t addrlen = sizeof(remote);
-    struct command response;
-    int n = recvfrom(fd, &response, sizeof(response), 0, (struct sockaddr*)&remote, &addrlen);
-    if (n < 0)
-        perror("recvfrom");
-    struct timespec end;
-    clock_gettime(CLOCK_REALTIME, &end);
-    struct timespec result;
-    if ( timespec_diff(&result, &end, &response.ts) < 1)
-        printf("%ld.%09ld\n", result.tv_sec, result.tv_nsec);
-
-
-    send_to_addr(fd, ctx);
+    if (event&EV_READ) {
+        struct sockaddr_in remote;
+        socklen_t addrlen = sizeof(remote);
+        struct command response;
+        int n = recvfrom(fd, &response, sizeof(response), 0, (struct sockaddr*)&remote, &addrlen);
+        if (n < 0)
+            perror("recvfrom");
+        struct timespec end;
+        clock_gettime(CLOCK_REALTIME, &end);
+        struct timespec result;
+        if ( timespec_diff(&result, &end, &response.ts) < 1)
+            printf("%ld.%09ld\n", result.tv_sec, result.tv_nsec);
+    }
+    send_to_addr(ctx);
 }
 
 int new_dgram_socket() {
@@ -118,10 +119,12 @@ int main(int argc, char *argv[])
     ctx.base = event_base_new();
     int sock = new_dgram_socket();
     evutil_make_socket_nonblocking(sock);
-
+    ctx.sock = sock;
     struct event *ev_read, *ev_sigint, *ev_sigterm;
-    ev_read = event_new(ctx.base, sock, EV_READ|EV_PERSIST, on_read, &ctx);
-    event_add(ev_read, NULL);
+    ev_read = event_new(ctx.base, sock, EV_TIMEOUT|EV_READ|EV_PERSIST, on_read, &ctx);
+
+    struct timeval one_second = {1,0};
+    event_add(ev_read, &one_second);
 
     ev_sigint = evsignal_new(ctx.base, SIGINT, handle_signal, &ctx);
     evsignal_add(ev_sigint, NULL);
@@ -129,7 +132,7 @@ int main(int argc, char *argv[])
     ev_sigterm = evsignal_new(ctx.base, SIGTERM, handle_signal, &ctx);
     evsignal_add(ev_sigterm, NULL);
 
-    send_to_addr(sock, &ctx);
+    send_to_addr(&ctx);
 
     event_base_dispatch(ctx.base);
 
