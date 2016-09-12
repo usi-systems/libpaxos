@@ -10,6 +10,7 @@
 #include "netpaxos.h"
 #include "message_pack.h"
 
+#define MAX_GAPS 128
 
 static void
 send_paxos_message(struct paxos_ctx* ctx, paxos_message* msg) {
@@ -19,35 +20,20 @@ send_paxos_message(struct paxos_ctx* ctx, paxos_message* msg) {
             (struct sockaddr*)&ctx->acceptor_sin, sizeof(ctx->acceptor_sin));
 }
 
-static void
-send_prepare_message(struct paxos_ctx* ctx, paxos_prepare* prepare) {
-    paxos_message msg = {
-        .type = PAXOS_PREPARE,
-        .u.prepare = *prepare,
-    };
-    send_paxos_message(ctx, &msg);
-}
-
-static void
-send_accept_message(struct paxos_ctx* ctx, paxos_accept* accept) {
-    paxos_message msg = {
-        .type = PAXOS_ACCEPT,
-        .u.accept = *accept,
-    };
-    send_paxos_message(ctx, &msg);
-}
-
 void check_holes(evutil_socket_t fd, short event, void *arg) {
     struct paxos_ctx *ctx = arg;
     unsigned from_inst;
     unsigned to_inst;
     if (learner_has_holes(ctx->learner_state, &from_inst, &to_inst)) {
         paxos_log_debug("Learner has holes from %d to %d\n", from_inst, to_inst);
-        int iid;
-        for (iid = from_inst; iid < to_inst; iid++) {
-            paxos_prepare prepare;
-            learner_prepare(ctx->learner_state, &prepare, iid);
-            send_prepare_message(ctx, &prepare);
+        if ((to_inst - from_inst) > MAX_GAPS) {
+            int iid;
+            for (iid = from_inst; iid < from_inst + MAX_GAPS; iid++) {
+                paxos_message out;
+                out.type = PAXOS_PREPARE;
+                learner_prepare(ctx->learner_state, &out.u.prepare, iid);
+                send_paxos_message(ctx, &out);
+            }
         }
     }
     event_add(ctx->hole_watcher, &ctx->tv);
@@ -68,10 +54,20 @@ void on_paxos_accepted(paxos_message *msg, struct paxos_ctx *ctx) {
 
 void on_paxos_promise(paxos_message *msg, struct paxos_ctx *ctx) {
     int ret;
-    paxos_accept accept;
-    ret = learner_receive_promise(ctx->learner_state, &msg->u.promise, &accept);
+    paxos_message out;
+    out.type = PAXOS_ACCEPT;
+    ret = learner_receive_promise(ctx->learner_state, &msg->u.promise, &out.u.accept);
     if (ret)
-        send_accept_message(ctx, &accept);
+        send_paxos_message(ctx, &out);
+}
+
+void on_paxos_preempted(paxos_message *msg, struct paxos_ctx *ctx) {
+    int ret;
+    paxos_message out;
+    out.type = PAXOS_PREPARE;
+    ret = learner_receive_preempted(ctx->learner_state, &msg->u.preempted, &out.u.prepare);
+    if (ret)
+        send_paxos_message(ctx, &out);
 }
 
 void learner_read_cb(evutil_socket_t fd, short what, void *arg) {
@@ -97,6 +93,8 @@ void learner_read_cb(evutil_socket_t fd, short what, void *arg) {
             case PAXOS_PROMISE:
                 on_paxos_promise(&msg, ctx);
                 break;
+            case PAXOS_PREEMPTED:
+                on_paxos_preempted(&msg, ctx);
             default:
                 paxos_log_debug("No handler for message type %d\n", msg.type);
         }

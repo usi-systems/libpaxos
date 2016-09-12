@@ -147,6 +147,18 @@ learner_receive_accepted(struct learner* l, paxos_accepted* ack)
 		l->highest_iid_closed = inst->iid;
 }
 
+int learner_receive_preempted(struct learner* l, paxos_preempted* ack,
+    paxos_prepare* out)
+{
+	struct gap* gap = learner_get_gap(l, ack->iid);
+	if (gap == NULL)
+		return 0;
+	gap->ballot = ack->ballot;
+	gap_reset(gap);
+	*out = (paxos_prepare) {gap->iid, gap->ballot};
+	return 1;
+}
+
 int
 learner_deliver_next(struct learner* l, paxos_accepted* out)
 {

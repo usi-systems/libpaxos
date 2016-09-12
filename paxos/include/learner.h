@@ -47,6 +47,8 @@ int learner_has_holes(struct learner* l, iid_t* from, iid_t* to);
 void learner_prepare(struct learner* l, paxos_prepare* out, iid_t iid);
 int learner_receive_promise(struct learner* l, paxos_promise* promise,
     paxos_accept* accept);
+int learner_receive_preempted(struct learner* l, paxos_preempted* ack,
+    paxos_prepare* out);
 
 #ifdef __cplusplus
 }
