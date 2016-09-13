@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include "learner.h"
 #include "paxos.h"
 #include <stdio.h>
@@ -12,6 +13,16 @@
 #include "message_pack.h"
 
 #define MAX_GAPS 32
+
+#define VLEN 32
+#define TIMEOUT 1
+
+static struct mmsghdr msgs[VLEN];
+static struct iovec iovecs[VLEN];
+static char bufs[VLEN][BUFSIZE+1];
+static struct timespec timeout;
+
+
 
 static void
 send_paxos_message(struct paxos_ctx* ctx, paxos_message* msg) {
@@ -79,33 +90,36 @@ void on_paxos_preempted(paxos_message *msg, struct paxos_ctx *ctx) {
 void learner_read_cb(evutil_socket_t fd, short what, void *arg) {
     struct paxos_ctx *ctx = arg;
     if (what&EV_READ) {
-        char buffer[BUFSIZE];
-        memset(buffer, 0, BUFSIZE);
-        struct sockaddr_in remote;
-        socklen_t readlen = sizeof(remote);
-
-        int n = recvfrom(fd, buffer, BUFSIZE, 0, (struct sockaddr *)&remote,
-            &readlen);
-        if (n < 0)
-            perror("recvfrom");
-
-        struct paxos_message msg;
-        unpack_paxos_message(&msg, buffer);
-
-        switch(msg.type) {
-            case PAXOS_ACCEPTED:
-                on_paxos_accepted(&msg, ctx);
-                break;
-            case PAXOS_PROMISE:
-                on_paxos_promise(&msg, ctx);
-                break;
-            case PAXOS_PREEMPTED:
-                on_paxos_preempted(&msg, ctx);
-                break;
-            default:
-                paxos_log_debug("No handler for message type %d\n", msg.type);
+        int retval;
+        int i;
+        retval = recvmmsg(fd, msgs, VLEN, 0, &timeout);
+        if (retval == -1) {
+            perror("recvmmsg()");
+            exit(EXIT_FAILURE);
         }
-        paxos_message_destroy(&msg);
+
+        for (i = 0; i < retval; i++) {
+            bufs[i][msgs[i].msg_len] = 0;
+
+            struct paxos_message msg;
+            unpack_paxos_message(&msg, bufs[i]);
+
+            switch(msg.type) {
+                case PAXOS_ACCEPTED:
+                    on_paxos_accepted(&msg, ctx);
+                    break;
+                case PAXOS_PROMISE:
+                    on_paxos_promise(&msg, ctx);
+                    break;
+                case PAXOS_PREEMPTED:
+                    on_paxos_preempted(&msg, ctx);
+                    break;
+                default:
+                    paxos_log_debug("No handler for message type %d\n", msg.type);
+            }
+            paxos_message_destroy(&msg);
+        }
+
     }
 }
 
@@ -120,12 +134,23 @@ struct paxos_ctx *make_learner(struct netpaxos_configuration *conf,
     evutil_socket_t sock = create_server_socket(conf->learner_port);
     evutil_make_socket_nonblocking(sock);
     ctx->sock = sock;
-
+    setRcvBuf(ctx->sock);
     if (net_ip__is_multicast_ip(conf->learner_address)) {
         subcribe_to_multicast_group(conf->learner_address, sock);
     }
 
     ip_to_sockaddr(conf->acceptor_address, conf->acceptor_port, &ctx->acceptor_sin);
+
+    int i;
+    memset(msgs, 0, sizeof(msgs));
+    for (i = 0; i < VLEN; i++) {
+        iovecs[i].iov_base         = bufs[i];
+        iovecs[i].iov_len          = BUFSIZE;
+        msgs[i].msg_hdr.msg_iov    = &iovecs[i];
+        msgs[i].msg_hdr.msg_iovlen = 1;
+    }
+    timeout.tv_sec = TIMEOUT;
+    timeout.tv_nsec = 0;
 
     time_t t;
     srand((unsigned) time(&t));

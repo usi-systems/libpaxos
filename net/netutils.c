@@ -87,3 +87,13 @@ void
 print_addr(struct sockaddr_in* s) {
     printf("address %s, port %d\n", inet_ntoa(s->sin_addr), ntohs(s->sin_port));
 }
+
+void setRcvBuf(int sockfd) {
+    int rcvbuf = 16777216;
+    socklen_t size = sizeof(sockfd);
+    if ( setsockopt(sockfd, SOL_SOCKET, SO_RCVBUF, (void *)&rcvbuf, size) == -1 )
+    {
+        perror("set SO_RCVBUF");
+        exit(EXIT_FAILURE);
+    }
+}
