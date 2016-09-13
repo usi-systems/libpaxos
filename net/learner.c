@@ -6,11 +6,12 @@
 #include <event2/event.h>
 #include <sys/socket.h>
 #include <signal.h>
+#include <time.h>
 #include "netutils.h"
 #include "netpaxos.h"
 #include "message_pack.h"
 
-#define MAX_GAPS 128
+#define MAX_GAPS 32
 
 static void
 send_paxos_message(struct paxos_ctx* ctx, paxos_message* msg) {
@@ -18,24 +19,29 @@ send_paxos_message(struct paxos_ctx* ctx, paxos_message* msg) {
     pack_paxos_message(buffer, msg);
     sendto(ctx->sock, buffer, sizeof(*msg), 0,
             (struct sockaddr*)&ctx->acceptor_sin, sizeof(ctx->acceptor_sin));
+    // print_addr(&ctx->acceptor_sin);
 }
 
-void check_holes(evutil_socket_t fd, short event, void *arg) {
-    struct paxos_ctx *ctx = arg;
+void learner_check_holes(struct paxos_ctx *ctx) {
     unsigned from_inst;
     unsigned to_inst;
     if (learner_has_holes(ctx->learner_state, &from_inst, &to_inst)) {
         paxos_log_debug("Learner has holes from %d to %d\n", from_inst, to_inst);
-        if ((to_inst - from_inst) > MAX_GAPS) {
-            int iid;
-            for (iid = from_inst; iid < from_inst + MAX_GAPS; iid++) {
-                paxos_message out;
-                out.type = PAXOS_PREPARE;
-                learner_prepare(ctx->learner_state, &out.u.prepare, iid);
-                send_paxos_message(ctx, &out);
-            }
+        if ((to_inst - from_inst) > MAX_GAPS)
+            to_inst = from_inst + MAX_GAPS;
+        int iid;
+        for (iid = from_inst; iid < to_inst; iid++) {
+            paxos_message out;
+            out.type = PAXOS_PREPARE;
+            learner_prepare(ctx->learner_state, &out.u.prepare, iid);
+            send_paxos_message(ctx, &out);
         }
     }
+}
+
+void check_holes(evutil_socket_t fd, short event, void *arg) {
+    struct paxos_ctx *ctx = arg;
+    learner_check_holes(ctx);
     event_add(ctx->hole_watcher, &ctx->tv);
 }
 
@@ -95,6 +101,7 @@ void learner_read_cb(evutil_socket_t fd, short what, void *arg) {
                 break;
             case PAXOS_PREEMPTED:
                 on_paxos_preempted(&msg, ctx);
+                break;
             default:
                 paxos_log_debug("No handler for message type %d\n", msg.type);
         }
@@ -120,6 +127,9 @@ struct paxos_ctx *make_learner(struct netpaxos_configuration *conf,
 
     ip_to_sockaddr(conf->acceptor_address, conf->acceptor_port, &ctx->acceptor_sin);
 
+    time_t t;
+    srand((unsigned) time(&t));
+
     ctx->ev_read = event_new(ctx->base, sock, EV_READ|EV_PERSIST,
         learner_read_cb, ctx);
     event_add(ctx->ev_read, NULL);
@@ -135,8 +145,8 @@ struct paxos_ctx *make_learner(struct netpaxos_configuration *conf,
     ctx->deliver = f;
     ctx->deliver_arg = arg;
 
-    ctx->tv.tv_sec = 0;
-    ctx->tv.tv_usec = 100000;
+    ctx->tv.tv_sec = 2;
+    ctx->tv.tv_usec = rand() % 999983;
 
     ctx->hole_watcher = evtimer_new(ctx->base, check_holes, ctx);
     event_add(ctx->hole_watcher, &ctx->tv);

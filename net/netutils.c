@@ -82,3 +82,8 @@ hexdump(char *buf, int size)
     }
     printf("\n");
 }
+
+void
+print_addr(struct sockaddr_in* s) {
+    printf("address %s, port %d\n", inet_ntoa(s->sin_addr), ntohs(s->sin_port));
+}
