@@ -14,7 +14,7 @@
 
 #define MAX_GAPS 32
 
-#define VLEN 32
+#define VLEN 1024
 #define TIMEOUT 1
 
 static struct mmsghdr msgs[VLEN];
@@ -22,13 +22,16 @@ static struct iovec iovecs[VLEN];
 static char bufs[VLEN][BUFSIZE+1];
 static struct timespec timeout;
 
+static uint32_t max_received;
 
+static struct mmsghdr tx_buffer[VLEN];
+static struct iovec tx_iovecs[VLEN];
 
 static void
-send_paxos_message(struct paxos_ctx* ctx, paxos_message* msg) {
+send_paxos_message(struct paxos_ctx* ctx, paxos_message* msg, int msg_size) {
     char buffer[BUFSIZE];
     pack_paxos_message(buffer, msg);
-    sendto(ctx->sock, buffer, sizeof(*msg), 0,
+    sendto(ctx->sock, buffer, msg_size, 0,
             (struct sockaddr*)&ctx->acceptor_sin, sizeof(ctx->acceptor_sin));
     // print_addr(&ctx->acceptor_sin);
 }
@@ -45,8 +48,19 @@ void learner_check_holes(struct paxos_ctx *ctx) {
             paxos_message out;
             out.type = PAXOS_PREPARE;
             learner_prepare(ctx->learner_state, &out.u.prepare, iid);
-            send_paxos_message(ctx, &out);
+            // send_paxos_message(ctx, &out, sizeof(paxos_message));
+            int idx = iid - from_inst;
+            tx_iovecs[idx].iov_base = &out;
+            tx_iovecs[idx].iov_len = sizeof(paxos_message);
+            tx_buffer[idx].msg_hdr.msg_name = &ctx->acceptor_sin;
+            tx_buffer[idx].msg_hdr.msg_namelen = sizeof(ctx->acceptor_sin);
+            tx_buffer[idx].msg_hdr.msg_iov = &tx_iovecs[idx];
+            tx_buffer[idx].msg_hdr.msg_iovlen = 1;
         }
+        unsigned vlen = to_inst - from_inst;
+        int retval = sendmmsg(ctx->sock, tx_buffer, vlen, 0);
+        if (retval == -1)
+            perror("sendmmsg()");
     }
 }
 
@@ -74,8 +88,10 @@ void on_paxos_promise(paxos_message *msg, struct paxos_ctx *ctx) {
     paxos_message out;
     out.type = PAXOS_ACCEPT;
     ret = learner_receive_promise(ctx->learner_state, &msg->u.promise, &out.u.accept);
-    if (ret)
-        send_paxos_message(ctx, &out);
+    if (ret) {
+        size_t datagram_len = sizeof(paxos_message) + msg->u.promise.value.paxos_value_len;
+        send_paxos_message(ctx, &out, datagram_len);
+    }
 }
 
 void on_paxos_preempted(paxos_message *msg, struct paxos_ctx *ctx) {
@@ -83,8 +99,10 @@ void on_paxos_preempted(paxos_message *msg, struct paxos_ctx *ctx) {
     paxos_message out;
     out.type = PAXOS_PREPARE;
     ret = learner_receive_preempted(ctx->learner_state, &msg->u.preempted, &out.u.prepare);
-    if (ret)
-        send_paxos_message(ctx, &out);
+    if (ret) {
+        size_t datagram_len = sizeof(paxos_message);
+        send_paxos_message(ctx, &out, datagram_len);
+    }
 }
 
 void learner_read_cb(evutil_socket_t fd, short what, void *arg) {
@@ -100,7 +118,10 @@ void learner_read_cb(evutil_socket_t fd, short what, void *arg) {
 
         for (i = 0; i < retval; i++) {
             bufs[i][msgs[i].msg_len] = 0;
-
+            if (max_received < retval) {
+                max_received = retval;
+                // printf("max_received %d\n", max_received);
+            }
             struct paxos_message msg;
             unpack_paxos_message(&msg, bufs[i]);
 
@@ -152,6 +173,8 @@ struct paxos_ctx *make_learner(struct netpaxos_configuration *conf,
     timeout.tv_sec = TIMEOUT;
     timeout.tv_nsec = 0;
 
+    max_received = 0;
+
     time_t t;
     srand((unsigned) time(&t));
 
@@ -170,8 +193,9 @@ struct paxos_ctx *make_learner(struct netpaxos_configuration *conf,
     ctx->deliver = f;
     ctx->deliver_arg = arg;
 
-    ctx->tv.tv_sec = 2;
-    ctx->tv.tv_usec = rand() % 999983;
+    ctx->tv.tv_sec = 1;
+    /* check holes every 1s + ~100 ms */
+    ctx->tv.tv_usec = 100000 * (rand() % 7);
 
     ctx->hole_watcher = evtimer_new(ctx->base, check_holes, ctx);
     event_add(ctx->hole_watcher, &ctx->tv);
