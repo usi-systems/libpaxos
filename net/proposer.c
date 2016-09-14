@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,6 +9,27 @@
 #include "netpaxos.h"
 #include "message_pack.h"
 #include "paxos.h"
+
+#define VLEN 1024
+#define TIMEOUT 1
+
+static struct mmsghdr tx_buffer[VLEN];
+static struct iovec tx_iovecs[VLEN];
+
+static struct mmsghdr msgs[VLEN];
+static struct iovec iovecs[VLEN];
+static char bufs[VLEN][BUFSIZE+1];
+static struct timespec timeout;
+
+static int tx_buffer_len;
+
+static void flush_buffer(evutil_socket_t fd, short what, void *arg) {
+    int retval = sendmmsg(fd, tx_buffer, tx_buffer_len, 0);
+    if (retval == -1)
+        perror("sendmmsg()");
+    tx_buffer_len = 0;
+    printf("send %d packets\n", retval);
+}
 
 void submit(struct paxos_ctx *ctx, char *value, int size) {
     struct paxos_message msg = {
@@ -20,40 +42,28 @@ void submit(struct paxos_ctx *ctx, char *value, int size) {
         .u.accept.value.paxos_value_val = value
     };
 
-    // int i;
-    // char *raw = (char *)msg.u.accept.value.paxos_value_val;
-    // printf("MSG\n");
-    // for (i = 0; i < size; i++) {
-    //     if (i % 16 == 0)
-    //         printf("\n");
-    //     printf("%02x ", (unsigned char)raw[i]);
-    // }
-    // printf("\n");
-
     char buffer[BUFSIZE];
-    memset(buffer, 0, BUFSIZE);
     pack_paxos_message(buffer, &msg);
     size_t msg_len = sizeof(struct paxos_message) + size;
 
-    int n = sendto( ctx->sock, buffer, msg_len, 0,
-                    (struct sockaddr *)&ctx->coordinator_sin,
-                    sizeof(ctx->coordinator_sin) );
-    if (n < 0) {
-        perror("submit error");
-    }
+    tx_iovecs[tx_buffer_len].iov_base = buffer;
+    tx_iovecs[tx_buffer_len].iov_len = msg_len;
+    tx_buffer[tx_buffer_len].msg_hdr.msg_name = &ctx->coordinator_sin;
+    tx_buffer[tx_buffer_len].msg_hdr.msg_namelen = sizeof(ctx->coordinator_sin);
+    tx_buffer[tx_buffer_len].msg_hdr.msg_iov = &tx_iovecs[tx_buffer_len];
+    tx_buffer[tx_buffer_len].msg_hdr.msg_iovlen = 1;
+    tx_buffer_len++;
+
+    flush_buffer(ctx->sock, EV_TIMEOUT, NULL);
 }
 
 void proposer_read_cb(evutil_socket_t fd, short what, void *arg) {
     if (what&EV_READ) {
-        char buffer[BUFSIZE];
-        memset(buffer, 0, BUFSIZE);
-        struct sockaddr_in remote;
-        socklen_t readlen = sizeof(remote);
-        int n = recvfrom(fd, buffer, BUFSIZE, 0, (struct sockaddr *)&remote,
-            &readlen);
-        if (n < 0){
-            perror("recvfrom");
-            return;
+        int retval;
+        retval = recvmmsg(fd, msgs, VLEN, 0, &timeout);
+        if (retval == -1) {
+            perror("recvmmsg()");
+            exit(EXIT_FAILURE);
         }
     }
 }
@@ -61,6 +71,18 @@ void proposer_read_cb(evutil_socket_t fd, short what, void *arg) {
 struct paxos_ctx *make_proposer(struct netpaxos_configuration *conf,
     int proposer_id, void *arg)
 {
+    int i;
+    memset(msgs, 0, sizeof(msgs));
+    for (i = 0; i < VLEN; i++) {
+        iovecs[i].iov_base         = bufs[i];
+        iovecs[i].iov_len          = BUFSIZE;
+        msgs[i].msg_hdr.msg_iov    = &iovecs[i];
+        msgs[i].msg_hdr.msg_iovlen = 1;
+    }
+    timeout.tv_sec = TIMEOUT;
+    timeout.tv_nsec = 0;
+    tx_buffer_len = 0;
+
     struct paxos_ctx *ctx = malloc( sizeof(struct paxos_ctx));
     init_paxos_ctx(ctx);
     ctx->base = event_base_new();
@@ -78,12 +100,14 @@ struct paxos_ctx *make_proposer(struct netpaxos_configuration *conf,
                     &ctx->coordinator_sin );
 
     ctx->sock = sock;
-
-    ctx->ev_read = event_new(ctx->base, sock, EV_TIMEOUT|EV_READ|EV_PERSIST,
-        proposer_read_cb, ctx);
-    struct timeval one_second = {5,0};
-    event_add(ctx->ev_read, &one_second);
-
+    setRcvBuf(ctx->sock);
+    /* flush buffer every 100 us */
+    /*
+    struct timeval flush_timer = {0, 10000};
+    ctx->hole_watcher = event_new(ctx->base, sock, EV_TIMEOUT|EV_PERSIST,
+        flush_buffer, NULL);
+    event_add(ctx->hole_watcher, &flush_timer);
+    */
     ctx->ev_sigint = evsignal_new(ctx->base, SIGINT, handle_signal, ctx);
     evsignal_add(ctx->ev_sigint, NULL);
 
