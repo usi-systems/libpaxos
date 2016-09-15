@@ -121,10 +121,9 @@ int main(int argc, char *argv[])
     evutil_make_socket_nonblocking(sock);
     ctx.sock = sock;
     struct event *ev_read, *ev_sigint, *ev_sigterm;
-    ev_read = event_new(ctx.base, sock, EV_TIMEOUT|EV_READ|EV_PERSIST, on_read, &ctx);
+    ev_read = event_new(ctx.base, sock, EV_READ|EV_PERSIST, on_read, &ctx);
 
-    struct timeval one_second = {1,0};
-    event_add(ev_read, &one_second);
+    event_add(ev_read, NULL);
 
     ev_sigint = evsignal_new(ctx.base, SIGINT, handle_signal, &ctx);
     evsignal_add(ev_sigint, NULL);

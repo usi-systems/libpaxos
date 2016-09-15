@@ -28,7 +28,6 @@ static void flush_buffer(evutil_socket_t fd, short what, void *arg) {
     if (retval == -1)
         perror("sendmmsg()");
     tx_buffer_len = 0;
-    printf("send %d packets\n", retval);
 }
 
 void submit(struct paxos_ctx *ctx, char *value, int size) {

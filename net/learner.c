@@ -12,7 +12,7 @@
 #include "netpaxos.h"
 #include "message_pack.h"
 
-#define MAX_GAPS 32
+#define MAX_GAPS 128
 
 #define VLEN 1024
 #define TIMEOUT 1
