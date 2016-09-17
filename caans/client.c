@@ -15,7 +15,7 @@ struct client_context {
     struct event_base *base;
     struct sockaddr_in server_addr;
     enum Operation op;
-    int command_id;
+    uint16_t command_id;
     int sock;
 };
 

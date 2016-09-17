@@ -12,21 +12,21 @@ enum Operation {
 
 struct command {
     struct timespec ts;
-    int command_id;
+    uint16_t command_id;
     enum Operation op;
     char content[32];
 };
 
 
 struct __attribute__((__packed__)) client_request {
-    unsigned length;
+    uint16_t length;
     struct sockaddr_in cliaddr;
     char content[1];
 };
 
-unsigned content_length(struct client_request *request);
-unsigned message_length(struct client_request *request);
-struct client_request* create_client_request(const char *data, unsigned data_size);
+uint16_t content_length(struct client_request *request);
+uint16_t message_length(struct client_request *request);
+struct client_request* create_client_request(const char *data, uint16_t data_size);
 void print_message(struct client_request *request);
 void hexdump_message(struct client_request *request);
 #endif

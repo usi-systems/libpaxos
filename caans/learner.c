@@ -63,8 +63,8 @@ void deliver(unsigned int inst, char* val, size_t size, void* arg) {
             }
         }
     }
-
-    char *retval = (val + sizeof(unsigned) + sizeof(struct sockaddr_in));
+    /* Skip command ID and client address */
+    char *retval = (val + sizeof(uint16_t) + sizeof(struct sockaddr_in));
 
     if (cmd->command_id % app->node_count == app->node_id) {
         int n = sendto(app->paxos->sock, retval, content_length(req), 0,
