@@ -1,33 +1,29 @@
 #!/usr/bin/env bash
 
 VG=""
-BUILD="build"
-CONFIG="paxos.conf"
+BIN="build/caans"
+CONFIG="~/paxos_dpdk.conf"
 OPT="--verbose"
 
 tmux_test ()  {
 	tmux new-session -d -s paxos
-	tmux new-window -t paxos
-
-	for (( i = 0; i < 3; i++ )); do
-		tmux split
-		tmux select-layout even-vertical
-	done
-
-	for (( i = 0; i < 3; i++ )); do
-		tmux send-keys -t $i "$VG ./$BUILD/sample/replica $i $CONFIG $OPT" C-m
-	done
-
-	tmux send-keys -t 3 "./$BUILD/sample/client $CONFIG" C-m
-	tmux selectp -t 3
-
+	tmux split-window -v -t paxos
+	tmux split-window -v -t paxos
+	tmux split-window -v -t paxos
+	# tmux split-window -v -t paxos
+	tmux select-layout -t paxos tiled
+	tmux send-keys -t paxos:0.0 "./$BIN/server_caans $CONFIG 0 1" C-m
+	tmux send-keys -t paxos:0.1 "./$BIN/sw_acceptor $CONFIG 0" C-m
+	sleep 2
+	# tmux send-keys -t paxos:0.4 "./$BIN/sequencer $CONFIG" C-m
+	tmux send-keys -t paxos:0.2 "./$BIN/proxy_caans $CONFIG 0 6789" C-m
+	tmux send-keys -t paxos:0.3 "./$BIN/client_caans 192.168.1.110 6789" C-m
 	tmux attach-session -t paxos
 	tmux kill-session -t paxos
 }
 
 usage () {
-	echo "$0 [--help] [--build-dir dir] [--config-file] [--valgrind]
-	[--silence-replica]"
+	echo "$0 [--help] [--build-dir dir] [--config-file]"
 	exit 1
 }
 
@@ -44,12 +40,6 @@ while [[ $# > 0 ]]; do
 		;;
 		-h|--help)
 		usage
-		;;
-		-s|--silence-replica)
-		OPT=""
-		;;
-		-v|--valgrind)
-		VG="valgrind "
 		;;
 		*)
 		usage
