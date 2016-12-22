@@ -8,8 +8,11 @@
 #include <time.h>
 #include <string.h>
 #include "message.h"
-
+#include <math.h>
 #define BILLION 1000000000
+#define BILLION_FLOAT 1000000000.0
+#define ON 1
+#define OFF 0
 
 struct client_context {
     struct event_base *base;
@@ -19,6 +22,10 @@ struct client_context {
     int sock;
 };
 
+static int at_second = 0;
+static int num_messages = 0;
+static int flag = 0;
+static struct timespec time_sum = {0, 0};
 
 int
 timespec_diff(struct timespec *result, struct timespec *end,struct timespec *start)
@@ -34,6 +41,22 @@ timespec_diff(struct timespec *result, struct timespec *end,struct timespec *sta
   return end->tv_sec < start->tv_sec;
 }
 
+struct timespec timespec_add(struct timespec * time1, struct timespec *time2)
+{
+    struct timespec sum;
+    sum.tv_sec = time1->tv_sec + time2->tv_sec;
+    sum.tv_nsec = time1->tv_nsec + time2->tv_nsec;
+    if(sum.tv_nsec >= BILLION)
+    {
+        sum.tv_sec++;
+        sum.tv_nsec = sum.tv_nsec - BILLION;
+    }
+    return sum;
+}
+double timespec_double(struct timespec time)
+{
+    return ((double) time.tv_sec + (time.tv_nsec / BILLION_FLOAT));
+}
 
 void handle_signal(evutil_socket_t fd, short what, void *arg)
 {
@@ -52,8 +75,9 @@ void send_to_addr(struct client_context *ctx) {
     cmd.content[15] = '\0';
     memset(cmd.content+16, 'v', 15);
     cmd.content[31] = '\0';
-
-    int msg_size = sizeof cmd;   
+    //printf("Start: %ld.%09ld\n", cmd.ts.tv_sec, cmd.ts.tv_nsec);
+    int msg_size = sizeof (cmd);
+   // printf ("message size from client: %d\n", msg_size);
     int n = sendto(ctx->sock , &cmd, msg_size, 0, (struct sockaddr *)&ctx->server_addr, addr_size);
     if (n < 0) {
         perror("sendto");
@@ -72,12 +96,25 @@ void on_read(evutil_socket_t fd, short event, void *arg) {
         struct timespec end;
         clock_gettime(CLOCK_REALTIME, &end);
         struct timespec result;
-        if ( timespec_diff(&result, &end, &response.ts) < 1)
-            printf("%ld.%09ld\n", result.tv_sec, result.tv_nsec);
+        if (timespec_diff(&result, &end, &response.ts) < 1 && flag == ON){
+                printf("%ld.%09ld\n", result.tv_sec, result.tv_nsec);
+                time_sum = timespec_add(&time_sum, &result);
+                num_messages++;
+        }
+        else if (timespec_diff(&result, &end, &response.ts) < 1 && flag == OFF){
+            time_sum = timespec_add(&time_sum, &result);
+            num_messages++;
+        }
     }
     send_to_addr(ctx);
 }
-
+ void on_perf (evutil_socket_t fd, short event, void *arg) {
+    double sum = 0.0, agv_latency = 0;
+    sum = timespec_double(time_sum);
+    agv_latency = sum / num_messages;
+    printf("%4d %6d %f\n", at_second++, num_messages, agv_latency);
+    num_messages= 0;
+ }
 int new_dgram_socket() {
     int s = socket(AF_INET, SOCK_DGRAM, 0);
     if (s < 0) {
@@ -91,8 +128,8 @@ int new_dgram_socket() {
 int main(int argc, char *argv[])
 {
     if (argc < 3) {
-        printf("Syntax: %s [hostname] [port] [GET/SET]\n"
-               "Example: %s 192.168.1.110 6789 GET\n",argv[0], argv[0]);
+        printf("Syntax: %s [hostname] [port] [GET/SET] [ON/OFF]\n"
+               "Example: %s 192.168.1.110 6789 GET OFF\n",argv[0], argv[0]);
         return 1;
     }
 
@@ -109,7 +146,12 @@ int main(int argc, char *argv[])
         if (strcmp(argv[3], "SET") == 0) {
             ctx.op = SET;
         }
+        if (strcmp(argv[4], "ON") == 0){
+            flag = ON;
+        }
     }
+    flag = OFF;
+
     ctx.command_id = 0;
     memset(&ctx.server_addr, 0, sizeof ctx.server_addr);
     ctx.server_addr.sin_family = AF_INET;
@@ -120,10 +162,13 @@ int main(int argc, char *argv[])
     int sock = new_dgram_socket();
     evutil_make_socket_nonblocking(sock);
     ctx.sock = sock;
-    struct event *ev_read, *ev_sigint, *ev_sigterm;
+    struct event *ev_read, *ev_sigint, *ev_sigterm, *ev_latency;
     ev_read = event_new(ctx.base, sock, EV_READ|EV_PERSIST, on_read, &ctx);
-
     event_add(ev_read, NULL);
+
+    ev_latency = event_new(ctx.base, -1, EV_TIMEOUT|EV_PERSIST, on_perf, &ctx);
+    struct timeval one_second = {1, 0};
+    event_add(ev_latency, &one_second);
 
     ev_sigint = evsignal_new(ctx.base, SIGINT, handle_signal, &ctx);
     evsignal_add(ev_sigint, NULL);
