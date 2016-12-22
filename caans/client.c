@@ -58,6 +58,24 @@ double timespec_double(struct timespec time)
     return ((double) time.tv_sec + (time.tv_nsec / BILLION_FLOAT));
 }
 
+/*struct timespec float_to_timespec(double fSeconds)
+{
+    struct timespec result;
+    if (fSeconds < 0)
+    {
+        result.tv_sec = 0;
+        result.tv_nsec = 0;
+    }
+    else if (fSeconds > (double) LONG_MAX){
+        result.tv_sec = LONG_MAX;
+        result.tv_nsec = 999999999L ;
+    }
+    else{
+        result.tv_sec = (time_t) fSeconds;
+        result.tv_nsec = (long) ((fSeconds - (double)result.tv_sec) * 1000000000.0);
+    }
+    return result;
+}*/
 void handle_signal(evutil_socket_t fd, short what, void *arg)
 {
     printf("Caught signal\n");
@@ -96,19 +114,25 @@ void on_read(evutil_socket_t fd, short event, void *arg) {
         struct timespec end;
         clock_gettime(CLOCK_REALTIME, &end);
         struct timespec result;
-        if (timespec_diff(&result, &end, &response.ts) < 1 && flag == ON){
+        if(flag == ON)
+        {
+            if (timespec_diff(&result, &end, &response.ts) < 1)
                 printf("%ld.%09ld\n", result.tv_sec, result.tv_nsec);
+
+        }
+        else if (flag == OFF)
+        {
+            if (timespec_diff(&result, &end, &response.ts) < 1)
+            {
                 time_sum = timespec_add(&time_sum, &result);
                 num_messages++;
-        }
-        else if (timespec_diff(&result, &end, &response.ts) < 1 && flag == OFF){
-            time_sum = timespec_add(&time_sum, &result);
-            num_messages++;
+            }
+
         }
     }
     send_to_addr(ctx);
 }
- void on_perf (evutil_socket_t fd, short event, void *arg) {
+void on_perf (evutil_socket_t fd, short event, void *arg) {
     if (flag == OFF)
     {
         double sum = 0.0, agv_latency = 0;
@@ -117,7 +141,8 @@ void on_read(evutil_socket_t fd, short event, void *arg) {
         printf("%4d %6d %f\n", at_second++, num_messages, agv_latency);
         num_messages= 0;
     }
- }
+    
+}
 int new_dgram_socket() {
     int s = socket(AF_INET, SOCK_DGRAM, 0);
     if (s < 0) {
@@ -145,6 +170,7 @@ int main(int argc, char *argv[])
 
     struct client_context ctx;
     ctx.op = GET;
+    flag = OFF;
     if (argc > 3) {
         if (strcmp(argv[3], "SET") == 0) {
             ctx.op = SET;
@@ -153,7 +179,6 @@ int main(int argc, char *argv[])
             flag = ON;
         }
     }
-    flag = OFF;
 
     ctx.command_id = 0;
     memset(&ctx.server_addr, 0, sizeof ctx.server_addr);
