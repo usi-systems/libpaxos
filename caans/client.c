@@ -109,11 +109,14 @@ void on_read(evutil_socket_t fd, short event, void *arg) {
     send_to_addr(ctx);
 }
  void on_perf (evutil_socket_t fd, short event, void *arg) {
-    double sum = 0.0, agv_latency = 0;
-    sum = timespec_double(time_sum);
-    agv_latency = sum / num_messages;
-    printf("%4d %6d %f\n", at_second++, num_messages, agv_latency);
-    num_messages= 0;
+    if (flag == OFF)
+    {
+        double sum = 0.0, agv_latency = 0;
+        sum = timespec_double(time_sum);
+        agv_latency = sum / num_messages;
+        printf("%4d %6d %f\n", at_second++, num_messages, agv_latency);
+        num_messages= 0;
+    }
  }
 int new_dgram_socket() {
     int s = socket(AF_INET, SOCK_DGRAM, 0);
