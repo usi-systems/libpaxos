@@ -10,7 +10,6 @@
 #include "message.h"
 #include <math.h>
 #define BILLION 1000000000
-#define BILLION_FLOAT 1000000000.0
 #define ON 1
 #define OFF 0
 
@@ -55,27 +54,8 @@ struct timespec timespec_add(struct timespec * time1, struct timespec *time2)
 }
 double timespec_double(struct timespec time)
 {
-    return ((double) time.tv_sec + (time.tv_nsec / BILLION_FLOAT));
+    return ((double) time.tv_sec + ((double)time.tv_nsec / BILLION));
 }
-
-/*struct timespec float_to_timespec(double fSeconds)
-{
-    struct timespec result;
-    if (fSeconds < 0)
-    {
-        result.tv_sec = 0;
-        result.tv_nsec = 0;
-    }
-    else if (fSeconds > (double) LONG_MAX){
-        result.tv_sec = LONG_MAX;
-        result.tv_nsec = 999999999L ;
-    }
-    else{
-        result.tv_sec = (time_t) fSeconds;
-        result.tv_nsec = (long) ((fSeconds - (double)result.tv_sec) * 1000000000.0);
-    }
-    return result;
-}*/
 void handle_signal(evutil_socket_t fd, short what, void *arg)
 {
     printf("Caught signal\n");
@@ -93,9 +73,7 @@ void send_to_addr(struct client_context *ctx) {
     cmd.content[15] = '\0';
     memset(cmd.content+16, 'v', 15);
     cmd.content[31] = '\0';
-    //printf("Start: %ld.%09ld\n", cmd.ts.tv_sec, cmd.ts.tv_nsec);
     int msg_size = sizeof (cmd);
-   // printf ("message size from client: %d\n", msg_size);
     int n = sendto(ctx->sock , &cmd, msg_size, 0, (struct sockaddr *)&ctx->server_addr, addr_size);
     if (n < 0) {
         perror("sendto");
@@ -140,6 +118,8 @@ void on_perf (evutil_socket_t fd, short event, void *arg) {
         agv_latency = sum / num_messages;
         printf("%4d %6d %f\n", at_second++, num_messages, agv_latency);
         num_messages= 0;
+        time_sum.tv_sec = 0;
+        time_sum.tv_nsec = 0;  
     }
     
 }
