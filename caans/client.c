@@ -2,6 +2,9 @@
 #include <stdlib.h>
 #include <event2/event.h>
 #include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/time.h>
+#include <errno.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <signal.h>
@@ -25,9 +28,11 @@ static int at_second = 0;
 static int num_messages = 0;
 static int flag = 0;
 static struct timespec time_sum = {0, 0};
+static struct timespec last_time = {0,0};
+static struct timeval tv = {0, 370000};
+static int timeout_flag = 0;
 
-int
-timespec_diff(struct timespec *result, struct timespec *end,struct timespec *start)
+int timespec_diff(struct timespec *result, struct timespec *end,struct timespec *start)
 {
     if (end->tv_nsec < start->tv_nsec) {
         result->tv_nsec =  BILLION + end->tv_nsec - start->tv_nsec;
@@ -63,12 +68,19 @@ void handle_signal(evutil_socket_t fd, short what, void *arg)
     event_base_loopbreak(ctx->base);
 }
 
-void send_to_addr(struct client_context *ctx) {
+void send_to_addr(struct client_context *ctx, int timeout_flag) {
     socklen_t addr_size = sizeof (ctx->server_addr);
     struct command cmd;
     cmd.command_id = ctx->command_id++;
     cmd.op = ctx->op;
-    clock_gettime(CLOCK_REALTIME, &cmd.ts);
+    if(timeout_flag == 1)
+        cmd.ts = last_time;
+    else if (timeout_flag == 0)
+    {
+        clock_gettime(CLOCK_REALTIME, &cmd.ts);
+        last_time = cmd.ts;
+        
+    }
     memset(cmd.content, 'k', 15);
     cmd.content[15] = '\0';
     memset(cmd.content+16, 'v', 15);
@@ -78,37 +90,50 @@ void send_to_addr(struct client_context *ctx) {
     if (n < 0) {
         perror("sendto");
     }
+    
 }
 
 void on_read(evutil_socket_t fd, short event, void *arg) {
     struct client_context *ctx = arg;
+
     if (event&EV_READ) {
         struct sockaddr_in remote;
         socklen_t addrlen = sizeof(remote);
         struct command response;
-        int n = recvfrom(fd, &response, sizeof(response), 0, (struct sockaddr*)&remote, &addrlen);
-        if (n < 0)
-            perror("recvfrom");
-        struct timespec end;
-        clock_gettime(CLOCK_REALTIME, &end);
-        struct timespec result;
-        if(flag == ON)
-        {
-            if (timespec_diff(&result, &end, &response.ts) < 1)
-                printf("%ld.%09ld\n", result.tv_sec, result.tv_nsec);
 
-        }
-        else if (flag == OFF)
-        {
-            if (timespec_diff(&result, &end, &response.ts) < 1)
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv, sizeof(struct timeval));
+        int recvlen = recvfrom(fd, &response, sizeof(response), 0, (struct sockaddr*)&remote, &addrlen);
+        if (recvlen >= 0){
+
+            struct timespec end;
+            clock_gettime(CLOCK_REALTIME, &end);
+            struct timespec result;
+            if(flag == ON)
             {
-                time_sum = timespec_add(&time_sum, &result);
-                num_messages++;
-            }
+                if (timespec_diff(&result, &end, &response.ts) < 1)
+                    printf("%ld.%09ld\n", result.tv_sec, result.tv_nsec);
 
+            }
+            else if (flag == OFF)
+            {
+                if (timespec_diff(&result, &end, &response.ts) < 1)
+                {
+                    time_sum = timespec_add(&time_sum, &result);
+                    num_messages++;
+                }
+
+            }
+            timeout_flag = 0;
         }
+        else {
+            if(errno == EAGAIN || errno == EWOULDBLOCK)
+            {
+                printf ("Hurrar -recvfrom() timeout.\n");
+                timeout_flag = 1;
+            }
+        }   
     }
-    send_to_addr(ctx);
+    send_to_addr(ctx, timeout_flag);
 }
 void on_perf (evutil_socket_t fd, short event, void *arg) {
     if (flag == OFF)
@@ -184,7 +209,7 @@ int main(int argc, char *argv[])
     ev_sigterm = evsignal_new(ctx.base, SIGTERM, handle_signal, &ctx);
     evsignal_add(ev_sigterm, NULL);
 
-    send_to_addr(&ctx);
+    send_to_addr(&ctx, timeout_flag);
 
     event_base_dispatch(ctx.base);
 
