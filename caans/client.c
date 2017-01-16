@@ -29,7 +29,7 @@ static int num_messages = 0;
 static int flag = 0;
 static struct timespec time_sum = {0, 0};
 static struct timespec last_time = {0,0};
-static struct timeval tv = {0, 370000};
+static struct timeval tv = {0, 360000};
 static int timeout_flag = 0;
 
 int timespec_diff(struct timespec *result, struct timespec *end,struct timespec *start)
@@ -101,8 +101,37 @@ void on_read(evutil_socket_t fd, short event, void *arg) {
         socklen_t addrlen = sizeof(remote);
         struct command response;
 
-        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv, sizeof(struct timeval));
-        int recvlen = recvfrom(fd, &response, sizeof(response), 0, (struct sockaddr*)&remote, &addrlen);
+        if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv, sizeof(struct timeval)) < 0)
+        {
+            printf ("Hurrar -recvfrom() timeout.\n");
+            timeout_flag = 1;
+        }
+        else {
+            int recvlen = recvfrom(fd, &response, sizeof(response), 0, (struct sockaddr*)&remote, &addrlen);
+            if (recvlen < 0)
+                perror ("recvfrom\n");
+            struct timespec end;
+            clock_gettime(CLOCK_REALTIME, &end);
+            struct timespec result;
+            if(flag == ON)
+            {
+                if (timespec_diff(&result, &end, &response.ts) < 1)
+                    printf("%ld.%09ld\n", result.tv_sec, result.tv_nsec);
+
+            }
+            else if (flag == OFF)
+            {
+                if (timespec_diff(&result, &end, &response.ts) < 1)
+                {
+                    time_sum = timespec_add(&time_sum, &result);
+                    num_messages++;
+                }
+
+            }
+            timeout_flag = 0;
+
+        }
+        /*int recvlen = recvfrom(fd, &response, sizeof(response), 0, (struct sockaddr*)&remote, &addrlen);
         if (recvlen >= 0){
 
             struct timespec end;
@@ -126,12 +155,13 @@ void on_read(evutil_socket_t fd, short event, void *arg) {
             timeout_flag = 0;
         }
         else {
+            printf("recvlen: %d, errno: %d EAGAIN %d EWOULDBLOCK %d \n", recvlen, errno, EAGAIN, EWOULDBLOCK);
             if(errno == EAGAIN || errno == EWOULDBLOCK)
             {
                 printf ("Hurrar -recvfrom() timeout.\n");
                 timeout_flag = 1;
             }
-        }   
+        }   */
     }
     send_to_addr(ctx, timeout_flag);
 }
@@ -140,11 +170,18 @@ void on_perf (evutil_socket_t fd, short event, void *arg) {
     {
         double sum = 0.0, agv_latency = 0;
         sum = timespec_double(time_sum);
-        agv_latency = sum / num_messages;
-        printf("%4d %6d %f\n", at_second++, num_messages, agv_latency);
-        num_messages= 0;
-        time_sum.tv_sec = 0;
-        time_sum.tv_nsec = 0;  
+        if (num_messages == 0 || sum == 0)
+             printf("%4d %6d 0\n", at_second++, num_messages);
+        else
+        {
+            agv_latency = sum / num_messages;
+            printf("%4d %6d %f\n", at_second++, num_messages, agv_latency);
+            num_messages= 0;
+            time_sum.tv_sec = 0;
+            time_sum.tv_nsec = 0;
+
+        }
+         
     }
     
 }
