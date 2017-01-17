@@ -28,7 +28,6 @@ static int num_messages = 0;
 static int flag = 0;
 static struct timespec time_sum = {0, 0};
 static struct timespec last_time = {0,0};
-static struct timeval timeout = {0, 360};
 static int timeout_flag = 0;
 
 int timespec_diff(struct timespec *result, struct timespec *end,struct timespec *start)
@@ -73,12 +72,15 @@ void send_to_addr(struct client_context *ctx, int timeout_flag) {
     cmd.command_id = ctx->command_id++;
     cmd.op = ctx->op;
     
-    if(timeout_flag == 1)
-        cmd.ts = last_time;
-    else if (timeout_flag == 0)
+    if(timeout_flag == 1){
+        cmd.ts.tv_sec = last_time.tv_sec;
+        cmd.ts.tv_nsec = last_time.tv_nsec;
+    
+    } else if (timeout_flag == 0)
     {
         clock_gettime(CLOCK_REALTIME, &cmd.ts);
-        last_time = cmd.ts;
+        last_time.tv_sec = cmd.ts.tv_sec;
+        last_time.tv_nsec = cmd.ts.tv_nsec;
         
     }
     memset(cmd.content, 'k', 15);
@@ -104,41 +106,48 @@ void on_read(evutil_socket_t fd, short event, void *arg) {
         fd_set fds;
         FD_ZERO (&fds);
         FD_SET (fd, &fds);
+        struct timeval timeout;
         timeout.tv_sec = 0;
-        timeout.tv_usec = 360;
+        timeout.tv_usec = 1000;
+       
         int retval = select (fd+1, &fds, NULL, NULL, &timeout);
+    
         if (retval == -1)
         {
             perror ("select");
         }
         else if (retval == 0){
+            printf("socket timeout\n");
             timeout_flag = 1;
         }
         else{
-            
-            int recvlen = recvfrom(fd, &response, sizeof(response), 0, (struct sockaddr*)&remote, &addrlen);
-            if (recvlen < 0)
-                perror ("recvfrom");
-            struct timespec end;
-            clock_gettime(CLOCK_REALTIME, &end);
-            struct timespec result;
-            if(flag == ON)
-            {
-                if (timespec_diff(&result, &end, &response.ts) < 1)
-                    printf("%ld.%09ld\n", result.tv_sec, result.tv_nsec);
-
-            }
-            else if (flag == OFF)
-            {
-                if (timespec_diff(&result, &end, &response.ts) < 1)
+            if (FD_ISSET(fd, &fds)){
+                int recvlen = recvfrom(fd, &response, sizeof(response), 0, (struct sockaddr*)&remote, &addrlen);
+                if (recvlen < 0)
+                    perror ("recvfrom");
+                struct timespec end;
+                clock_gettime(CLOCK_REALTIME, &end);
+                struct timespec result;
+                if(flag == ON)
                 {
-                    time_sum = timespec_add(&time_sum, &result);
-                    num_messages++;
-                }
+                    if (timespec_diff(&result, &end, &response.ts) < 1)
+                        printf("%ld.%09ld\n", result.tv_sec, result.tv_nsec);
 
+                }
+                else if (flag == OFF)
+                {
+                    if (timespec_diff(&result, &end, &response.ts) < 1)
+                    {
+                        time_sum = timespec_add(&time_sum, &result);
+                        num_messages++;
+                    }
+
+                }
+                timeout_flag = 0;
             }
-            timeout_flag = 0;
         }
+        timeout.tv_sec = 0;
+        timeout.tv_usec = 1000;
     }
     send_to_addr(ctx, timeout_flag);
 }
