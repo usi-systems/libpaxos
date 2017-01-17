@@ -108,7 +108,7 @@ void on_read(evutil_socket_t fd, short event, void *arg) {
         FD_SET (fd, &fds);
         struct timeval timeout;
         timeout.tv_sec = 0;
-        timeout.tv_usec = 1000;
+        timeout.tv_usec = 270;
        
         int retval = select (fd+1, &fds, NULL, NULL, &timeout);
     
@@ -147,7 +147,7 @@ void on_read(evutil_socket_t fd, short event, void *arg) {
             }
         }
         timeout.tv_sec = 0;
-        timeout.tv_usec = 1000;
+        timeout.tv_usec = 270;
     }
     send_to_addr(ctx, timeout_flag);
 }
