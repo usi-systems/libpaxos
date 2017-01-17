@@ -29,7 +29,7 @@ static int flag = 0;
 static struct timespec time_sum = {0, 0};
 static struct timespec last_time = {0,0};
 static int timeout_flag = 0;
-
+static int tm = 0;
 int timespec_diff(struct timespec *result, struct timespec *end,struct timespec *start)
 {
     if (end->tv_nsec < start->tv_nsec) {
@@ -108,7 +108,7 @@ void on_read(evutil_socket_t fd, short event, void *arg) {
         FD_SET (fd, &fds);
         struct timeval timeout;
         timeout.tv_sec = 0;
-        timeout.tv_usec = 270;
+        timeout.tv_usec = tm;
        
         int retval = select (fd+1, &fds, NULL, NULL, &timeout);
     
@@ -147,7 +147,7 @@ void on_read(evutil_socket_t fd, short event, void *arg) {
             }
         }
         timeout.tv_sec = 0;
-        timeout.tv_usec = 270;
+        timeout.tv_usec = tm;
     }
     send_to_addr(ctx, timeout_flag);
 }
@@ -184,8 +184,8 @@ int new_dgram_socket() {
 int main(int argc, char *argv[])
 {
     if (argc < 3) {
-        printf("Syntax: %s [hostname] [port] [GET/SET] [ON/OFF]\n"
-               "Example: %s 192.168.1.110 6789 GET OFF\n",argv[0], argv[0]);
+        printf("Syntax: %s [hostname] [port] [TIMEOUT(µs)] [GET/SET] [ON/OFF]\n"
+               "Example: %s 192.168.1.110 6789 300 GET OFF \n",argv[0], argv[0]);
         return 1;
     }
 
@@ -200,10 +200,11 @@ int main(int argc, char *argv[])
     ctx.op = GET;
     flag = OFF;
     if (argc > 3) {
-        if (strcmp(argv[3], "SET") == 0) {
+        tm = atoi(argv[3]);
+        if (strcmp(argv[4], "SET") == 0) {
             ctx.op = SET;
         }
-        if (strcmp(argv[4], "ON") == 0){
+        if (strcmp(argv[5], "ON") == 0){
             flag = ON;
         }
     }
