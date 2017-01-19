@@ -9,7 +9,7 @@
 #include <string.h>
 #include "message.h"
 
-#define BILLION 1000000000
+#define NS_PER_S 1000000000
 
 struct client_context {
     struct event_base *base;
@@ -17,14 +17,15 @@ struct client_context {
     enum Operation op;
     uint16_t command_id;
     int sock;
+    double latency;
+    int nb_messages;
 };
-
 
 int
 timespec_diff(struct timespec *result, struct timespec *end,struct timespec *start)
 {
     if (end->tv_nsec < start->tv_nsec) {
-        result->tv_nsec =  BILLION + end->tv_nsec - start->tv_nsec;
+        result->tv_nsec =  NS_PER_S + end->tv_nsec - start->tv_nsec;
         result->tv_sec = end->tv_sec - start->tv_sec - 1;
     } else {
         result->tv_nsec = end->tv_nsec - start->tv_nsec;
@@ -60,6 +61,16 @@ void send_to_addr(struct client_context *ctx) {
     }
 }
 
+void on_perf(evutil_socket_t fd, short event, void *arg) {
+    struct client_context *ctx = arg;
+    if (ctx->nb_messages > 0) {
+        double average_latency = ctx->latency / ctx->nb_messages / NS_PER_S;
+        printf("%.09f\n", average_latency);
+    }
+    ctx->latency = 0.0;
+    ctx->nb_messages = 0;
+}
+
 void on_read(evutil_socket_t fd, short event, void *arg) {
     struct client_context *ctx = arg;
     if (event&EV_READ) {
@@ -72,8 +83,11 @@ void on_read(evutil_socket_t fd, short event, void *arg) {
         struct timespec end;
         clock_gettime(CLOCK_REALTIME, &end);
         struct timespec result;
-        if ( timespec_diff(&result, &end, &response.ts) < 1)
-            printf("%ld.%09ld\n", result.tv_sec, result.tv_nsec);
+        if ( timespec_diff(&result, &end, &response.ts) < 1) {
+            // printf("%ld.%09ld\n", result.tv_sec, result.tv_nsec);
+            ctx->latency += result.tv_sec*NS_PER_S + result.tv_nsec;
+            ctx->nb_messages++;
+        }
     }
     send_to_addr(ctx);
 }
@@ -104,6 +118,9 @@ int main(int argc, char *argv[])
     }
 
     struct client_context ctx;
+    ctx.latency = 0.0;
+    ctx.nb_messages = 0;
+
     ctx.op = GET;
     if (argc > 3) {
         if (strcmp(argv[3], "SET") == 0) {
@@ -120,16 +137,21 @@ int main(int argc, char *argv[])
     int sock = new_dgram_socket();
     evutil_make_socket_nonblocking(sock);
     ctx.sock = sock;
-    struct event *ev_read, *ev_sigint, *ev_sigterm;
-    ev_read = event_new(ctx.base, sock, EV_READ|EV_PERSIST, on_read, &ctx);
+    struct event *ev_read, *ev_sigint, *ev_sigterm, *ev_perf;
 
-    event_add(ev_read, NULL);
+    struct timeval one_second = {1, 0};
+    ev_read = event_new(ctx.base, sock, EV_READ|EV_PERSIST|EV_TIMEOUT, on_read, &ctx);
+
+    event_add(ev_read, &one_second);
 
     ev_sigint = evsignal_new(ctx.base, SIGINT, handle_signal, &ctx);
     evsignal_add(ev_sigint, NULL);
 
     ev_sigterm = evsignal_new(ctx.base, SIGTERM, handle_signal, &ctx);
     evsignal_add(ev_sigterm, NULL);
+
+    ev_perf = event_new(ctx.base, -1, EV_TIMEOUT|EV_PERSIST, on_perf, &ctx);
+    event_add(ev_perf, &one_second);
 
     send_to_addr(&ctx);
 
@@ -138,6 +160,7 @@ int main(int argc, char *argv[])
     event_free(ev_read);
     event_free(ev_sigint);
     event_free(ev_sigterm);
+    event_free(ev_perf);
     event_base_free(ctx.base);
 
     return 0;

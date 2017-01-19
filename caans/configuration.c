@@ -31,7 +31,7 @@ int populate_configuration(char* config, struct netpaxos_configuration *conf)
     conf->coordinator_address = NULL;
     /* Initialize number of proposers to 5 */
     conf->proposer_count = 0;
-    conf->max_num_proposer = 5;
+    conf->max_num_proposer = 10;
     conf->proposer_port = calloc(conf->max_num_proposer, sizeof(int));
     conf->proposer_address = calloc(conf->max_num_proposer, sizeof(char*));
     int i;

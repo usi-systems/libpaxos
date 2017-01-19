@@ -66,7 +66,9 @@ void deliver(unsigned int inst, char* val, size_t size, void* arg) {
     /* Skip command ID and client address */
     char *retval = (val + sizeof(uint16_t) + sizeof(struct sockaddr_in));
 
-    if (cmd->command_id % app->node_count == app->node_id) {
+    /* TEST only the first learner responds */
+    // if (cmd->command_id % app->node_count == app->node_id) {
+    if (app->node_id == 0) {
         int n = sendto(app->paxos->sock, retval, content_length(req), 0,
                         (struct sockaddr *)&req->cliaddr,
                         sizeof(req->cliaddr));
@@ -122,7 +124,10 @@ int main(int argc, char *argv[]) {
     }
     struct paxos_ctx *paxos = make_learner(&conf, deliver, app);
     app->paxos = paxos;
-    app->leveldb = new_leveldb_context();
+
+    if (app->enable_leveldb) {
+        app->leveldb = new_leveldb_context();
+    }
 
     struct event *ev_perf = event_new(paxos->base, -1, EV_TIMEOUT|EV_PERSIST, on_perf, app);
     struct timeval one_second = {1, 0};
@@ -135,7 +140,9 @@ int main(int argc, char *argv[]) {
     event_free(ev_perf);
     free_paxos_ctx(app->paxos);
     free(app->proxies);
-    free_leveldb_context(app->leveldb);
+    if (app->enable_leveldb) {
+        free_leveldb_context(app->leveldb);
+    }
     free(app);
     free_configuration(&conf);
 
