@@ -84,9 +84,12 @@ void on_read(evutil_socket_t fd, short event, void *arg) {
         clock_gettime(CLOCK_REALTIME, &end);
         struct timespec result;
         if ( timespec_diff(&result, &end, &response.ts) < 1) {
-            // printf("%ld.%09ld\n", result.tv_sec, result.tv_nsec);
+#ifdef AGGREGATE
             ctx->latency += result.tv_sec*NS_PER_S + result.tv_nsec;
             ctx->nb_messages++;
+#else
+            printf("%ld.%09ld\n", result.tv_sec, result.tv_nsec);
+#endif
         }
     }
     send_to_addr(ctx);
@@ -137,7 +140,7 @@ int main(int argc, char *argv[])
     int sock = new_dgram_socket();
     evutil_make_socket_nonblocking(sock);
     ctx.sock = sock;
-    struct event *ev_read, *ev_sigint, *ev_sigterm, *ev_perf;
+    struct event *ev_read, *ev_sigint, *ev_sigterm;
 
     struct timeval one_second = {1, 0};
     ev_read = event_new(ctx.base, sock, EV_READ|EV_PERSIST|EV_TIMEOUT, on_read, &ctx);
@@ -149,10 +152,11 @@ int main(int argc, char *argv[])
 
     ev_sigterm = evsignal_new(ctx.base, SIGTERM, handle_signal, &ctx);
     evsignal_add(ev_sigterm, NULL);
+#ifdef AGGREGATE
 
-    ev_perf = event_new(ctx.base, -1, EV_TIMEOUT|EV_PERSIST, on_perf, &ctx);
+    struct event *ev_perf = event_new(ctx.base, -1, EV_TIMEOUT|EV_PERSIST, on_perf, &ctx);
     event_add(ev_perf, &one_second);
-
+#endif
     send_to_addr(&ctx);
 
     event_base_dispatch(ctx.base);
@@ -160,7 +164,9 @@ int main(int argc, char *argv[])
     event_free(ev_read);
     event_free(ev_sigint);
     event_free(ev_sigterm);
+#ifdef AGGREGATE
     event_free(ev_perf);
+#endif
     event_base_free(ctx.base);
 
     return 0;
