@@ -24,19 +24,8 @@ void deliver(unsigned int inst, char* val, size_t size, void* arg) {
     if (size <= 0)
         return;
     struct client_request *req = (struct client_request*)val;
-    // printf("address %s, port %d\n", inet_ntoa(req->cliaddr.sin_addr), ntohs(req->cliaddr.sin_port));
 
     struct command *cmd = (struct command*)(val + sizeof(struct client_request) - 1);
-    // int i;
-    // printf("MSG\n");
-    // for (i = 0; i < size; i++) {
-    //     if (i % 16 == 0)
-    //         printf("\n");
-    //     printf("%02x ", (unsigned char)val[i]);
-    // }
-    // printf("\n");
-
-    // paxos_log_debug("DELIVERED: %d %s", inst, val);
     if (app->enable_leveldb) {
         char *key = cmd->content;
         if (cmd->op == SET) {
@@ -69,6 +58,7 @@ void deliver(unsigned int inst, char* val, size_t size, void* arg) {
     /* TEST only the first learner responds */
     // if (cmd->command_id % app->node_count == app->node_id) {
     if (app->node_id == 0) {
+        // print_addr(&req->cliaddr);
         int n = sendto(app->paxos->sock, retval, content_length(req), 0,
                         (struct sockaddr *)&req->cliaddr,
                         sizeof(req->cliaddr));

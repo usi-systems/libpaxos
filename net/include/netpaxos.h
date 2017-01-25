@@ -51,6 +51,8 @@ struct paxos_ctx {
     respond_callback respond;
     void* respond_arg;
     struct timeval tv;
+    int at_second;
+    int message_per_second;
     char* buffer;
 };
 
@@ -67,6 +69,7 @@ void start_paxos(struct paxos_ctx *ctx);
 void handle_signal(evutil_socket_t fd, short what, void *arg);
 void free_paxos_ctx(struct paxos_ctx *ctx);
 void subcribe_to_multicast_group(char *group, int sockfd);
+void on_perf(evutil_socket_t fd, short event, void *arg);
 
 void check_holes(evutil_socket_t fd, short event, void *arg);
 void learner_read_cb(evutil_socket_t fd, short what, void *arg);
