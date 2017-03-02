@@ -114,7 +114,7 @@ submit_trim(struct counter_replica* replica)
 }
 
 static void
-on_deliver(int tid, unsigned iid, char* value, size_t size, void* arg)
+on_deliver(unsigned iid, char* value, size_t size, void* arg)
 {
 	int replica_id, trim_id;
 	struct counter_replica* replica = (struct counter_replica*)arg;

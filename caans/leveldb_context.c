@@ -2,10 +2,8 @@
 #include <stdio.h>
 #include <string.h>
 #include "leveldb_context.h"
-#include "netpaxos.h"
-#include <pthread.h>
 
-#define TEST_DB "/tmp/libpaxos_leveldb"
+#define TEST_DB "/tmp/libpaxos"
 
 enum boolean {
     false,
@@ -17,16 +15,12 @@ struct leveldb_ctx* new_leveldb_context() {
     ctx->options = leveldb_options_create();
     ctx->woptions = leveldb_writeoptions_create();
     ctx->roptions = leveldb_readoptions_create();
-  
-    //pthread_mutex_lock (&levelb_mutex);
     open_db(ctx, TEST_DB);
-    //pthread_mutex_unlock (&levelb_mutex);
     return ctx;
 }
 
 
 void open_db(struct leveldb_ctx *ctx, char* db_name) {
-
     char *err = NULL;
     leveldb_options_set_create_if_missing(ctx->options, true);
     ctx->db = leveldb_open(ctx->options, db_name, &err);
@@ -35,7 +29,6 @@ void open_db(struct leveldb_ctx *ctx, char* db_name) {
         exit (EXIT_FAILURE);
     }
     leveldb_free(err); err = NULL;
-    
 }
 
 void destroy_db(struct leveldb_ctx *ctx, char* db_name) {

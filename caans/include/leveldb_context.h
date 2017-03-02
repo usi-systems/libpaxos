@@ -3,7 +3,6 @@
 
 #include <leveldb/c.h>
 
-
 struct leveldb_ctx {
     leveldb_t *db;
     leveldb_options_t *options;

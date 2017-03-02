@@ -71,7 +71,6 @@ evlearner_deliver_next_closed(struct evlearner* l)
 	paxos_accepted deliver;
 	while (learner_deliver_next(l->state, &deliver)) {
 		l->delfun(
-			0,
 			deliver.iid,
 			deliver.value.paxos_value_val,
 			deliver.value.paxos_value_len,

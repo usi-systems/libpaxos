@@ -47,7 +47,6 @@ struct evpaxos_replica;
  * a value has been learned.
  */
 typedef void (*deliver_function)(
-	int tid,
 	unsigned int,
 	char* value,
 	size_t size,

@@ -8,25 +8,19 @@ int parse_verbosity(char* str, paxos_log_level* verbosity);
 
 void dump_configuration(struct netpaxos_configuration *conf)
 {
-    int i;
-    printf ("--------------------------\n");
-    for (i = 0; i < conf->learner_count; i++) {
-        paxos_log_debug("learner thread %d: %s %d", i, conf->learner_address[i], conf->learner_port[i]);
-    }
-    //paxos_log_debug("learner: %s %d", conf->learner_address, conf->learner_port);
+    paxos_log_debug("learner: %s %d", conf->learner_address, conf->learner_port);
     paxos_log_debug("acceptor: %s %d", conf->acceptor_address, conf->acceptor_port);
     paxos_log_debug("num_acceptors: %d", conf->acceptor_count);
-   
+    int i;
     for (i = 0; i < conf->proposer_count; i++) {
         paxos_log_debug("proposer %d: %s %d", i, conf->proposer_address[i], conf->proposer_port[i]);
     }
-   printf ("--------------------------\n");
 }
 
 int populate_configuration(char* config, struct netpaxos_configuration *conf)
 {
-    //conf->learner_port = 0;
-    //conf->learner_address =NULL;
+    conf->learner_port = 0;
+    conf->learner_address =NULL;
     conf->acceptor_port = 0;
     conf->acceptor_address = NULL;
     conf->acceptor_count = 1;
@@ -35,9 +29,9 @@ int populate_configuration(char* config, struct netpaxos_configuration *conf)
     conf->proposer_address = NULL;
     conf->coordinator_port = 0;
     conf->coordinator_address = NULL;
-    /* Initialize number of proposers to 10 */
+    /* Initialize number of proposers to 5 */
     conf->proposer_count = 0;
-    conf->max_num_proposer = 10;
+    conf->max_num_proposer = 5;
     conf->proposer_port = calloc(conf->max_num_proposer, sizeof(int));
     conf->proposer_address = calloc(conf->max_num_proposer, sizeof(char*));
     int i;
@@ -46,15 +40,6 @@ int populate_configuration(char* config, struct netpaxos_configuration *conf)
         conf->proposer_address[i] = NULL;
     }
 
-    conf->learner_count = 0;
-    conf->max_num_learner_thread = 12;
-    conf->learner_port = calloc(conf->max_num_learner_thread, sizeof(int));
-    conf->learner_address =  calloc(conf->max_num_learner_thread, sizeof(char*));
-    int j;
-    for (j = 0; j < conf->max_num_learner_thread; j++) {
-        conf->learner_port[j] = 0;
-        conf->learner_address[j] = NULL;
-    }
     FILE *fp = fopen(config, "r");
     if (fp == NULL)
         return EXIT_FAILURE;
@@ -83,15 +68,10 @@ int populate_configuration(char* config, struct netpaxos_configuration *conf)
                 conf->acceptor_port = atoi(token);
             }
             if (strcmp(token, "learner") == 0) {
-                /*token = strtok(NULL, delim);
+                token = strtok(NULL, delim);
                 conf->learner_address = strdup(token);
                 token = strtok(NULL, delim);
-                conf->learner_port = atoi(token);*/
-                token = strtok(NULL, delim);
-                conf->learner_address[conf->learner_count] = strdup(token);
-                token = strtok(NULL, delim);
-                conf->learner_port[conf->learner_count] = atoi(token);
-                conf->learner_count++;
+                conf->learner_port = atoi(token);
             }
             if (strcmp(token, "coordinator") == 0) {
                 token = strtok(NULL, delim);

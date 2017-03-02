@@ -44,7 +44,6 @@ struct __attribute__((__packed__)) paxos_prepare
 	uint16_t ballot;
 	uint16_t value_ballot;
 	uint16_t aid;
-	uint16_t thread_id;
 	paxos_value value;
 };
 typedef struct paxos_prepare paxos_prepare;
@@ -55,7 +54,6 @@ struct __attribute__((__packed__)) paxos_promise
 	uint16_t ballot;
 	uint16_t value_ballot;
 	uint16_t aid;
-	uint16_t thread_id;
 	paxos_value value;
 };
 typedef struct paxos_promise paxos_promise;
@@ -66,7 +64,6 @@ struct __attribute__((__packed__)) paxos_accept
 	uint16_t ballot;
 	uint16_t value_ballot;
 	uint16_t aid;
-	uint16_t thread_id;
 	paxos_value value;
 };
 typedef struct paxos_accept paxos_accept;
@@ -77,7 +74,6 @@ struct __attribute__((__packed__)) paxos_accepted
 	uint16_t ballot;
 	uint16_t value_ballot;
 	uint16_t aid;
-	uint16_t thread_id;
 	paxos_value value;
 };
 typedef struct paxos_accepted paxos_accepted;
@@ -88,7 +84,6 @@ struct __attribute__((__packed__)) paxos_preempted
 	uint16_t ballot;
 	uint16_t value_ballot;
 	uint16_t aid;
-	uint16_t thread_id;
 	paxos_value value;
 };
 typedef struct paxos_preempted paxos_preempted;

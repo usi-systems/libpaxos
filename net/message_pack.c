@@ -11,8 +11,7 @@
 #define BALLOT_OFFSET 6
 #define VALUE_BALLOT_OFFSET 8
 #define AID_OFFSET 10
-#define THREAD_ID_OFFSET 12
-#define VALUE_OFFSET 14
+#define VALUE_OFFSET 12
 /* paxos_repeat offsets */
 #define FROM_OFFSET 2
 #define TO_OFFSET 6
@@ -74,7 +73,6 @@ void pack_paxos_prepare(char* p, paxos_prepare* v)
     pack_uint16(p, v->ballot, BALLOT_OFFSET);
     pack_uint16(p, v->value_ballot, VALUE_BALLOT_OFFSET);
     pack_uint16(p, v->aid, AID_OFFSET);
-    pack_uint16(p, v->thread_id, THREAD_ID_OFFSET);
     pack_value(p, &v->value, VALUE_OFFSET);
 }
 
@@ -84,7 +82,6 @@ void unpack_paxos_prepare(paxos_prepare* v, char* p)
     unpack_uint16(&v->ballot, p, BALLOT_OFFSET);
     unpack_uint16(&v->value_ballot, p, VALUE_BALLOT_OFFSET);
     unpack_uint16(&v->aid, p, AID_OFFSET);
-    unpack_uint16(&v->thread_id, p, THREAD_ID_OFFSET);
     unpack_value(&v->value, p, VALUE_OFFSET);
 }
 
@@ -95,7 +92,6 @@ void pack_paxos_promise(char* p, paxos_promise* v)
     pack_uint16(p, v->ballot, BALLOT_OFFSET);
     pack_uint16(p, v->value_ballot, VALUE_BALLOT_OFFSET);
     pack_uint16(p, v->aid, AID_OFFSET);
-    pack_uint16(p, v->thread_id, THREAD_ID_OFFSET);
     pack_value(p, &v->value, VALUE_OFFSET);
 }
 
@@ -105,7 +101,6 @@ void unpack_paxos_promise(paxos_promise* v, char* p)
     unpack_uint16(&v->ballot, p, BALLOT_OFFSET);
     unpack_uint16(&v->value_ballot, p, VALUE_BALLOT_OFFSET);
     unpack_uint16(&v->aid, p, AID_OFFSET);
-    unpack_uint16(&v->thread_id, p, THREAD_ID_OFFSET);
     unpack_value(&v->value, p, VALUE_OFFSET);
 }
 
@@ -116,7 +111,6 @@ void pack_paxos_accept(char* p, paxos_accept* v)
     pack_uint16(p, v->ballot, BALLOT_OFFSET);
     pack_uint16(p, v->value_ballot, VALUE_BALLOT_OFFSET);
     pack_uint16(p, v->aid, AID_OFFSET);
-    pack_uint16(p, v->thread_id, THREAD_ID_OFFSET);
     pack_value(p, &v->value, VALUE_OFFSET);
 }
 
@@ -126,7 +120,6 @@ void unpack_paxos_accept(paxos_accept* v, char* p)
     unpack_uint16(&v->ballot, p, BALLOT_OFFSET);
     unpack_uint16(&v->value_ballot, p, VALUE_BALLOT_OFFSET);
     unpack_uint16(&v->aid, p, AID_OFFSET);
-    unpack_uint16(&v->thread_id, p, THREAD_ID_OFFSET);
     unpack_value(&v->value, p, VALUE_OFFSET);
 }
 
@@ -137,7 +130,6 @@ void pack_paxos_accepted(char* p, paxos_accepted* v)
     pack_uint16(p, v->ballot, BALLOT_OFFSET);
     pack_uint16(p, v->value_ballot, VALUE_BALLOT_OFFSET);
     pack_uint16(p, v->aid, AID_OFFSET);
-    pack_uint16(p, v->thread_id, THREAD_ID_OFFSET);
     pack_value(p, &v->value, VALUE_OFFSET);
 }
 
@@ -147,7 +139,6 @@ void unpack_paxos_accepted(paxos_accepted* v, char* p)
     unpack_uint16(&v->ballot, p, BALLOT_OFFSET);
     unpack_uint16(&v->value_ballot, p, VALUE_BALLOT_OFFSET);
     unpack_uint16(&v->aid, p, AID_OFFSET);
-    unpack_uint16(&v->thread_id, p, THREAD_ID_OFFSET);
     unpack_value(&v->value, p, VALUE_OFFSET);
 }
 
@@ -158,7 +149,6 @@ void pack_paxos_preempted(char* p, paxos_preempted* v)
     pack_uint16(p, v->ballot, BALLOT_OFFSET);
     pack_uint16(p, v->value_ballot, VALUE_BALLOT_OFFSET);
     pack_uint16(p, v->aid, AID_OFFSET);
-    pack_uint16(p, v->thread_id, THREAD_ID_OFFSET);
     pack_value(p, &v->value, VALUE_OFFSET);
 }
 
@@ -168,7 +158,6 @@ void unpack_paxos_preempted(paxos_preempted* v, char* p)
     unpack_uint16(&v->ballot, p, BALLOT_OFFSET);
     unpack_uint16(&v->value_ballot, p, VALUE_BALLOT_OFFSET);
     unpack_uint16(&v->aid, p, AID_OFFSET);
-    unpack_uint16(&v->thread_id, p, THREAD_ID_OFFSET);
     unpack_value(&v->value, p, VALUE_OFFSET);
 }
 

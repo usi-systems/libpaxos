@@ -469,13 +469,11 @@ instance_to_accept(struct instance* inst, paxos_accept* accept)
 	paxos_value* v = inst->value;
 	if (instance_has_promised_value(inst))
 		v = inst->promised_value;
-	int t_id = accept->thread_id;
 	*accept = (paxos_accept) {
 		inst->iid,
 		inst->ballot,
 		inst->ballot,
 		0, // acceptor id field
-		t_id,
 		{ v->paxos_value_len,
 		  v->paxos_value_val }
 	};

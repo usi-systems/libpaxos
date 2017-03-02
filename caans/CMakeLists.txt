@@ -20,14 +20,11 @@ target_link_libraries(server_caans netpaxos ${LIBPAXOS_LINKER_LIBS})
 add_executable(proxy_caans proposer.c ${SRCS})
 target_link_libraries(proxy_caans netpaxos ${LIBPAXOS_LINKER_LIBS})
 
-#add_executable(replica_caans replica.c ${SRCS})
-#target_link_libraries(replica_caans netpaxos ${LIBPAXOS_LINKER_LIBS})
+add_executable(replica_caans replica.c ${SRCS})
+target_link_libraries(replica_caans netpaxos ${LIBPAXOS_LINKER_LIBS})
 
 add_executable(client_caans client.c ${SRCS})
 target_link_libraries(client_caans netpaxos ${LIBPAXOS_LINKER_LIBS})
-
-add_executable(pktgen4learner pktgen4learner.c ${SRCS})
-target_link_libraries(pktgen4learner netpaxos ${LIBPAXOS_LINKER_LIBS})
 
 add_executable(sw_coordinator coordinator.c ${SRCS})
 target_link_libraries(sw_coordinator netpaxos ${LIBPAXOS_LINKER_LIBS})

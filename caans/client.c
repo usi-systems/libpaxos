@@ -10,10 +10,10 @@
 #include <time.h>
 #include <string.h>
 #include "message.h"
-
-#define NS_PER_S 1000000000
-#define AGGREGATE
-#define NUM_OF_THREAD 2
+#include <math.h>
+#define BILLION 1000000000
+#define ON 1
+#define OFF 0
 
 struct client_context {
     struct event_base *base;
@@ -21,16 +21,19 @@ struct client_context {
     enum Operation op;
     uint16_t command_id;
     int sock;
-    double latency;
-    int nb_messages;
 };
 
-
-int
-timespec_diff(struct timespec *result, struct timespec *end,struct timespec *start)
+static int at_second = 0;
+static int num_messages = 0;
+static int flag = 0;
+static struct timespec time_sum = {0, 0};
+static struct timespec last_time = {0,0};
+static int timeout_flag = 0;
+static int tm = 0;
+int timespec_diff(struct timespec *result, struct timespec *end,struct timespec *start)
 {
     if (end->tv_nsec < start->tv_nsec) {
-        result->tv_nsec =  NS_PER_S + end->tv_nsec - start->tv_nsec;
+        result->tv_nsec =  BILLION + end->tv_nsec - start->tv_nsec;
         result->tv_sec = end->tv_sec - start->tv_sec - 1;
     } else {
         result->tv_nsec = end->tv_nsec - start->tv_nsec;
@@ -63,74 +66,33 @@ void handle_signal(evutil_socket_t fd, short what, void *arg)
     event_base_loopbreak(ctx->base);
 }
 
-
-void random_string(char *s)
-{
-    int n = rand() % ('z' - 'a' + 1);
-    *s = n + 'a';
-}
-
-uint16_t command_to_thread(char *s)
-{
-    unsigned long r = hash(s);
-    return ((r % NUM_OF_THREAD));
-}
-
-void send_to_addr(struct client_context *ctx) {
+void send_to_addr(struct client_context *ctx, int timeout_flag) {
     socklen_t addr_size = sizeof (ctx->server_addr);
     struct command cmd;
     cmd.command_id = ctx->command_id++;
     cmd.op = ctx->op;
-  
-    if (cmd.op == SET){
-        clock_gettime(CLOCK_REALTIME, &cmd.ts);
-
-        char key, value;
-        random_string(&key);
-        random_string(&value);
-        memset(cmd.content, key, 15);
-        cmd.content[15] = '\0';
-        memset(cmd.content+16, value, 15);
-        cmd.content[31] = '\0';
-
-        cmd.thread_id = command_to_thread(&key);
-
-        //printf ("SET key %c value %c thread_id %d\n", key, value, cmd.thread_id);
-        
-    }
-    else if (cmd.op == GET)
+    
+    if(timeout_flag == 1){
+        cmd.ts.tv_sec = last_time.tv_sec;
+        cmd.ts.tv_nsec = last_time.tv_nsec;
+    
+    } else if (timeout_flag == 0)
     {
         clock_gettime(CLOCK_REALTIME, &cmd.ts);
-
-        char key;
-        random_string(&key);
-        memset(cmd.content, key, 15);
-        cmd.content[15] = '\0';
-        memset(cmd.content+16, '\0', 15);
-        cmd.content[31] = '\0';
-
-        cmd.thread_id = command_to_thread(&key);
-        //printf ("GET key %c thread_id %d\n", key, cmd.thread_id);
+        last_time.tv_sec = cmd.ts.tv_sec;
+        last_time.tv_nsec = cmd.ts.tv_nsec;
+        
     }
-    
-
-    int msg_size = sizeof cmd;   
-    int n = sendto(ctx->sock , &cmd, msg_size, 0, (struct sockaddr *)&ctx->server_addr, addr_size); //server_addr: dest addr (proxy addr)
+    memset(cmd.content, 'k', 15);
+    cmd.content[15] = '\0';
+    memset(cmd.content+16, 'v', 15);
+    cmd.content[31] = '\0';
+    int msg_size = sizeof (cmd);
+    int n = sendto(ctx->sock , &cmd, msg_size, 0, (struct sockaddr *)&ctx->server_addr, addr_size);
     if (n < 0) {
         perror("sendto");
     }
     
-}
-
-
-void on_perf(evutil_socket_t fd, short event, void *arg) {
-    struct client_context *ctx = arg;
-    if (ctx->nb_messages > 0) {
-        double average_latency = ctx->latency / ctx->nb_messages / NS_PER_S;
-        printf("%.09f\n", average_latency);
-    }
-    ctx->latency = 0.0;
-    ctx->nb_messages = 0;
 }
 
 void on_read(evutil_socket_t fd, short event, void *arg) {
@@ -141,26 +103,74 @@ void on_read(evutil_socket_t fd, short event, void *arg) {
         struct sockaddr_in remote;
         socklen_t addrlen = sizeof(remote);
         struct command response;
-        int n = recvfrom(fd, &response, sizeof(response), 0, (struct sockaddr*)&remote, &addrlen);
-        if (n < 0)
-            perror("recvfrom");
-        struct timespec end;
-        clock_gettime(CLOCK_REALTIME, &end);
-        struct timespec result;
-        if ( timespec_diff(&result, &end, &response.ts) < 1) {
-#ifdef AGGREGATE
-            ctx->latency += result.tv_sec*NS_PER_S + result.tv_nsec;
-            ctx->nb_messages++;
-#else
-            printf("%ld.%09ld\n", result.tv_sec, result.tv_nsec);
-#endif
+        fd_set fds;
+        FD_ZERO (&fds);
+        FD_SET (fd, &fds);
+        struct timeval timeout;
+        timeout.tv_sec = 0;
+        timeout.tv_usec = tm;
+       
+        int retval = select (fd+1, &fds, NULL, NULL, &timeout);
+    
+        if (retval == -1)
+        {
+            perror ("select");
         }
+        else if (retval == 0){
+            printf("socket timeout\n");
+            timeout_flag = 1;
+        }
+        else{
+            if (FD_ISSET(fd, &fds)){
+                int recvlen = recvfrom(fd, &response, sizeof(response), 0, (struct sockaddr*)&remote, &addrlen);
+                if (recvlen < 0)
+                    perror ("recvfrom");
+                struct timespec end;
+                clock_gettime(CLOCK_REALTIME, &end);
+                struct timespec result;
+                if(flag == ON)
+                {
+                    if (timespec_diff(&result, &end, &response.ts) < 1)
+                        printf("%ld.%09ld\n", result.tv_sec, result.tv_nsec);
+
+                }
+                else if (flag == OFF)
+                {
+                    if (timespec_diff(&result, &end, &response.ts) < 1)
+                    {
+                        time_sum = timespec_add(&time_sum, &result);
+                        num_messages++;
+                    }
+
+                }
+                timeout_flag = 0;
+            }
+        }
+        timeout.tv_sec = 0;
+        timeout.tv_usec = tm;
     }
-    send_to_addr(ctx);
+    send_to_addr(ctx, timeout_flag);
+}
+void on_perf (evutil_socket_t fd, short event, void *arg) {
+    if (flag == OFF)
+    {
+        double sum = 0.0, agv_latency = 0;
+        sum = timespec_double(time_sum);
+        if (num_messages == 0 || sum == 0)
+             printf("%4d %6d 0\n", at_second++, num_messages);
+        else
+        {
+            agv_latency = sum / num_messages;
+            printf("%4d %6d %f\n", at_second++, num_messages, agv_latency);
+            num_messages= 0;
+            time_sum.tv_sec = 0;
+            time_sum.tv_nsec = 0;
+
+        }
+         
+    }
     
 }
-
-
 int new_dgram_socket() {
     int s = socket(AF_INET, SOCK_DGRAM, 0);
     if (s < 0) {
@@ -187,9 +197,6 @@ int main(int argc, char *argv[])
     }
 
     struct client_context ctx;
-    ctx.latency = 0.0;
-    ctx.nb_messages = 0;
-    srand(time(NULL));
     ctx.op = GET;
     flag = OFF;
     if (argc > 3) {
@@ -212,32 +219,27 @@ int main(int argc, char *argv[])
     int sock = new_dgram_socket();
     evutil_make_socket_nonblocking(sock);
     ctx.sock = sock;
-    struct event *ev_read, *ev_sigint, *ev_sigterm;
+    struct event *ev_read, *ev_sigint, *ev_sigterm, *ev_latency;
+    ev_read = event_new(ctx.base, sock, EV_READ|EV_PERSIST, on_read, &ctx);
+    event_add(ev_read, NULL);
 
+    ev_latency = event_new(ctx.base, -1, EV_TIMEOUT|EV_PERSIST, on_perf, &ctx);
     struct timeval one_second = {1, 0};
-    ev_read = event_new(ctx.base, sock, EV_READ|EV_PERSIST|EV_TIMEOUT, on_read, &ctx);
-    event_add(ev_read, &one_second);
+    event_add(ev_latency, &one_second);
 
     ev_sigint = evsignal_new(ctx.base, SIGINT, handle_signal, &ctx);
     evsignal_add(ev_sigint, NULL);
 
     ev_sigterm = evsignal_new(ctx.base, SIGTERM, handle_signal, &ctx);
     evsignal_add(ev_sigterm, NULL);
-#ifdef AGGREGATE
-    struct timeval hundred_ms = {0, 10000};
-    struct event *ev_perf = event_new(ctx.base, -1, EV_TIMEOUT|EV_PERSIST, on_perf, &ctx);
-    event_add(ev_perf, &hundred_ms);
-#endif
-    send_to_addr(&ctx);
+
+    send_to_addr(&ctx, timeout_flag);
 
     event_base_dispatch(ctx.base);
 
     event_free(ev_read);
     event_free(ev_sigint);
     event_free(ev_sigterm);
-#ifdef AGGREGATE
-    event_free(ev_perf);
-#endif
     event_base_free(ctx.base);
 
     return 0;
