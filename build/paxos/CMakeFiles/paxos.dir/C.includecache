@@ -1,0 +1,46 @@
+#IncludeRegexLine: ^[ 	]*#[ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+../paxos/include/khash.h
+khash.h
+../paxos/include/khash.h
+stdlib.h
+-
+string.h
+-
+limits.h
+-
+
+../paxos/include/learner.h
+paxos.h
+../paxos/include/paxos.h
+
+../paxos/include/paxos.h
+stdarg.h
+-
+sys/types.h
+-
+paxos_types.h
+../paxos/include/paxos_types.h
+
+../paxos/include/paxos_types.h
+stdint.h
+-
+
+/home/vagrant/libpaxos/paxos/learner.c
+learner.h
+/home/vagrant/libpaxos/paxos/learner.h
+khash.h
+/home/vagrant/libpaxos/paxos/khash.h
+stdlib.h
+-
+string.h
+-
+assert.h
+-
+

@@ -1,0 +1,17 @@
+/home/vagrant/libpaxos/build/sample/CMakeFiles/acceptor.dir
+/home/vagrant/libpaxos/build/caans/CMakeFiles/client_caans.dir
+/home/vagrant/libpaxos/build/sample/CMakeFiles/counter.dir
+/home/vagrant/libpaxos/build/evpaxos/CMakeFiles/evpaxos.dir
+/home/vagrant/libpaxos/build/unit/gtest/CMakeFiles/gtest-all.dir
+/home/vagrant/libpaxos/build/sample/CMakeFiles/learner.dir
+/home/vagrant/libpaxos/build/net/CMakeFiles/netpaxos.dir
+/home/vagrant/libpaxos/build/paxos/CMakeFiles/paxos.dir
+/home/vagrant/libpaxos/build/caans/CMakeFiles/pktgen4learner.dir
+/home/vagrant/libpaxos/build/sample/CMakeFiles/proposer.dir
+/home/vagrant/libpaxos/build/sample/CMakeFiles/proxy.dir
+/home/vagrant/libpaxos/build/caans/CMakeFiles/proxy_caans.dir
+/home/vagrant/libpaxos/build/sample/CMakeFiles/replica.dir
+/home/vagrant/libpaxos/build/caans/CMakeFiles/sequencer.dir
+/home/vagrant/libpaxos/build/caans/CMakeFiles/server_caans.dir
+/home/vagrant/libpaxos/build/caans/CMakeFiles/sw_acceptor.dir
+/home/vagrant/libpaxos/build/caans/CMakeFiles/sw_coordinator.dir

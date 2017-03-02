@@ -27,6 +27,8 @@ static uint32_t max_received;
 static struct mmsghdr tx_buffer[VLEN];
 static struct iovec tx_iovecs[VLEN];
 
+
+
 static void
 send_paxos_message(struct paxos_ctx* ctx, paxos_message* msg, int msg_size) {
     char buffer[BUFSIZE];
@@ -70,17 +72,25 @@ void check_holes(evutil_socket_t fd, short event, void *arg) {
     event_add(ctx->hole_watcher, &ctx->tv);
 }
 
-void on_paxos_accepted(paxos_message *msg, struct paxos_ctx *ctx) {
-    learner_receive_accepted(ctx->learner_state, &msg->u.accepted);
+void on_paxos_accepted(paxos_message *msg, struct learner_thread *l) {
+
+    learner_receive_accepted(l->ctx->learner_state, &msg->u.accepted);
     paxos_accepted chosen_value;
-    while (learner_deliver_next(ctx->learner_state, &chosen_value)) {
-        ctx->deliver(
+    pthread_mutex_lock (&levelb_mutex);
+    while (learner_deliver_next(l->ctx->learner_state, &chosen_value)) {
+        
+        int tid = l->learner_id;
+        //printf("I am here %d\n", tid);
+        l->ctx->deliver(
+            tid,
             chosen_value.iid,
             chosen_value.value.paxos_value_val,
             chosen_value.value.paxos_value_len,
-            ctx->deliver_arg);
+            l->ctx->deliver_arg);
         paxos_accepted_destroy(&chosen_value);
+        
     }
+    pthread_mutex_unlock (&levelb_mutex);
 }
 
 void on_paxos_promise(paxos_message *msg, struct paxos_ctx *ctx) {
@@ -106,7 +116,8 @@ void on_paxos_preempted(paxos_message *msg, struct paxos_ctx *ctx) {
 }
 
 void learner_read_cb(evutil_socket_t fd, short what, void *arg) {
-    struct paxos_ctx *ctx = arg;
+    //printf("read\n");
+    struct learner_thread *l = arg;
     if (what&EV_READ) {
         int retval;
         int i;
@@ -127,13 +138,13 @@ void learner_read_cb(evutil_socket_t fd, short what, void *arg) {
 
             switch(msg.type) {
                 case PAXOS_ACCEPTED:
-                    on_paxos_accepted(&msg, ctx);
+                    on_paxos_accepted(&msg, l);
                     break;
                 case PAXOS_PROMISE:
-                    on_paxos_promise(&msg, ctx);
+                    on_paxos_promise(&msg, l->ctx);
                     break;
                 case PAXOS_PREEMPTED:
-                    on_paxos_preempted(&msg, ctx);
+                    on_paxos_preempted(&msg, l->ctx);
                     break;
                 default:
                     paxos_log_debug("No handler for message type %d\n", msg.type);
@@ -143,25 +154,37 @@ void learner_read_cb(evutil_socket_t fd, short what, void *arg) {
 
     }
 }
+struct learner* create_learner_new (int acceptors){
+    struct learner* l;
+    l = learner_new(acceptors);
+    return l;
 
-
-struct paxos_ctx *make_learner(struct netpaxos_configuration *conf,
-                                        deliver_function f, void *arg)
+}
+void set_instance_id (struct learner* l, iid_t iid){
+    learner_set_instance_id(l, 0);
+}
+struct learner_thread*
+make_learner (int learner_id, struct netpaxos_configuration *conf, deliver_function f, void *arg)
 {
-    struct paxos_ctx *ctx = malloc( sizeof(struct paxos_ctx));
-    init_paxos_ctx(ctx);
-    ctx->base = event_base_new();
+    struct learner_thread* l;
 
-    evutil_socket_t sock = create_server_socket(conf->learner_port);
+    l = malloc (sizeof(struct learner_thread));
+    l->ctx = malloc(sizeof(struct paxos_ctx));
+    init_paxos_ctx(l->ctx);
+
+    l->ctx->base = event_base_new();
+    l->learner_id = learner_id;
+    //printf("I am here . Thread learner %d\n",learner_id);
+    evutil_socket_t sock = create_server_socket(conf->learner_port[learner_id]);
     evutil_make_socket_nonblocking(sock);
-    ctx->sock = sock;
-    setRcvBuf(ctx->sock);
-    if (net_ip__is_multicast_ip(conf->learner_address)) {
-        subcribe_to_multicast_group(conf->learner_address, sock);
+    l->ctx->sock = sock;
+   // printf("Thread learner %d socket %d\n", learner_id, sock);
+    setRcvBuf(l->ctx->sock);
+    if (net_ip__is_multicast_ip(conf->learner_address[learner_id])) {
+        subcribe_to_multicast_group(conf->learner_address[learner_id], sock);
     }
 
-    ip_to_sockaddr(conf->acceptor_address, conf->acceptor_port, &ctx->acceptor_sin);
-
+    ip_to_sockaddr(conf->acceptor_address, conf->acceptor_port, &(l->ctx->acceptor_sin));
     int i;
     memset(msgs, 0, sizeof(msgs));
     for (i = 0; i < VLEN; i++) {
@@ -174,31 +197,20 @@ struct paxos_ctx *make_learner(struct netpaxos_configuration *conf,
     timeout.tv_nsec = 0;
 
     max_received = 0;
+    l->ctx->ev_read = event_new(l->ctx->base, sock, EV_READ|EV_PERSIST,learner_read_cb, l);
+    event_add(l->ctx->ev_read, NULL);
 
-    time_t t;
-    srand((unsigned) time(&t));
+    //l->ctx->learner_state = learner_new(conf->acceptor_count);
+    //learner_set_instance_id(l->ctx->learner_state, 0);
+    l->ctx->deliver = f;
+    l->ctx->deliver_arg = arg;
 
-    ctx->ev_read = event_new(ctx->base, sock, EV_READ|EV_PERSIST,
-        learner_read_cb, ctx);
-    event_add(ctx->ev_read, NULL);
-
-    ctx->ev_sigint = evsignal_new(ctx->base, SIGINT, handle_signal, ctx);
-    evsignal_add(ctx->ev_sigint, NULL);
-
-    ctx->ev_sigterm = evsignal_new(ctx->base, SIGTERM, handle_signal, ctx);
-    evsignal_add(ctx->ev_sigterm, NULL);
-
-    ctx->learner_state = learner_new(conf->acceptor_count);
-    learner_set_instance_id(ctx->learner_state, 0);
-    ctx->deliver = f;
-    ctx->deliver_arg = arg;
-
-    ctx->tv.tv_sec = 1;
+    l->ctx->tv.tv_sec = 1;
     /* check holes every 1s + ~100 ms */
-    ctx->tv.tv_usec = 100000 * (rand() % 7);
+    l->ctx->tv.tv_usec = 100000 * (rand() % 7);
 
-    ctx->hole_watcher = evtimer_new(ctx->base, check_holes, ctx);
-    event_add(ctx->hole_watcher, &ctx->tv);
+    l->ctx->hole_watcher = evtimer_new(l->ctx->base, check_holes, l->ctx);
+    event_add(l->ctx->hole_watcher, &(l->ctx->tv));
 
-    return ctx;
+    return l;
 }

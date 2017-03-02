@@ -26,10 +26,18 @@ void handle_signal(evutil_socket_t fd, short what, void *arg)
 void init_paxos_ctx(struct paxos_ctx *ctx)
 {
     ctx->sock = 0;
-    memset(&ctx->acceptor_sin, 0, sizeof(struct sockaddr_in));
-    memset(&ctx->learner_sin, 0, sizeof(struct sockaddr_in));
+    ctx->at_second = 0;
+    ctx->message_per_second = 0;
     memset(&ctx->proposer_sin, 0, sizeof(struct sockaddr_in));
     memset(&ctx->coordinator_sin, 0, sizeof(struct sockaddr_in));
+    memset(&ctx->acceptor_sin, 0, sizeof(struct sockaddr_in));
+    ctx->learner_sin = calloc(NUM_OF_THREAD, sizeof(struct sockaddr_in));
+    int i;
+    for (i= 0; i < NUM_OF_THREAD; i++)
+    {
+        memset(&ctx->learner_sin[i], 0, sizeof(struct sockaddr_in));
+    }
+    
     ctx->base = NULL;
     ctx->ev_send = NULL;
     ctx->ev_read = NULL;
@@ -75,4 +83,10 @@ static void
 sequencer_free(struct sequencer* sq)
 {
     free(sq);
+}
+
+void on_perf(evutil_socket_t fd, short event, void *arg) {
+    struct paxos_ctx *ctx = arg;
+    printf("%4d %8d\n", ctx->at_second++, ctx->message_per_second);
+    ctx->message_per_second = 0;
 }

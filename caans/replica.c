@@ -11,7 +11,7 @@
 
 #include "application_proxy.h"
 
-void deliver(unsigned int inst, char* val, size_t size, void* arg) {
+void deliver(int tid, unsigned int inst, char* val, size_t size, void* arg) {
     printf("\n");
     int i;
     for (i = 0; i < size; i++)

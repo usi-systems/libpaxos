@@ -30,13 +30,15 @@ static void flush_buffer(evutil_socket_t fd, short what, void *arg) {
     tx_buffer_len = 0;
 }
 
-void submit(struct paxos_ctx *ctx, char *value, int size) {
+void submit(struct paxos_ctx *ctx, char *value, int size, uint16_t thread_id) {
+    //printf("before submit, thread_id is  %d\n", thread_id);
     struct paxos_message msg = {
         .type = PAXOS_ACCEPT,
         .u.accept.iid = 1,
         .u.accept.ballot = 0,
         .u.accept.value_ballot = 0,
         .u.accept.aid = 0,
+        .u.accept.thread_id  = thread_id,
         .u.accept.value.paxos_value_len = size,
         .u.accept.value.paxos_value_val = value
     };

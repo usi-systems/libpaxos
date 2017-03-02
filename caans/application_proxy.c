@@ -13,13 +13,13 @@
 
 #define VLEN 1024
 #define TIMEOUT 1
-
+#define REQ_SIZE 56
 static struct mmsghdr msgs[VLEN];
 static struct iovec iovecs[VLEN];
-static char bufs[VLEN][BUFSIZE+1];
+static char bufs[VLEN][REQ_SIZE+1];
 static struct sockaddr_in remotes[VLEN];
 static struct timespec timeout;
-
+uint16_t t_id = 0;
 
 void handle_request(evutil_socket_t fd, short event, void *arg) {
     struct application_ctx *app = arg;
@@ -32,12 +32,16 @@ void handle_request(evutil_socket_t fd, short event, void *arg) {
 
     for (i = 0; i < retval; i++) {
         int recv_bytes = iovecs[i].iov_len;
-        struct client_request *req = create_client_request(bufs[i], recv_bytes);
+        struct client_request *req = create_client_request(bufs[i], recv_bytes, &t_id);
         req->cliaddr = remotes[i];
         // hexdump((char*)req, req->length);
-        submit(app->paxos, (char*)req, message_length(req));
+        submit(app->paxos, (char*)req, message_length(req), t_id);
         app->current_request_id++;
     }
+    /*if (t_id == NUM_OF_THREAD -1){
+        printf("thread_id now is %d\n", t_id);
+        t_id = 0;
+    }*/
 }
 
 
@@ -51,7 +55,7 @@ void start_proxy(struct application_ctx *ctx, int proxy_port) {
     size_t sa_len = sizeof(struct sockaddr_in);
     for (i = 0; i < VLEN; i++) {
         iovecs[i].iov_base          = bufs[i];
-        iovecs[i].iov_len           = BUFSIZE;
+        iovecs[i].iov_len           = REQ_SIZE;
         msgs[i].msg_hdr.msg_iov     = &iovecs[i];
         msgs[i].msg_hdr.msg_iovlen  = 1;
         msgs[i].msg_hdr.msg_name    = &remotes[i];

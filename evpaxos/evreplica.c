@@ -41,12 +41,12 @@ struct evpaxos_replica
 };
 
 static void
-evpaxos_replica_deliver(unsigned iid, char* value, size_t size, void* arg)
+evpaxos_replica_deliver(int tid, unsigned iid, char* value, size_t size, void* arg)
 {
 	struct evpaxos_replica* r = arg;
 	evproposer_set_instance_id(r->proposer, iid);
 	if (r->deliver)
-		r->deliver(iid, value, size, r->arg);
+		r->deliver(0, iid, value, size, r->arg);
 }
 
 struct evpaxos_replica*
