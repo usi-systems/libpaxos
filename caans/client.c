@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <event2/event.h>
 #include <sys/socket.h>
+#include <sys/select.h>
+#include <errno.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <signal.h>
@@ -23,6 +25,7 @@ struct client_context {
     int nb_messages;
 };
 
+
 int
 timespec_diff(struct timespec *result, struct timespec *end,struct timespec *start)
 {
@@ -37,13 +40,29 @@ timespec_diff(struct timespec *result, struct timespec *end,struct timespec *sta
   return end->tv_sec < start->tv_sec;
 }
 
-
+struct timespec timespec_add(struct timespec * time1, struct timespec *time2)
+{
+    struct timespec sum;
+    sum.tv_sec = time1->tv_sec + time2->tv_sec;
+    sum.tv_nsec = time1->tv_nsec + time2->tv_nsec;
+    if(sum.tv_nsec >= BILLION)
+    {
+        sum.tv_sec++;
+        sum.tv_nsec = sum.tv_nsec - BILLION;
+    }
+    return sum;
+}
+double timespec_double(struct timespec time)
+{
+    return ((double) time.tv_sec + ((double)time.tv_nsec / BILLION));
+}
 void handle_signal(evutil_socket_t fd, short what, void *arg)
 {
     printf("Caught signal\n");
     struct client_context *ctx = arg;
     event_base_loopbreak(ctx->base);
 }
+
 
 void random_string(char *s)
 {
@@ -62,6 +81,7 @@ void send_to_addr(struct client_context *ctx) {
     struct command cmd;
     cmd.command_id = ctx->command_id++;
     cmd.op = ctx->op;
+  
     if (cmd.op == SET){
         clock_gettime(CLOCK_REALTIME, &cmd.ts);
 
@@ -99,6 +119,7 @@ void send_to_addr(struct client_context *ctx) {
     if (n < 0) {
         perror("sendto");
     }
+    
 }
 
 
@@ -114,7 +135,9 @@ void on_perf(evutil_socket_t fd, short event, void *arg) {
 
 void on_read(evutil_socket_t fd, short event, void *arg) {
     struct client_context *ctx = arg;
-    if (event&EV_READ) {
+
+    if (event&EV_READ)
+    {
         struct sockaddr_in remote;
         socklen_t addrlen = sizeof(remote);
         struct command response;
@@ -137,6 +160,7 @@ void on_read(evutil_socket_t fd, short event, void *arg) {
     
 }
 
+
 int new_dgram_socket() {
     int s = socket(AF_INET, SOCK_DGRAM, 0);
     if (s < 0) {
@@ -150,8 +174,8 @@ int new_dgram_socket() {
 int main(int argc, char *argv[])
 {
     if (argc < 3) {
-        printf("Syntax: %s [hostname] [port] [GET/SET]\n"
-               "Example: %s 192.168.1.110 6789 GET\n",argv[0], argv[0]);
+        printf("Syntax: %s [hostname] [port] [TIMEOUT(µs)] [GET/SET] [ON/OFF]\n"
+               "Example: %s 192.168.1.110 6789 300 GET OFF \n",argv[0], argv[0]);
         return 1;
     }
 
@@ -167,11 +191,17 @@ int main(int argc, char *argv[])
     ctx.nb_messages = 0;
     srand(time(NULL));
     ctx.op = GET;
+    flag = OFF;
     if (argc > 3) {
-        if (strcmp(argv[3], "SET") == 0) {
+        tm = atoi(argv[3]);
+        if (strcmp(argv[4], "SET") == 0) {
             ctx.op = SET;
         }
+        if (strcmp(argv[5], "ON") == 0){
+            flag = ON;
+        }
     }
+
     ctx.command_id = 0;
     memset(&ctx.server_addr, 0, sizeof ctx.server_addr);
     ctx.server_addr.sin_family = AF_INET;
