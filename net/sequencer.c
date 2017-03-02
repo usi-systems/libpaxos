@@ -21,26 +21,27 @@ sequencer_handle_proposal(struct paxos_ctx *ctx, char* buf, int size)
     // hexdump(buf, size);
     int n = sendto(ctx->sock, buf, size, 0,
         (struct sockaddr *)&ctx->acceptor_sin, sizeof(ctx->acceptor_sin));
+   // printf("packet accept has size of %d\n", size); size 102
     if (n < 0)
         error_at_line(1, errno, __FILE__, __LINE__, "%s\n", strerror(errno));
 }
 
 
-static void
+/*static void
 handle_accepted(struct paxos_ctx *ctx, char* buf, int size, struct sockaddr_in *remote, size_t socklen)
 {
     struct paxos_message msg;
     unpack_paxos_message(&msg, buf);
     char *val = (char*)msg.u.accepted.value.paxos_value_val;
-    /* Skip command ID and client address */
+    // Skip command ID and client address 
     char *retval = (val + sizeof(uint16_t) + sizeof(struct sockaddr_in));
     size_t retsize = size - sizeof(msg.u.accepted) + sizeof(uint16_t) + socklen;
-    int n = sendto(ctx->sock, retval, retsize, 0,
-        (struct sockaddr *)remote, socklen);
+     printf("packet accepted has size of %zd\n", retsize);
+    int n = sendto(ctx->sock, retval, retsize, 0, (struct sockaddr *)remote, socklen);
     ctx->message_per_second++;
     if (n < 0)
         error_at_line(1, errno, __FILE__, __LINE__, "%s\n", strerror(errno));
-}
+}*/
 
 static void
 handle_packet_in(evutil_socket_t fd, short what, void *arg)
@@ -62,7 +63,7 @@ handle_packet_in(evutil_socket_t fd, short what, void *arg)
                 sequencer_handle_proposal(ctx, buf, n);
                 break;
             case PAXOS_ACCEPTED: // use ACCEPTED for benchmarking
-                handle_accepted(ctx, buf, n, &remote, len);
+                //handle_accepted(ctx, buf, n, &remote, len);
                 break;
             default:
                 break;

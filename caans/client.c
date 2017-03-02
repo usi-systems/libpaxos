@@ -11,6 +11,7 @@
 
 #define NS_PER_S 1000000000
 #define AGGREGATE
+#define NUM_OF_THREAD 2
 
 struct client_context {
     struct event_base *base;
@@ -44,23 +45,62 @@ void handle_signal(evutil_socket_t fd, short what, void *arg)
     event_base_loopbreak(ctx->base);
 }
 
+void random_string(char *s)
+{
+    int n = rand() % ('z' - 'a' + 1);
+    *s = n + 'a';
+}
+
+uint16_t command_to_thread(char *s)
+{
+    unsigned long r = hash(s);
+    return ((r % NUM_OF_THREAD));
+}
+
 void send_to_addr(struct client_context *ctx) {
     socklen_t addr_size = sizeof (ctx->server_addr);
     struct command cmd;
     cmd.command_id = ctx->command_id++;
     cmd.op = ctx->op;
-    clock_gettime(CLOCK_REALTIME, &cmd.ts);
-    memset(cmd.content, 'k', 15);
-    cmd.content[15] = '\0';
-    memset(cmd.content+16, 'v', 15);
-    cmd.content[31] = '\0';
+    if (cmd.op == SET){
+        clock_gettime(CLOCK_REALTIME, &cmd.ts);
+
+        char key, value;
+        random_string(&key);
+        random_string(&value);
+        memset(cmd.content, key, 15);
+        cmd.content[15] = '\0';
+        memset(cmd.content+16, value, 15);
+        cmd.content[31] = '\0';
+
+        cmd.thread_id = command_to_thread(&key);
+
+        //printf ("SET key %c value %c thread_id %d\n", key, value, cmd.thread_id);
+        
+    }
+    else if (cmd.op == GET)
+    {
+        clock_gettime(CLOCK_REALTIME, &cmd.ts);
+
+        char key;
+        random_string(&key);
+        memset(cmd.content, key, 15);
+        cmd.content[15] = '\0';
+        memset(cmd.content+16, '\0', 15);
+        cmd.content[31] = '\0';
+
+        cmd.thread_id = command_to_thread(&key);
+        //printf ("GET key %c thread_id %d\n", key, cmd.thread_id);
+    }
+    
 
     int msg_size = sizeof cmd;   
-    int n = sendto(ctx->sock , &cmd, msg_size, 0, (struct sockaddr *)&ctx->server_addr, addr_size);
+    int n = sendto(ctx->sock , &cmd, msg_size, 0, (struct sockaddr *)&ctx->server_addr, addr_size); //server_addr: dest addr (proxy addr)
     if (n < 0) {
         perror("sendto");
     }
 }
+
 
 void on_perf(evutil_socket_t fd, short event, void *arg) {
     struct client_context *ctx = arg;
@@ -94,6 +134,7 @@ void on_read(evutil_socket_t fd, short event, void *arg) {
         }
     }
     send_to_addr(ctx);
+    
 }
 
 int new_dgram_socket() {
@@ -124,7 +165,7 @@ int main(int argc, char *argv[])
     struct client_context ctx;
     ctx.latency = 0.0;
     ctx.nb_messages = 0;
-
+    srand(time(NULL));
     ctx.op = GET;
     if (argc > 3) {
         if (strcmp(argv[3], "SET") == 0) {
@@ -145,7 +186,6 @@ int main(int argc, char *argv[])
 
     struct timeval one_second = {1, 0};
     ev_read = event_new(ctx.base, sock, EV_READ|EV_PERSIST|EV_TIMEOUT, on_read, &ctx);
-
     event_add(ev_read, &one_second);
 
     ev_sigint = evsignal_new(ctx.base, SIGINT, handle_signal, &ctx);

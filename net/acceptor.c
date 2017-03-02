@@ -36,11 +36,14 @@ void acceptor_handle_accept(struct paxos_ctx *ctx, struct paxos_message *msg,
 
     if (acceptor_receive_accept(ctx->acceptor_state, accept, &out) != 0) {
         if (out.type == PAXOS_ACCEPTED) {
+            int thread_id = out.u.accept.thread_id;
             size_t msg_len = pack_paxos_message(ctx->buffer, &out);
+
             int n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
-                (struct sockaddr *)&ctx->learner_sin, sizeof(ctx->learner_sin));
+                (struct sockaddr *)&ctx->learner_sin[thread_id], sizeof(ctx->learner_sin[thread_id]));
             if (n < 0)
                 error_at_line(1, errno, __FILE__, __LINE__, "%s\n", strerror(errno));
+            
             n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
                 (struct sockaddr *)remote, socklen);
             if (n < 0)
@@ -106,7 +109,7 @@ void acceptor_read(evutil_socket_t fd, short what, void *arg)
         } else if (msg.type == PAXOS_REPEAT) {
             acceptor_handle_repeat(ctx, &msg, &remote, len);
         } else if (msg.type == PAXOS_ACCEPTED) { // use ACCEPTED for benchmarking
-            acceptor_handle_benchmark(ctx, &msg, n, &remote, len);
+            //acceptor_handle_benchmark(ctx, &msg, n, &remote, len);
         }
 
         paxos_message_destroy(&msg);
@@ -131,7 +134,15 @@ struct paxos_ctx *make_acceptor(struct netpaxos_configuration *conf, int aid)
         subcribe_to_multicast_group(conf->acceptor_address, sock);
     }
 
-    ip_to_sockaddr(conf->learner_address, conf->learner_port, &ctx->learner_sin);
+    // ip_to_sockaddr(conf->learner_address, conf->learner_port, &ctx->learner_sin);
+    int i;
+    for (i = 0; i < conf->learner_count ; i++)
+    {
+         ip_to_sockaddr( conf->learner_address[i],
+                    conf->learner_port[i],
+                    &ctx->learner_sin[i]);
+    }
+
     ip_to_sockaddr( conf->coordinator_address, conf->coordinator_port,
                     &ctx->coordinator_sin );
 

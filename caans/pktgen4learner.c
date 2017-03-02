@@ -62,7 +62,7 @@ void send_to_addr(struct client_context *ctx) {
     memset(cmd.content+16, 'v', 15);
     cmd.content[31] = '\0';
 #endif
-    struct client_request *req = create_client_request((char*)&cmd, sizeof(cmd));
+    struct client_request *req = create_client_request((char*)&cmd, sizeof(cmd), 0);
     req->cliaddr = ctx->client_addr;
 
     struct paxos_message msg = {

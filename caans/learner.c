@@ -5,6 +5,8 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <pthread.h>
+#include <signal.h>
 #include "netpaxos.h"
 #include "netutils.h"
 #include "configuration.h"
@@ -12,13 +14,17 @@
 #include "message.h"
 #include "leveldb_context.h"
 
-void on_perf(evutil_socket_t fd, short event, void *arg) {
-    struct application_ctx *app = arg;
-    printf("%4d %8d\n", app->at_second++, app->message_per_second);
-    app->message_per_second = 0;
-}
+static int node_id = 0;
+static int node_count = 0;
+static int enable_leveldb = 0;
+static int amount_of_write = 0;
+static char* file_config;
+struct netpaxos_configuration conf;
 
-void deliver(unsigned int inst, char* val, size_t size, void* arg) {
+struct leveldb_ctx *commond_levelb;
+struct learner* commond_learner_state;
+
+static void deliver(int tid, unsigned int inst, char* val, size_t size, void* arg) {
     struct application_ctx *app = arg;
     app->message_per_second++;
     if (size <= 0)
@@ -26,11 +32,13 @@ void deliver(unsigned int inst, char* val, size_t size, void* arg) {
     struct client_request *req = (struct client_request*)val;
 
     struct command *cmd = (struct command*)(val + sizeof(struct client_request) - 1);
+    
+   //pthread_mutex_lock (&levelb_mutex);
     if (app->enable_leveldb) {
         char *key = cmd->content;
         if (cmd->op == SET) {
             char *value = cmd->content + 16;
-            paxos_log_debug("SET(%s, %s)", key, value);
+            printf("SET(%s, %s) thread_id %d\n", key, value, tid);
             int res = add_entry(app->leveldb, 0, key, 16, value, 16);
             if (res) {
                 fprintf(stderr, "Add entry failed.\n");
@@ -46,12 +54,14 @@ void deliver(unsigned int inst, char* val, size_t size, void* arg) {
             } 
             else {
                 if (stored_value != NULL) {
-                    paxos_log_debug("Stored value %s, size %zu", stored_value, vsize);
+                    printf("Stored value %s, size %zu at thread_id %d\n", stored_value, vsize, tid);
                     free(stored_value);
                 }
             }
         }
+        //leveldb_close(app->leveldb->db);
     }
+   // pthread_mutex_unlock (&levelb_mutex);
     /* Skip command ID and client address */
     char *retval = (val + sizeof(uint16_t) + sizeof(struct sockaddr_in));
 
@@ -67,44 +77,48 @@ void deliver(unsigned int inst, char* val, size_t size, void* arg) {
     }
 }
 
+void on_perf(evutil_socket_t fd, short event, void *arg) {
+    struct application_ctx *app = arg;
+    printf("%4d %8d\n", app->at_second++, app->message_per_second);
+    app->message_per_second = 0;
+
+}
+
 void usage(char *prog) {
     printf("Usage: %s configuration-file learner_id number_of_learner [enable_leveldb]\n", prog);
 }
 
+static void
+learner_thread_free(struct learner_thread* l, struct application_ctx* app, struct netpaxos_configuration conf)
+{
+    //bufferevent_free
+    event_free(l->ev_perf);
+    //event_base_free(l->ctx->base);
+    //free_paxos_ctx(l->ctx);
+    free_paxos_ctx(app->paxos);
+    free(app->proxies);
+    free_leveldb_context(app->leveldb);
+    free(app);
+    free_configuration(&conf);
+    paxos_log_debug("Exit properly");
+    free(l);
+}
 
-int main(int argc, char *argv[]) {
+static void*
+start_thread(void* v)
+{
+    int learner_id = *((int*)v);
+    printf("Learner thread %d: starting....\n", learner_id);
+    struct learner_thread* l = malloc (sizeof(struct learner_thread));
 
-    if (argc < 4) {
-        usage(argv[0]);
-        return 0;
-    }
+    struct application_ctx *app = malloc(sizeof (struct application_ctx));
 
-    struct netpaxos_configuration conf;
-    populate_configuration(argv[1], &conf);
-    dump_configuration(&conf);
-
-    struct application_ctx *app = malloc( sizeof (struct application_ctx));
-    app->node_id = atoi(argv[2]);
-    app->node_count = atoi(argv[3]);
+    app->node_id = node_id;
+    app->node_count = node_count;
     app->at_second = 0;
     app->message_per_second = 0;
-    app->enable_leveldb = 0;
-
-    if (argc > 4) {
-        app->enable_leveldb = atoi(argv[4]);
-    }
-
-    int percent_write = 5;
-    if (argc > 5) {
-        percent_write = atoi(argv[5]);
-    }
-    if (percent_write == 0) {
-        app->amount_of_write = 0;
-    } else {
-        /* Work for less than 50% of write */
-        app->amount_of_write = 100 / percent_write;
-    }
-
+    app->enable_leveldb = enable_leveldb;
+    app->amount_of_write = amount_of_write;
     app->proxies = calloc(conf.proposer_count, sizeof(struct sockaddr_in));
     int i;
     for (i = 0; i < conf.proposer_count; i++) {
@@ -112,30 +126,127 @@ int main(int argc, char *argv[]) {
                     conf.proposer_port[i],
                     &app->proxies[i] );
     }
-    struct paxos_ctx *paxos = make_learner(&conf, deliver, app);
-    app->paxos = paxos;
-
-    if (app->enable_leveldb) {
-        app->leveldb = new_leveldb_context();
-    }
-
-    struct event *ev_perf = event_new(paxos->base, -1, EV_TIMEOUT|EV_PERSIST, on_perf, app);
+    //start learner thread
+    l = make_learner(learner_id, &conf, deliver, app);
+    l->ctx->learner_state = commond_learner_state;
+    learners[learner_id] = l;
+    app->paxos = l->ctx;
+    app->leveldb = commond_levelb;
+    
+    l->ev_perf = event_new(l->ctx->base, -1, EV_TIMEOUT|EV_PERSIST, on_perf, app);
     struct timeval one_second = {1, 0};
-    event_add(ev_perf, &one_second);
+    event_add(l->ev_perf, &one_second);
 
-    event_base_priority_init(paxos->base, 4);
-    event_priority_set(ev_perf, 0);
-
+    event_base_priority_init(l->ctx->base, 4);
+    event_priority_set(l->ev_perf, 0);
+    
+    //start paxos in learner (event_base_dispatch)
     start_paxos(app->paxos);
-    event_free(ev_perf);
-    free_paxos_ctx(app->paxos);
-    free(app->proxies);
-    if (app->enable_leveldb) {
-        free_leveldb_context(app->leveldb);
+    learner_thread_free(l, app, conf);
+    pthread_exit(NULL);
+}
+static void 
+start_learner(int * learner_id, pthread_t* t)
+{
+    int rc = 0;
+    if ((rc = pthread_create(t, NULL, start_thread, learner_id)))
+    {       
+        fprintf(stderr, "error: pthread_create, rc: %d\n",rc);
     }
-    free(app);
-    free_configuration(&conf);
+}
 
-    paxos_log_debug("Exit properly");
-    return 0;
+static void
+finish_learner(struct learner_thread* l)
+{
+    //struct event_base* base = 
+    event_base_loopbreak(l->ctx->base);
+}
+
+static void
+sigint_handler(int sig)
+{
+  int i;
+  printf("Caught signal %d\n", sig);
+  for (i = 0; i <  NUM_OF_THREAD; i++) 
+  {
+    finish_learner(learners[i]);
+  }
+}
+
+int main(int argc, char *argv[])
+{
+
+    pthread_t* t;
+    int i, *ids;
+    // Initialize mutex
+    pthread_mutex_init(&levelb_mutex, NULL);
+    //pthread_mutex_init(&deliver_mutex, NULL);
+    //Create threads to perform the dotproduct
+    pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+    if (argc < 4) 
+    {
+        usage(argv[0]);
+        return 0;
+    }
+
+    file_config = argv[1];
+    node_id = atoi (argv[2]);
+    node_count = atoi(argv[3]);
+    if (argc > 4)
+    {
+        enable_leveldb = atoi(argv[4]);
+    }
+    int percent_write = 5;
+    if (argc > 5) 
+    {
+        percent_write = atoi(argv[5]);
+    }
+    if (percent_write == 0) {
+        amount_of_write = 0;
+    } else {
+        /* Work for less than 50% of write */
+        amount_of_write = 100 / percent_write;
+    }
+    
+    srand(time(NULL));
+    signal(SIGINT, sigint_handler);
+
+    populate_configuration(file_config, &conf);
+    dump_configuration(&conf);
+
+    // initialize one new learner
+    commond_learner_state = create_learner_new(conf.acceptor_count);
+    set_instance_id(commond_learner_state, 0);
+
+    //start leveldb
+    commond_levelb = new_leveldb_context();
+
+    t = malloc(NUM_OF_THREAD * sizeof(pthread_t));
+    ids = malloc(NUM_OF_THREAD * sizeof(int));
+
+
+    learners = malloc(NUM_OF_THREAD *sizeof(struct learner_thread*));
+    for (i = 0; i < NUM_OF_THREAD; i++)
+    {
+        ids[i] = i;
+        start_learner(&ids[i], &t[i]);
+    }
+   
+
+    for (i = 0; i < NUM_OF_THREAD; i++)
+    {
+        pthread_join(t[i], NULL);
+        printf("Learner thread %d finished!\n", ids[i]);
+    }
+      /* Clean up and exit */
+    pthread_attr_destroy(&attr);
+    pthread_mutex_destroy(&levelb_mutex);
+
+    free(t);
+    free(ids);
+    free(learners);
+    
+
+    return 0; 
 }

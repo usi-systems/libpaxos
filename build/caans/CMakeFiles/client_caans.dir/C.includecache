@@ -1,0 +1,40 @@
+#IncludeRegexLine: ^[ 	]*#[ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+../caans/include/message.h
+time.h
+-
+sys/socket.h
+-
+netinet/in.h
+-
+netinet/ip.h
+-
+
+/home/vagrant/libpaxos/caans/client.c
+stdio.h
+-
+stdlib.h
+-
+event2/event.h
+-
+sys/socket.h
+-
+netinet/in.h
+-
+arpa/inet.h
+-
+signal.h
+-
+time.h
+-
+string.h
+-
+message.h
+/home/vagrant/libpaxos/caans/message.h
+

@@ -51,7 +51,7 @@ handle_sigint(int sig, short ev, void* arg)
 }
 
 static void
-deliver(unsigned iid, char* value, size_t size, void* arg)
+deliver(int tid, unsigned iid, char* value, size_t size, void* arg)
 {
 	struct client_value* val = (struct client_value*)value;
 	printf("%ld.%06ld [%.16s] %ld bytes\n", val->t.tv_sec, val->t.tv_usec,

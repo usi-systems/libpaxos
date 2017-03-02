@@ -1,0 +1,2 @@
+/usr/bin/ar cr libgtest-all.a  CMakeFiles/gtest-all.dir/gtest-all.cc.o
+/usr/bin/ranlib libgtest-all.a

@@ -1,0 +1,1 @@
+/usr/bin/cc   -fPIC -Wall    CMakeFiles/counter.dir/counter.c.o  -o counter  -L/usr/local/lib -rdynamic ../evpaxos/libevpaxos.so -lm -lrt -lleveldb ../paxos/libpaxos.a -lm -lrt -lpthread -llmdb -levent /usr/local/lib/libmsgpackc.so -Wl,-rpath,/usr/local/lib:/home/vagrant/libpaxos/build/evpaxos 
