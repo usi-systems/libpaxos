@@ -13,10 +13,10 @@
 
 #define VLEN 1024
 #define TIMEOUT 1
-#define REQ_SIZE 56
+
 static struct mmsghdr msgs[VLEN];
 static struct iovec iovecs[VLEN];
-static char bufs[VLEN][REQ_SIZE+1];
+static char bufs[VLEN][BUFSIZE+1];
 static struct sockaddr_in remotes[VLEN];
 static struct timespec timeout;
 
@@ -51,7 +51,7 @@ void start_proxy(struct application_ctx *ctx, int proxy_port) {
     size_t sa_len = sizeof(struct sockaddr_in);
     for (i = 0; i < VLEN; i++) {
         iovecs[i].iov_base          = bufs[i];
-        iovecs[i].iov_len           = REQ_SIZE;
+        iovecs[i].iov_len           = BUFSIZE;
         msgs[i].msg_hdr.msg_iov     = &iovecs[i];
         msgs[i].msg_hdr.msg_iovlen  = 1;
         msgs[i].msg_hdr.msg_name    = &remotes[i];

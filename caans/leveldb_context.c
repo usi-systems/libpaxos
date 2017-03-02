@@ -3,7 +3,7 @@
 #include <string.h>
 #include "leveldb_context.h"
 
-#define TEST_DB "/tmp/libpaxos_leveldb"
+#define TEST_DB "/tmp/libpaxos"
 
 enum boolean {
     false,
