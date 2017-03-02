@@ -9,7 +9,8 @@
 #include "netutils.h"
 #include "netpaxos.h"
 #include "message_pack.h"
-
+#include <errno.h>
+#include <error.h>
 
 void acceptor_handle_prepare(struct paxos_ctx *ctx, struct paxos_message *msg,
         struct sockaddr_in *remote, socklen_t socklen)
@@ -22,7 +23,7 @@ void acceptor_handle_prepare(struct paxos_ctx *ctx, struct paxos_message *msg,
         int n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
             (struct sockaddr *)remote, socklen);
         if (n < 0)
-            perror("Sendto:");
+            error_at_line(1, errno, __FILE__, __LINE__, "%s\n", strerror(errno));
         paxos_message_destroy(&out);
     }
 }
@@ -35,15 +36,18 @@ void acceptor_handle_accept(struct paxos_ctx *ctx, struct paxos_message *msg,
 
     if (acceptor_receive_accept(ctx->acceptor_state, accept, &out) != 0) {
         if (out.type == PAXOS_ACCEPTED) {
+            int thread_id = out.u.accept.thread_id;
             size_t msg_len = pack_paxos_message(ctx->buffer, &out);
+
             int n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
-                (struct sockaddr *)&ctx->learner_sin, sizeof(ctx->learner_sin));
+                (struct sockaddr *)&ctx->learner_sin[thread_id], sizeof(ctx->learner_sin[thread_id]));
             if (n < 0)
-                perror("Sendto:");
+                error_at_line(1, errno, __FILE__, __LINE__, "%s\n", strerror(errno));
+            
             n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
                 (struct sockaddr *)remote, socklen);
             if (n < 0)
-                perror("Sendto:");
+                error_at_line(1, errno, __FILE__, __LINE__, "%s\n", strerror(errno));
         }
         paxos_message_destroy(&out);
     }
@@ -63,12 +67,25 @@ void acceptor_handle_repeat(struct paxos_ctx *ctx, struct paxos_message* msg,
             int n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
                 (struct sockaddr *)remote, socklen);
             if (n < 0)
-                perror("Sendto:");
+                error_at_line(1, errno, __FILE__, __LINE__, "%s\n", strerror(errno));
             paxos_message_destroy(&out);
         }
     }
 }
 
+void
+acceptor_handle_benchmark(struct paxos_ctx *ctx, struct paxos_message *msg, int size, struct sockaddr_in *remote, size_t socklen)
+{
+    char *val = (char*)msg->u.accepted.value.paxos_value_val;
+    /* Skip command ID and client address */
+    char *retval = (val + sizeof(uint16_t) + sizeof(struct sockaddr_in));
+    size_t retsize = size - sizeof(msg->u.accepted) + sizeof(uint16_t) + socklen;
+    int n = sendto(ctx->sock, retval, retsize, 0,
+        (struct sockaddr *)remote, socklen);
+    ctx->message_per_second++;
+    if (n < 0)
+        error_at_line(1, errno, __FILE__, __LINE__, "%s\n", strerror(errno));
+}
 void acceptor_read(evutil_socket_t fd, short what, void *arg)
 {
     struct paxos_ctx *ctx = arg;
@@ -86,22 +103,13 @@ void acceptor_read(evutil_socket_t fd, short what, void *arg)
         unpack_paxos_message(&msg, ctx->buffer);
 
         if (msg.type == PAXOS_ACCEPT) {
-/*
-            int i;
-            printf("BUFSIZE=%d, n=%d\n", BUFSIZE, n);
-            for (i = 0; i < n; i++) {
-                if (i % 16 == 0)
-                    printf("\n");
-                printf("%02x ", (unsigned char)ctx->buffer[i]);
-            }
-            printf("\n");
-*/
             acceptor_handle_accept(ctx, &msg, &remote, len);
-
         } else if (msg.type == PAXOS_PREPARE) {
             acceptor_handle_prepare(ctx, &msg, &remote, len);
         } else if (msg.type == PAXOS_REPEAT) {
             acceptor_handle_repeat(ctx, &msg, &remote, len);
+        } else if (msg.type == PAXOS_ACCEPTED) { // use ACCEPTED for benchmarking
+            //acceptor_handle_benchmark(ctx, &msg, n, &remote, len);
         }
 
         paxos_message_destroy(&msg);
@@ -126,7 +134,15 @@ struct paxos_ctx *make_acceptor(struct netpaxos_configuration *conf, int aid)
         subcribe_to_multicast_group(conf->acceptor_address, sock);
     }
 
-    ip_to_sockaddr(conf->learner_address, conf->learner_port, &ctx->learner_sin);
+    // ip_to_sockaddr(conf->learner_address, conf->learner_port, &ctx->learner_sin);
+    int i;
+    for (i = 0; i < conf->learner_count ; i++)
+    {
+         ip_to_sockaddr( conf->learner_address[i],
+                    conf->learner_port[i],
+                    &ctx->learner_sin[i]);
+    }
+
     ip_to_sockaddr( conf->coordinator_address, conf->coordinator_port,
                     &ctx->coordinator_sin );
 
@@ -139,6 +155,10 @@ struct paxos_ctx *make_acceptor(struct netpaxos_configuration *conf, int aid)
 
     ctx->ev_sigterm = evsignal_new(ctx->base, SIGTERM, handle_signal, ctx);
     evsignal_add(ctx->ev_sigterm, NULL);
+
+    struct event *ev_perf = event_new(ctx->base, -1, EV_TIMEOUT|EV_PERSIST, on_perf, ctx);
+    struct timeval one_second = {1, 0};
+    event_add(ev_perf, &one_second);
 
     return ctx;
 }

@@ -96,7 +96,7 @@ static void on_stats(evutil_socket_t fd, short event, void *arg) {
     ctx->stats.at_second++;
 }
 
-static void deliver(unsigned iid, char* value, size_t size, void* arg) {
+static void deliver(int tid, unsigned iid, char* value, size_t size, void* arg) {
 	struct application_ctx *ctx = arg;
 	struct client_value* val = (struct client_value*)value;
     ctx->stats.delivered_count++;

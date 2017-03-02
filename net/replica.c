@@ -10,7 +10,7 @@
 #include "netpaxos.h"
 #include "message_pack.h"
 
-struct paxos_ctx *make_replica(struct netpaxos_configuration *conf,
+struct paxos_ctx *make_replica(struct netpaxos_configuration *conf, int thread_id,
                                         deliver_function f, void *arg)
 {
     struct paxos_ctx *ctx = malloc( sizeof(struct paxos_ctx));
@@ -18,11 +18,11 @@ struct paxos_ctx *make_replica(struct netpaxos_configuration *conf,
     ctx->base = event_base_new();
 
     /* Learner part */
-    evutil_socket_t sock = create_server_socket(conf->learner_port);
+    evutil_socket_t sock = create_server_socket(conf->learner_port[thread_id]);
     evutil_make_socket_nonblocking(sock);
     ctx->sock = sock;
-    if (net_ip__is_multicast_ip(conf->learner_address)) {
-        subcribe_to_multicast_group(conf->learner_address, sock);
+    if (net_ip__is_multicast_ip(conf->learner_address[thread_id])) {
+        subcribe_to_multicast_group(conf->learner_address[thread_id], sock);
     }
     ip_to_sockaddr(conf->acceptor_address, conf->acceptor_port, &ctx->acceptor_sin);
 
@@ -48,7 +48,7 @@ struct paxos_ctx *make_replica(struct netpaxos_configuration *conf,
     event_add(ctx->hole_watcher, &ctx->tv);
 
     /* Proposer part */
-    ip_to_sockaddr(conf->learner_address, conf->learner_port, &ctx->learner_sin);
+    ip_to_sockaddr(conf->learner_address[thread_id], conf->learner_port[thread_id], &ctx->learner_sin[thread_id]);
 
     return ctx;
 }
