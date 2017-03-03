@@ -75,7 +75,7 @@ void send_to_addr(struct client_context *ctx) {
 
         cmd.thread_id = command_to_thread(&key);
 
-        //printf ("SET key %c value %c thread_id %d\n", key, value, cmd.thread_id);
+        printf ("SET key %c value %c thread_id %d\n", key, value, cmd.thread_id);
         
     }
     else if (cmd.op == GET)
@@ -90,7 +90,7 @@ void send_to_addr(struct client_context *ctx) {
         cmd.content[31] = '\0';
 
         cmd.thread_id = command_to_thread(&key);
-        //printf ("GET key %c thread_id %d\n", key, cmd.thread_id);
+        printf ("GET key %c thread_id %d\n", key, cmd.thread_id);
     }
     
 

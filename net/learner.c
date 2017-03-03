@@ -76,7 +76,7 @@ void on_paxos_accepted(paxos_message *msg, struct learner_thread *l) {
 
     learner_receive_accepted(l->ctx->learner_state, &msg->u.accepted);
     paxos_accepted chosen_value;
-    pthread_mutex_lock (&levelb_mutex);
+    //pthread_mutex_lock (&levelb_mutex);
     while (learner_deliver_next(l->ctx->learner_state, &chosen_value)) {
         
         int tid = l->learner_id;
@@ -90,7 +90,7 @@ void on_paxos_accepted(paxos_message *msg, struct learner_thread *l) {
         paxos_accepted_destroy(&chosen_value);
         
     }
-    pthread_mutex_unlock (&levelb_mutex);
+   // pthread_mutex_unlock (&levelb_mutex);
 }
 
 void on_paxos_promise(paxos_message *msg, struct paxos_ctx *ctx) {
