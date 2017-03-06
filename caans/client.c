@@ -54,7 +54,7 @@ void random_string(char *s)
 uint16_t command_to_thread(char *s)
 {
     unsigned long r = hash(s);
-    printf("unique id of %s is %d\n", s, r);
+    printf("unique id of %c is %ld\n", *s, r);
     return ((r % NUM_OF_THREAD));
 }
 
@@ -69,6 +69,7 @@ void send_to_addr(struct client_context *ctx) {
         char key, value;
         random_string(&key);
         random_string(&value);
+        printf("key: %c\n", key);
         memset(cmd.content, key, 15);
         cmd.content[15] = '\0';
         memset(cmd.content+16, value, 15);
@@ -85,6 +86,7 @@ void send_to_addr(struct client_context *ctx) {
 
         char key;
         random_string(&key);
+        printf("key: %c\n", key);
         memset(cmd.content, key, 15);
         cmd.content[15] = '\0';
         memset(cmd.content+16, '\0', 15);
