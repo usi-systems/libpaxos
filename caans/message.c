@@ -51,15 +51,26 @@ void hexdump_message(struct client_request *request)
     }
     printf("\n");
 }
-
+// djb2 by Dan Bernstein. http://www.cse.yorku.ca/~oz/hash.html
 unsigned long
+hash(unsigned char *str)
+{
+    unsigned long hash = 5381;
+    int c;
+
+    while ((c = *str++))
+        hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
+
+    return hash;
+}
+/*unsigned long
 hash(const char *s)
 {
     unsigned long h;
     unsigned const char *us;
 
-    /* cast s to unsigned const char * */
-    /* this ensures that elements of s will be treated as having values >= 0 */
+    // cast s to unsigned const char 
+    // this ensures that elements of s will be treated as having values >= 0
     us = (unsigned const char *) s;
 
     h = 0;
@@ -69,4 +80,4 @@ hash(const char *s)
     } 
 
     return h;
-}
+}*/
