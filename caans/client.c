@@ -54,6 +54,7 @@ void random_string(char *s)
 uint16_t command_to_thread(char *s)
 {
     unsigned long r = hash(s);
+    printf("unique id of %s is %d\n", s, r);
     return ((r % NUM_OF_THREAD));
 }
 
