@@ -53,9 +53,7 @@ void random_string(unsigned char *s)
 
 uint16_t command_to_thread(unsigned char *s)
 {
-    printf("character is %c\n", *s);
     unsigned long r = hash(s);
-    printf("unique id of %c is %ld\n", *s, r);
     return ((r % NUM_OF_THREAD));
 }
 
@@ -67,34 +65,34 @@ void send_to_addr(struct client_context *ctx) {
     if (cmd.op == SET){
         clock_gettime(CLOCK_REALTIME, &cmd.ts);
 
-        unsigned char key, value;
-        random_string(&key);
-        random_string(&value);
-        printf("key: %c\n", key);
-        memset(cmd.content, key, 15);
+        unsigned char *key, *value;
+        key = malloc(sizeof(unsigned char));
+        value = malloc(sizeof(unsigned char));
+        random_string(key);
+        random_string(value);
+        memset(cmd.content, *key, 15);
         cmd.content[15] = '\0';
-        memset(cmd.content+16, value, 15);
+        memset(cmd.content+16, *value, 15);
         cmd.content[31] = '\0';
+        cmd.thread_id = command_to_thread(key);
 
-        cmd.thread_id = command_to_thread(&key);
-
-        printf ("SET key %c value %c thread_id %d\n", key, value, cmd.thread_id);
+        printf ("SET key %c value %c thread_id %d\n", *key, *value, cmd.thread_id);
         
     }
     else if (cmd.op == GET)
     {
         clock_gettime(CLOCK_REALTIME, &cmd.ts);
 
-        unsigned char key;
-        random_string(&key);
-        printf("key: %c\n", key);
-        memset(cmd.content, key, 15);
+        unsigned char *key;
+        key = malloc(sizeof(unsigned char));
+        random_string(key);
+        memset(cmd.content, *key, 15);
         cmd.content[15] = '\0';
         memset(cmd.content+16, '\0', 15);
         cmd.content[31] = '\0';
+        cmd.thread_id = command_to_thread(key);
 
-        cmd.thread_id = command_to_thread(&key);
-        printf ("GET key %c thread_id %d\n", key, cmd.thread_id);
+        printf ("GET key %c thread_id %d\n", *key, cmd.thread_id);
     }
     
 
