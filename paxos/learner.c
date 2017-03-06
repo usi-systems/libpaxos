@@ -159,6 +159,22 @@ int learner_receive_preempted(struct learner* l, paxos_preempted* ack,
 	return 1;
 }
 
+int learner_thread_deliver_next(struct learner *l, paxos_accepted* out, int thread_id)
+{
+	struct instance* inst = learner_get_current_instance(l);
+	if (inst == NULL || !instance_has_quorum(inst, l->acceptors))
+		return 0;
+	memcpy(out, inst->final_value, sizeof(paxos_accepted));
+	if (inst->final_value->thread_id == thread_id)
+	{
+		paxos_value_copy(&out->value, &inst->final_value->value);
+		learner_delete_instance(l, inst);
+		l->current_iid++;
+		return 1;
+	}
+	return 0;
+	
+}
 int
 learner_deliver_next(struct learner* l, paxos_accepted* out)
 {
@@ -336,7 +352,7 @@ learner_get_instance(struct learner* l, iid_t iid)
 	k = kh_get_instance(l->instances, iid);
 	if (k == kh_end(l->instances))
 		return NULL;
-	return kh_value(l->instances, k);
+	return kh_value(l->instances, k); // return instance with respect to k
 }
 
 static struct instance*
