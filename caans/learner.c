@@ -38,11 +38,11 @@ static void deliver(int tid, unsigned int inst, char* val, size_t size, void* ar
         char *key = cmd->content;
         if (cmd->op == SET) {
             char *value = cmd->content + 16;
-            printf("SET(%s, %s) thread_id %d\n", key, value, tid);
             int res = add_entry(app->leveldb, 0, key, 16, value, 16);
             if (res) {
                 fprintf(stderr, "Add entry failed.\n");
             }
+            paxos_log_debug("SET(%s, %s) thread_id %d\n", key, value, tid);
         }
         else if (cmd->op == GET) {
             /* check if the value is stored */
@@ -54,7 +54,7 @@ static void deliver(int tid, unsigned int inst, char* val, size_t size, void* ar
             } 
             else {
                 if (stored_value != NULL) {
-                    printf("Stored value %s, size %zu at thread_id %d\n", stored_value, vsize, tid);
+                    paxos_log_debug("GET the stored value %s with key %s, size %zu at thread_id %d\n", stored_value, key, vsize, tid);
                     free(stored_value);
                 }
             }
