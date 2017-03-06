@@ -22,7 +22,7 @@ struct learner_thread
 };
 
 struct learner_thread** learners;
-
+struct learner* commond_learner_state;
 /**
  * When starting a learner you must pass a callback to be invoked whenever
  * a value has been learned.

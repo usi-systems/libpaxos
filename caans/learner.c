@@ -22,7 +22,7 @@ static char* file_config;
 struct netpaxos_configuration conf;
 
 struct leveldb_ctx *commond_levelb;
-struct learner* commond_learner_state;
+
 
 static void deliver(int tid, unsigned int inst, char* val, size_t size, void* arg) {
     struct application_ctx *app = arg;
@@ -128,10 +128,11 @@ start_thread(void* v)
     }
     //start learner thread
     l = make_learner(learner_id, &conf, deliver, app);
-    l->ctx->learner_state = commond_learner_state;
+    //l->ctx->learner_state = commond_learner_state;
     learners[learner_id] = l;
     app->paxos = l->ctx;
-    app->leveldb = commond_levelb;
+    if (app->enable_leveldb)
+        app->leveldb = commond_levelb;
     
     l->ev_perf = event_new(l->ctx->base, -1, EV_TIMEOUT|EV_PERSIST, on_perf, app);
     struct timeval one_second = {1, 0};
@@ -220,7 +221,8 @@ int main(int argc, char *argv[])
     set_instance_id(commond_learner_state, 0);
 
     //start leveldb
-    commond_levelb = new_leveldb_context();
+    if (enable_leveldb)
+        commond_levelb = new_leveldb_context();
 
     t = malloc(NUM_OF_THREAD * sizeof(pthread_t));
     ids = malloc(NUM_OF_THREAD * sizeof(int));

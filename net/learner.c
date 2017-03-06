@@ -76,10 +76,10 @@ void on_paxos_accepted(paxos_message *msg, struct learner_thread *l) {
 
     learner_receive_accepted(l->ctx->learner_state, &msg->u.accepted);
     paxos_accepted chosen_value;
+    int tid = l->learner_id;
     //pthread_mutex_lock (&levelb_mutex);
-    while (learner_deliver_next(l->ctx->learner_state, &chosen_value)) {
-        
-        int tid = l->learner_id;
+    while (learner_thread_deliver_next(l->ctx->learner_state, &chosen_value, tid)) {
+       
         //printf("I am here %d\n", tid);
         l->ctx->deliver(
             tid,
@@ -197,6 +197,9 @@ make_learner (int learner_id, struct netpaxos_configuration *conf, deliver_funct
     timeout.tv_nsec = 0;
 
     max_received = 0;
+    
+    l->ctx->learner_state = commond_learner_state;
+
     l->ctx->ev_read = event_new(l->ctx->base, sock, EV_READ|EV_PERSIST,learner_read_cb, l);
     event_add(l->ctx->ev_read, NULL);
 
