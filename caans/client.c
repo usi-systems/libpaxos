@@ -45,14 +45,15 @@ void handle_signal(evutil_socket_t fd, short what, void *arg)
     event_base_loopbreak(ctx->base);
 }
 
-void random_string(char *s)
+void random_string(unsigned char *s)
 {
     int n = rand() % ('z' - 'a' + 1);
     *s = n + 'a';
 }
 
-uint16_t command_to_thread(char *s)
+uint16_t command_to_thread(unsigned char *s)
 {
+    printf("character is %c\n", *s);
     unsigned long r = hash(s);
     printf("unique id of %c is %ld\n", *s, r);
     return ((r % NUM_OF_THREAD));
@@ -66,7 +67,7 @@ void send_to_addr(struct client_context *ctx) {
     if (cmd.op == SET){
         clock_gettime(CLOCK_REALTIME, &cmd.ts);
 
-        char key, value;
+        unsigned char key, value;
         random_string(&key);
         random_string(&value);
         printf("key: %c\n", key);
@@ -84,7 +85,7 @@ void send_to_addr(struct client_context *ctx) {
     {
         clock_gettime(CLOCK_REALTIME, &cmd.ts);
 
-        char key;
+        unsigned char key;
         random_string(&key);
         printf("key: %c\n", key);
         memset(cmd.content, key, 15);

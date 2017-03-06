@@ -26,7 +26,8 @@ struct __attribute__((__packed__)) client_request {
     struct sockaddr_in cliaddr;
     char content[1];
 };
-unsigned long hash(const char *s);
+//unsigned long hash(const char *s);
+unsigned long hash(unsigned char *str);
 uint16_t content_length(struct client_request *request);
 uint16_t message_length(struct client_request *request);
 struct client_request* create_client_request(char *data, uint16_t data_size, uint16_t *tid);

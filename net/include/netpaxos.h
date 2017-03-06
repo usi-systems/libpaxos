@@ -102,5 +102,5 @@ void learner_read_cb(evutil_socket_t fd, short what, void *arg);
 struct paxos_ctx *make_coordinator(struct netpaxos_configuration *conf, int my_id);
 struct paxos_ctx *make_acceptor(struct netpaxos_configuration *conf, int aid);
 struct paxos_ctx* make_sequencer(struct netpaxos_configuration *conf);
-unsigned long hash(const char *s);
+//unsigned long hash(const char *s);
 #endif
