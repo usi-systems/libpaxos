@@ -123,7 +123,7 @@ void on_paxos_accepted(paxos_message *msg, struct learner_thread *l_th) {
                     l_th->ctx->deliver_arg);
             paxos_accepted_destroy(&chosen_value);
         }
-        paxos_accepted_destroy(&chosen_value);
+        //paxos_accepted_destroy(&chosen_value);
   
     }
    
