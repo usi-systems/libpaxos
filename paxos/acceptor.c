@@ -81,10 +81,11 @@ acceptor_receive_prepare(struct acceptor* a,
 		return 0;
 	int found = storage_get_record(&a->store, req->iid, &acc);
 	if (!found || acc.ballot <= req->ballot) {
-		paxos_log_debug("Preparing iid: %u, ballot: %u", req->iid, req->ballot);
+		paxos_log_debug("Preparing iid: %u, ballot: %u thread_id %u", req->iid, req->ballot, req->thread_id);
 		acc.aid = a->id;
 		acc.iid = req->iid;
 		acc.ballot = req->ballot;
+		acc.thread_id = req->thread_id;
 		if (storage_put_record(&a->store, &acc) != 0) {
 			storage_tx_abort(&a->store);
 			return 0;
@@ -108,7 +109,7 @@ acceptor_receive_accept(struct acceptor* a,
 		return 0;
 	int found = storage_get_record(&a->store, req->iid, &acc);
 	if (!found || acc.ballot <= req->ballot) {
-		paxos_log_debug("Accepting iid: %u, ballot: %u", req->iid, req->ballot);
+		paxos_log_debug("Accepting iid: %u, ballot: %u, thread_id %u", req->iid, req->ballot, req->thread_id);
 		paxos_accept_to_accepted(a->id, req, out);
 		if (storage_put_record(&a->store, &(out->u.accepted)) != 0) {
 			storage_tx_abort(&a->store);
@@ -163,9 +164,9 @@ paxos_accepted_to_promise(paxos_accepted* acc, paxos_message* out)
 	out->u.promise = (paxos_promise) {
 		acc->iid,
 		acc->ballot,
+		acc->thread_id,
 		acc->value_ballot,
 		acc->aid,
-		acc->thread_id,
 		{acc->value.paxos_value_len, acc->value.paxos_value_val}
 	};
 }
@@ -183,9 +184,9 @@ paxos_accept_to_accepted(int id, paxos_accept* acc, paxos_message* out)
 	out->u.accepted = (paxos_accepted) {
 		acc->iid,
 		acc->ballot,
+		acc->thread_id,
 		acc->ballot,
 		id,
-		acc->thread_id,
 		{value_size, value}
 	};
 }
@@ -194,5 +195,5 @@ static void
 paxos_accepted_to_preempted(int id, paxos_accepted* acc, paxos_message* out)
 {
 	out->type = PAXOS_PREEMPTED;
-	out->u.preempted = (paxos_preempted) { acc->iid, acc->ballot, 0, id, acc->thread_id, {0, NULL} };
+	out->u.preempted = (paxos_preempted) {acc->iid, acc->ballot, acc->thread_id, 0, id, {0, NULL} };
 }

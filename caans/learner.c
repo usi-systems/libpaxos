@@ -21,8 +21,6 @@ static int amount_of_write = 0;
 static char* file_config;
 struct netpaxos_configuration conf;
 
-struct leveldb_ctx *commond_levelb;
-
 
 static void deliver(int tid, unsigned int inst, char* val, size_t size, void* arg) {
     struct application_ctx *app = arg;
@@ -34,7 +32,8 @@ static void deliver(int tid, unsigned int inst, char* val, size_t size, void* ar
     struct command *cmd = (struct command*)(val + sizeof(struct client_request) - 1);
     
    //pthread_mutex_lock (&levelb_mutex);
-    if (app->enable_leveldb) {
+    if (app->enable_leveldb)
+    {
         char *key = cmd->content;
         if (cmd->op == SET) {
             char *value = cmd->content + 16;
@@ -59,9 +58,40 @@ static void deliver(int tid, unsigned int inst, char* val, size_t size, void* ar
                 }
             }
         }
-        //leveldb_close(app->leveldb->db);
+        else if (cmd->op == INC)
+        {
+            printf("RECEVIED AT THREAD ID %d\n", tid);
+            char *s_key = cmd->content + 16;
+            char *f_stored_value = NULL, *s_stored_value = NULL;
+            size_t f_vsize = 0, s_vsize = 0;
+
+            int f_res = get_value(app->leveldb, key, 16, &f_stored_value, &f_vsize);
+            int s_res = get_value(app->leveldb, s_key, 16, &s_stored_value, &s_vsize);
+
+            if (f_res || s_res)
+            {
+                fprintf(stderr, "get value failed.\n");
+            }
+            else{
+                if (f_stored_value != NULL && s_stored_value != NULL)
+                {
+                    paxos_log_debug("first value %s of first key  %s\n", f_stored_value,key);
+                    paxos_log_debug("second value %s second key %s\n", s_stored_value,s_key);
+                    char result_value[32];
+                    memset(result_value, f_stored_value[0], 8);
+                    memset(result_value+8, s_stored_value[0], 7);
+                    result_value[15] = '\0';
+                    paxos_log_debug("first value %s second value %s => result_value %s\n", f_stored_value,s_stored_value , result_value);
+                    int r = add_entry(app->leveldb, 0, key, 16, result_value, 16);
+                    if (r) {
+                        fprintf(stderr, "Add entry failed.\n");
+                    }
+                    paxos_log_debug("INC(%s, %s) with value %s on thread_id %d\n", key, s_key, result_value, tid);
+                }
+            }
+        }
     }
-   // pthread_mutex_unlock (&levelb_mutex);
+   
     /* Skip command ID and client address */
     char *retval = (val + sizeof(uint16_t) + sizeof(struct sockaddr_in));
 
@@ -104,6 +134,7 @@ learner_thread_free(struct learner_thread* l, struct application_ctx* app, struc
     free(l);
 }
 
+
 static void*
 start_thread(void* v)
 {
@@ -132,7 +163,7 @@ start_thread(void* v)
     learners[learner_id] = l;
     app->paxos = l->ctx;
     if (app->enable_leveldb)
-        app->leveldb = commond_levelb;
+        app->leveldb = common_levelb;
     
     l->ev_perf = event_new(l->ctx->base, -1, EV_TIMEOUT|EV_PERSIST, on_perf, app);
     struct timeval one_second = {1, 0};
@@ -146,6 +177,7 @@ start_thread(void* v)
     learner_thread_free(l, app, conf);
     pthread_exit(NULL);
 }
+
 static void 
 start_learner(int * learner_id, pthread_t* t)
 {
@@ -180,11 +212,9 @@ int main(int argc, char *argv[])
     pthread_t* t;
     int i, *ids;
     // Initialize mutex
-    pthread_mutex_init(&levelb_mutex, NULL);
-    //pthread_mutex_init(&deliver_mutex, NULL);
-    //Create threads to perform the dotproduct
-    pthread_attr_init(&attr);
-    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+    
+    pthread_mutex_init(&execute_mutex, NULL);
+    pthread_cond_init(&execute, NULL);
     if (argc < 4) 
     {
         usage(argv[0]);
@@ -216,13 +246,9 @@ int main(int argc, char *argv[])
     populate_configuration(file_config, &conf);
     dump_configuration(&conf);
 
-    // initialize one new learner
-    commond_learner_state = create_learner_new(conf.acceptor_count);
-    set_instance_id(commond_learner_state, 0);
-
     //start leveldb
     if (enable_leveldb)
-        commond_levelb = new_leveldb_context();
+        common_levelb = new_leveldb_context();
 
     t = malloc(NUM_OF_THREAD * sizeof(pthread_t));
     ids = malloc(NUM_OF_THREAD * sizeof(int));
@@ -242,8 +268,7 @@ int main(int argc, char *argv[])
         printf("Learner thread %d finished!\n", ids[i]);
     }
       /* Clean up and exit */
-    pthread_attr_destroy(&attr);
-    pthread_mutex_destroy(&levelb_mutex);
+    pthread_mutex_destroy(&execute_mutex);
 
     free(t);
     free(ids);

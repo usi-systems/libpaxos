@@ -22,6 +22,7 @@ static struct timespec timeout;
 uint16_t t_id = 0;
 
 void handle_request(evutil_socket_t fd, short event, void *arg) {
+
     struct application_ctx *app = arg;
     int i, retval;
     retval = recvmmsg(fd, msgs, VLEN, 0, &timeout);
@@ -29,7 +30,7 @@ void handle_request(evutil_socket_t fd, short event, void *arg) {
         perror("recvmmsg()");
         exit(EXIT_FAILURE);
     }
-
+    
     for (i = 0; i < retval; i++) {
         int recv_bytes = iovecs[i].iov_len;
         struct client_request *req = create_client_request(bufs[i], recv_bytes, &t_id);
@@ -38,10 +39,6 @@ void handle_request(evutil_socket_t fd, short event, void *arg) {
         submit(app->paxos, (char*)req, message_length(req), t_id);
         app->current_request_id++;
     }
-    /*if (t_id == NUM_OF_THREAD -1){
-        printf("thread_id now is %d\n", t_id);
-        t_id = 0;
-    }*/
 }
 
 
