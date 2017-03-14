@@ -12,6 +12,7 @@
 #define NS_PER_S 1000000000
 #define AGGREGATE
 #define NUM_OF_THREAD 2
+#define ALL 65
 
 struct client_context {
     struct event_base *base;
@@ -69,9 +70,9 @@ void send_to_addr(struct client_context *ctx) {
         key = malloc(sizeof(unsigned char));
         value = malloc(sizeof(unsigned char));
         random_string(key);
-        random_string(value);
         memset(cmd.content, *key, 15);
         cmd.content[15] = '\0';
+        random_string(value);
         memset(cmd.content+16, *value, 15);
         cmd.content[31] = '\0';
         cmd.thread_id = command_to_thread(key);
@@ -81,8 +82,6 @@ void send_to_addr(struct client_context *ctx) {
     }
     else if (cmd.op == GET)
     {
-        clock_gettime(CLOCK_REALTIME, &cmd.ts);
-
         unsigned char *key;
         key = malloc(sizeof(unsigned char));
         random_string(key);
@@ -91,8 +90,24 @@ void send_to_addr(struct client_context *ctx) {
         memset(cmd.content+16, '\0', 15);
         cmd.content[31] = '\0';
         cmd.thread_id = command_to_thread(key);
-
+        clock_gettime(CLOCK_REALTIME, &cmd.ts);
         printf ("GET key %c thread_id %d\n", *key, cmd.thread_id);
+    }
+    else if (cmd.op == INC)
+    {
+        clock_gettime(CLOCK_REALTIME, &cmd.ts);
+        unsigned char *key1, *key2;
+        key1 = malloc(sizeof(unsigned char));
+        key2 = malloc(sizeof(unsigned char));
+        random_string(key1);
+        memset(cmd.content, *key1, 15);
+        cmd.content[15] = '\0';
+        random_string(key2);
+        memset(cmd.content+16, *key2, 15);
+        cmd.content[31] = '\0';
+        cmd.thread_id = ALL;
+
+        printf ("INC key %c %c thread_id %d\n", *key1, *key2, cmd.thread_id);
     }
     
 
@@ -147,19 +162,80 @@ int new_dgram_socket() {
     }
     return s;
 }
-
+void
+usage(const char* name)
+{
+  printf("Usage: %s [ip address of proxy] [-h] [-r] [-p]\n", name);
+  printf("  %-30s%s\n", "-h, --help", "Output this message and exit");
+  printf("  %-30s%s\n", "-r, --remote-ip-address", "the address of proxy");
+  printf("  %-30s%s\n", "-p, --port", "port");
+  /*printf("  %-30s%s\n", "-i, --identifier", "Operation SET/GET/INC");
+  printf("  %-30s%s\n", "-o, --object", "Object X,Y,Z");
+  printf("  %-30s%s\n", "-v, --object-value", "the value of object SET");*/
+  
+  exit(1);
+}
 
 int main(int argc, char *argv[])
 {
-    if (argc < 3) {
-        printf("Syntax: %s [hostname] [port] [GET/SET]\n"
-               "Example: %s 192.168.1.110 6789 GET\n",argv[0], argv[0]);
+    /*if (argc < 3) {
+        printf("Syntax: %s [hostname] [port] [GET/SET/INC] X \n"
+               "Example: %s 192.168.1.110 6789 GET X\n",argv[0], argv[0]);
         return 1;
-    }
+    }*/
+    int i = 1, port;
+    //char *object = NULL, *object_value = NULL, 
+    char *identifier = NULL;
+    //char *name[] = {"GET", "SET", "INC"};
 
     struct hostent *server;
-    server = gethostbyname(argv[1]);
+    struct client_context ctx;
+    ctx.latency = 0.0;
+    ctx.nb_messages = 0;
+    ctx.op = SET;
+    while (i != argc){
+        if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0)
+            usage(argv[0]);
+        else if (strcmp(argv[i], "-r") == 0 || strcmp(argv[i], "--remote-ip-address") == 0)
+            server = gethostbyname(argv[++i]);
+        else if (strcmp(argv[i], "-p") == 0 || strcmp(argv[i], "--port") == 0)
+            port = atoi(argv[++i]);
+        else if (strcmp(argv[i], "-i") == 0 || strcmp(argv[i], "--identifier") == 0)
+            identifier = argv[++i];
+        /*else if (strcmp(argv[i], "-o") == 0 || strcmp(argv[i], "--object") == 0)
+            object = argv[++i];
+        else if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--object-value") == 0)
+            object_value = argv[++i];*/
+        i++;
+    }
     if (server == NULL) {
+        fprintf(stderr, "ERROR, no such host as %s\n", argv[1]);
+        return EXIT_FAILURE;
+    }
+    /*if (strcmp(identifier, "SET") == 0)
+        ctx.op = SET;
+    else if (strcmp(identifier, "GET") == 0)
+        ctx.op = GET;
+    else if (strcmp(identifier, "INC") == 0)
+        ctx.op = INC;*/
+    srand(time(NULL));
+
+    //identifier = name[rand() % (sizeof(name) /  sizeof (name[0]))];
+    if (strcmp(identifier, "SET") == 0)
+        ctx.op = SET;
+    else if (strcmp(identifier, "GET") == 0)
+        ctx.op = GET;
+    else if (strcmp(identifier, "INC") == 0)
+        ctx.op = INC;
+    //ctx.op = INC;
+
+    ctx.command_id = 0;
+    memset(&ctx.server_addr, 0, sizeof ctx.server_addr);
+    ctx.server_addr.sin_family = AF_INET;
+    memcpy((char *)&(ctx.server_addr.sin_addr.s_addr), (char *)server->h_addr, server->h_length);
+    ctx.server_addr.sin_port = htons(port);
+
+    /*if (server == NULL) {
         fprintf(stderr, "ERROR, no such host as %s\n", argv[1]);
         return EXIT_FAILURE;
     }
@@ -179,7 +255,7 @@ int main(int argc, char *argv[])
     ctx.server_addr.sin_family = AF_INET;
     memcpy((char *)&(ctx.server_addr.sin_addr.s_addr), (char *)server->h_addr, server->h_length);
     ctx.server_addr.sin_port = htons(atoi(argv[2]));
-
+    */
     ctx.base = event_base_new();
     int sock = new_dgram_socket();
     evutil_make_socket_nonblocking(sock);

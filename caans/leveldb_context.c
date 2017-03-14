@@ -17,10 +17,7 @@ struct leveldb_ctx* new_leveldb_context() {
     ctx->options = leveldb_options_create();
     ctx->woptions = leveldb_writeoptions_create();
     ctx->roptions = leveldb_readoptions_create();
-  
-    //pthread_mutex_lock (&levelb_mutex);
     open_db(ctx, TEST_DB);
-    //pthread_mutex_unlock (&levelb_mutex);
     return ctx;
 }
 

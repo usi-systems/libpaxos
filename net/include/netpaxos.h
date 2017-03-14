@@ -7,22 +7,26 @@
 #include <pthread.h>
 #define BUFSIZE 128
 #define NUM_OF_THREAD 2
+#define ALL 65
 
+pthread_mutex_t execute_mutex;
+pthread_cond_t execute;
 
-pthread_mutex_t levelb_mutex;
-//pthread_mutex_t deliver_mutex;
 pthread_attr_t attr;
 int check_leveldb;
 
 struct learner_thread
 {
-    int learner_id;
+   
+    int lth_id;
     struct paxos_ctx *ctx;
     struct event *ev_perf;
+
 };
 
+struct leveldb_ctx *common_levelb;
 struct learner_thread** learners;
-struct learner* commond_learner_state;
+
 /**
  * When starting a learner you must pass a callback to be invoked whenever
  * a value has been learned.
@@ -31,7 +35,7 @@ typedef void (*respond_callback)(char* value, size_t size, void* arg);
 typedef void (*deliver_function)(int tid, unsigned int, char* value, size_t size, void* arg);
 
 struct sequencer {
-    uint32_t current_instance;
+    uint32_t current_instance[NUM_OF_THREAD];
 };
 
 struct netpaxos_configuration {
@@ -84,8 +88,8 @@ struct paxos_ctx *make_proposer(struct netpaxos_configuration *conf,
 /*struct paxos_ctx *make_learner(struct netpaxos_configuration *conf,
                                         int thread_id,
                                         deliver_function f, void *arg);*/
-struct learner* create_learner_new (int acceptors);
-void set_instance_id (struct learner* l, iid_t iid);
+
+//void set_instance_id (struct learner* l, iid_t iid);
 struct learner_thread* make_learner(int learner_id, struct netpaxos_configuration *conf, deliver_function f, void *arg);
 
 struct paxos_ctx *make_replica(struct netpaxos_configuration *conf,int thread_id,

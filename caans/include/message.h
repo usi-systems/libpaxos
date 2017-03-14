@@ -9,7 +9,8 @@
 
 enum Operation {
     GET,
-    SET
+    SET,
+    INC
 };
 
 struct command {
@@ -18,6 +19,8 @@ struct command {
     uint16_t thread_id;
     enum Operation op;
     char content[32];
+    //char *object;
+    //char *object_value;
 };
 
 

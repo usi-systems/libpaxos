@@ -36,14 +36,22 @@ extern "C" {
 #include "paxos.h"
 
 struct learner;
+struct learner_thread;
 
 struct learner* learner_new(int acceptors);
 void learner_free(struct learner* l);
+
 void learner_set_instance_id(struct learner* l, iid_t iid);
+//void learner_thread_set_instance_id(struct learner_thread* l, iid_t iid);
+
 void learner_receive_accepted(struct learner* l, paxos_accepted* ack);
+void learner_thread_receive_accepted(struct learner* l, paxos_accepted* ack, int acceptors, iid_t *current_iid, iid_t *highest_iid_closed);
+
 int learner_deliver_next(struct learner* l, paxos_accepted* out);
-int learner_thread_deliver_next(struct learner *l, paxos_accepted* out, int thread_id);
+int learner_thread_deliver_next(struct learner *l, paxos_accepted* out, int thread_id, iid_t current_iid);
+
 int learner_has_holes(struct learner* l, iid_t* from, iid_t* to);
+int learner_thread_has_holes(struct learner_thread* l_th, iid_t* from, iid_t* to);
 /* Extend learner to run phase 1 and phase 2 in recovery */
 void learner_prepare(struct learner* l, paxos_prepare* out, iid_t iid);
 int learner_receive_promise(struct learner* l, paxos_promise* promise,

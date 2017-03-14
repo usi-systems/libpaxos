@@ -33,14 +33,34 @@ void acceptor_handle_accept(struct paxos_ctx *ctx, struct paxos_message *msg,
 {
     paxos_message out;
     paxos_accept* accept = &msg->u.accept;
+    printf("*thread_id  %d\n", accept->thread_id);
 
     if (acceptor_receive_accept(ctx->acceptor_state, accept, &out) != 0) {
         if (out.type == PAXOS_ACCEPTED) {
             int thread_id = out.u.accept.thread_id;
             size_t msg_len = pack_paxos_message(ctx->buffer, &out);
 
-            int n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
+            int n;
+           
+            if (thread_id == ALL)
+            {
+                int i;
+                for (i = 0; i < NUM_OF_THREAD; i++)
+                {
+                    n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
+                        (struct sockaddr *)&ctx->learner_sin[i], sizeof(ctx->learner_sin[i]));
+                    printf("---1--- send to learner: thread_id  %d, instance id %u\n", i, out.u.accept.iid);
+                }
+            }
+            else
+            {
+                n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
                 (struct sockaddr *)&ctx->learner_sin[thread_id], sizeof(ctx->learner_sin[thread_id]));
+                 printf("---2--- send to learner: thread_id  %d, instance id %u\n", thread_id, out.u.accept.iid);
+            }
+           
+            
+            
             if (n < 0)
                 error_at_line(1, errno, __FILE__, __LINE__, "%s\n", strerror(errno));
             

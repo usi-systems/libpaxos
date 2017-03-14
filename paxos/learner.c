@@ -1,5 +1,4 @@
-/*
- * Copyright (c) 2013-2014, University of Lugano
+/* Copyright (c) 2013-2014, University of Lugano
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -35,6 +34,7 @@
 struct instance
 {
 	iid_t iid;
+	uint16_t thread_id;
 	ballot_t last_update_ballot;
 	paxos_accepted** acks;
 	paxos_accepted* final_value;
@@ -44,6 +44,7 @@ KHASH_MAP_INIT_INT(instance, struct instance*);
 struct gap
 {
 	iid_t iid;
+	uint16_t thread_id;
 	ballot_t ballot;
 	ballot_t highest_accepted_ballot;
 	paxos_value* highest_accepted_value;
@@ -60,17 +61,21 @@ struct learner
 	iid_t current_iid;
 	iid_t highest_iid_closed;
 	khash_t(instance)* instances;
-	khash_t(gap)* gaps;	/* Learner starts Paxos for missing instances */
+	khash_t(gap)* gaps; /* Learner starts Paxos for missing instances */
 };
+
+
 
 static struct instance* learner_get_instance(struct learner* l, iid_t iid);
 static struct instance* learner_get_current_instance(struct learner* l);
-static struct instance* learner_get_instance_or_create(struct learner* l, 
-	iid_t iid);
+
+static struct instance* learner_get_instance_or_create(struct learner* l, iid_t iid);
 static void learner_delete_instance(struct learner* l, struct instance* inst);
 static struct instance* instance_new(int acceptors);
 static void instance_free(struct instance* i, int acceptors);
+
 static void instance_update(struct instance* i, paxos_accepted* ack, int acceptors);
+
 static int instance_has_quorum(struct instance* i, int acceptors);
 static void instance_add_accept(struct instance* i, paxos_accepted* ack);
 static paxos_accepted* paxos_accepted_dup(paxos_accepted* ack);
@@ -116,12 +121,14 @@ learner_free(struct learner* l)
 	free(l);
 }
 
+
 void
 learner_set_instance_id(struct learner* l, iid_t iid)
 {
 	l->current_iid = iid + 1;
 	l->highest_iid_closed = iid;
 }
+
 
 void
 learner_receive_accepted(struct learner* l, paxos_accepted* ack)
@@ -154,27 +161,11 @@ int learner_receive_preempted(struct learner* l, paxos_preempted* ack,
 	if (gap == NULL)
 		return 0;
 	gap->ballot = ack->ballot;
-	gap_reset(gap);
-	*out = (paxos_prepare) {gap->iid, gap->ballot};
+	gap_reset(gap); // set thread_id temporary
+	*out = (paxos_prepare) {gap->iid, gap->ballot, gap->thread_id};
 	return 1;
 }
 
-int learner_thread_deliver_next(struct learner *l, paxos_accepted* out, int thread_id)
-{
-	struct instance* inst = learner_get_current_instance(l);
-	if (inst == NULL || !instance_has_quorum(inst, l->acceptors))
-		return 0;
-	memcpy(out, inst->final_value, sizeof(paxos_accepted));
-	if (inst->final_value->thread_id == thread_id)
-	{
-		paxos_value_copy(&out->value, &inst->final_value->value);
-		learner_delete_instance(l, inst);
-		l->current_iid++;
-		return 1;
-	}
-	return 0;
-	
-}
 int
 learner_deliver_next(struct learner* l, paxos_accepted* out)
 {
@@ -352,14 +343,17 @@ learner_get_instance(struct learner* l, iid_t iid)
 	k = kh_get_instance(l->instances, iid);
 	if (k == kh_end(l->instances))
 		return NULL;
-	return kh_value(l->instances, k); // return instance with respect to k
+	return kh_value(l->instances, k);
 }
+
 
 static struct instance*
 learner_get_current_instance(struct learner* l)
 {
 	return learner_get_instance(l, l->current_iid);
+	return NULL;
 }
+
 
 static struct instance*
 learner_get_instance_or_create(struct learner* l, iid_t iid)
@@ -428,7 +422,9 @@ instance_update(struct instance* inst, paxos_accepted* accepted, int acceptors)
 		return;
 	}
 	paxos_accepted* prev_accepted = inst->acks[accepted->aid];
+	//paxos_log_debug("accepted->aid %d "	"with accepted->iid %u\n", accepted->aid, accepted->iid);
 	if (prev_accepted != NULL && prev_accepted->ballot >= accepted->ballot) {
+		//paxos_log_debug("prev_accepted->ballot %u accepted->ballot %u\n", prev_accepted->ballot, accepted->ballot);
 		paxos_log_debug("Dropped paxos_accepted for iid %u."
 			"Previous ballot is newer or equal.", accepted->iid);
 		return;

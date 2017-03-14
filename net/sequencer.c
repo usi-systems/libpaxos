@@ -12,13 +12,30 @@
 #include "netpaxos.h"
 #include "message_pack.h"
 
-
 static void
 sequencer_handle_proposal(struct paxos_ctx *ctx, char* buf, int size)
 {
+    uint16_t* be_threadid = (uint16_t *)(buf + sizeof(uint16_t) + sizeof(uint32_t) + sizeof(uint16_t));
     uint32_t* inst_be = (uint32_t *)(buf + sizeof(uint16_t));
-    *inst_be = htonl(ctx->sequencer->current_instance++);
-    // hexdump(buf, size);
+
+    uint16_t t = ntohs(*be_threadid);
+    
+    if (t == ALL)
+    {
+        int i;
+        for (i = 0; i < NUM_OF_THREAD; i++)
+        {
+            *inst_be = htonl(ctx->sequencer->current_instance[i]++);
+            printf("**All---Thread id %u current_instance %u\n", i, ntohl(*inst_be));
+        }
+    }
+    else{
+
+        *inst_be = htonl(ctx->sequencer->current_instance[t]++);
+        printf("**Specific---Thread id %u current_instance %u\n", t, ntohl(*inst_be));
+    }
+    *be_threadid = htons(t);
+    //printf("before sending, thread %u net_thread %u\n", ntohs(*be_threadid), *be_threadid);
     int n = sendto(ctx->sock, buf, size, 0,
         (struct sockaddr *)&ctx->acceptor_sin, sizeof(ctx->acceptor_sin));
    // printf("packet accept has size of %d\n", size); size 102
@@ -74,7 +91,12 @@ handle_packet_in(evutil_socket_t fd, short what, void *arg)
 struct sequencer*
 sequencer_new() {
     struct sequencer* sq = malloc(sizeof(struct sequencer));
-    sq->current_instance = 1;
+    int i;
+    for (i = 0; i < NUM_OF_THREAD; i++)
+    {
+       sq->current_instance[i] = 1;
+    }
+    
     return sq;
 }
 
