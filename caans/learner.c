@@ -22,8 +22,15 @@ static char* file_config;
 struct netpaxos_configuration conf;
 
 
+void on_perf(evutil_socket_t fd, short event, void *arg) {
+    struct application_ctx *app = arg;
+    printf("%4d %8d\n", app->at_second++, app->message_per_second);
+    app->message_per_second = 0;
+
+}
 static void deliver(int tid, unsigned int inst, char* val, size_t size, void* arg) {
     struct application_ctx *app = arg;
+    paxos_log_debug("thread id %d message %d second %d\n",tid, app->message_per_second, app->at_second);
     app->message_per_second++;
     if (size <= 0)
         return;
@@ -53,14 +60,14 @@ static void deliver(int tid, unsigned int inst, char* val, size_t size, void* ar
             } 
             else {
                 if (stored_value != NULL) {
-                    paxos_log_debug("GET the stored value %s with key %s, size %zu at thread_id %d\n", stored_value, key, vsize, tid);
+                    paxos_log_debug("GET key %s with the stored value %s size %zu at thread_id %d\n", key, stored_value, vsize, tid);
                     free(stored_value);
                 }
             }
         }
         else if (cmd->op == INC)
         {
-            printf("RECEVIED AT THREAD ID %d\n", tid);
+            paxos_log_debug("received at thread id %d\n", tid);
             char *s_key = cmd->content + 16;
             char *f_stored_value = NULL, *s_stored_value = NULL;
             size_t f_vsize = 0, s_vsize = 0;
@@ -75,8 +82,8 @@ static void deliver(int tid, unsigned int inst, char* val, size_t size, void* ar
             else{
                 if (f_stored_value != NULL && s_stored_value != NULL)
                 {
-                    paxos_log_debug("first value %s of first key  %s\n", f_stored_value,key);
-                    paxos_log_debug("second value %s second key %s\n", s_stored_value,s_key);
+                    paxos_log_debug("first key %s of first value  %s\n",key, f_stored_value);
+                    paxos_log_debug("second key %s second value %s\n", s_key, s_stored_value);
                     char result_value[32];
                     memset(result_value, f_stored_value[0], 8);
                     memset(result_value+8, s_stored_value[0], 7);
@@ -97,7 +104,8 @@ static void deliver(int tid, unsigned int inst, char* val, size_t size, void* ar
 
     /* TEST only the first learner responds */
     // if (cmd->command_id % app->node_count == app->node_id) {
-    if (app->node_id == 0) {
+    if (app->node_id == 0)
+    {
         // print_addr(&req->cliaddr);
         int n = sendto(app->paxos->sock, retval, content_length(req), 0,
                         (struct sockaddr *)&req->cliaddr,
@@ -107,29 +115,21 @@ static void deliver(int tid, unsigned int inst, char* val, size_t size, void* ar
     }
 }
 
-void on_perf(evutil_socket_t fd, short event, void *arg) {
-    struct application_ctx *app = arg;
-    printf("%4d %8d\n", app->at_second++, app->message_per_second);
-    app->message_per_second = 0;
-
-}
-
 void usage(char *prog) {
     printf("Usage: %s configuration-file learner_id number_of_learner [enable_leveldb]\n", prog);
 }
 
 static void
-learner_thread_free(struct learner_thread* l, struct application_ctx* app, struct netpaxos_configuration conf)
+learner_thread_free(struct learner_thread* l, struct application_ctx* app)
 {
     //bufferevent_free
     event_free(l->ev_perf);
-    //event_base_free(l->ctx->base);
-    //free_paxos_ctx(l->ctx);
+    event_base_free(l->ctx->base);
+    free_paxos_ctx(l->ctx);
     free_paxos_ctx(app->paxos);
     free(app->proxies);
     free_leveldb_context(app->leveldb);
     free(app);
-    free_configuration(&conf);
     paxos_log_debug("Exit properly");
     free(l);
 }
@@ -139,7 +139,7 @@ static void*
 start_thread(void* v)
 {
     int learner_id = *((int*)v);
-    printf("Learner thread %d: starting....\n", learner_id);
+    paxos_log_debug("Learner thread %d: starting....\n", learner_id);
     struct learner_thread* l = malloc (sizeof(struct learner_thread));
 
     struct application_ctx *app = malloc(sizeof (struct application_ctx));
@@ -159,7 +159,6 @@ start_thread(void* v)
     }
     //start learner thread
     l = make_learner(learner_id, &conf, deliver, app);
-    //l->ctx->learner_state = commond_learner_state;
     learners[learner_id] = l;
     app->paxos = l->ctx;
     if (app->enable_leveldb)
@@ -174,7 +173,8 @@ start_thread(void* v)
     
     //start paxos in learner (event_base_dispatch)
     start_paxos(app->paxos);
-    learner_thread_free(l, app, conf);
+    //event_base_dispatch(l->ctx->base);
+    learner_thread_free(l, app);
     pthread_exit(NULL);
 }
 
@@ -191,7 +191,6 @@ start_learner(int * learner_id, pthread_t* t)
 static void
 finish_learner(struct learner_thread* l)
 {
-    //struct event_base* base = 
     event_base_loopbreak(l->ctx->base);
 }
 
@@ -265,13 +264,14 @@ int main(int argc, char *argv[])
     for (i = 0; i < NUM_OF_THREAD; i++)
     {
         pthread_join(t[i], NULL);
-        printf("Learner thread %d finished!\n", ids[i]);
+        paxos_log_debug("Learner thread %d finished!\n", ids[i]);
     }
       /* Clean up and exit */
     pthread_mutex_destroy(&execute_mutex);
 
     free(t);
     free(ids);
+    free_configuration(&conf);
     free(learners);
     
 

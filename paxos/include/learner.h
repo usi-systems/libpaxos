@@ -44,18 +44,15 @@ void learner_free(struct learner* l);
 void learner_set_instance_id(struct learner* l, iid_t iid);
 //void learner_thread_set_instance_id(struct learner_thread* l, iid_t iid);
 
-void learner_receive_accepted(struct learner* l, paxos_accepted* ack);
-void learner_thread_receive_accepted(struct learner* l, paxos_accepted* ack, int acceptors, iid_t *current_iid, iid_t *highest_iid_closed);
+void learner_receive_accepted(struct learner* l, paxos_accepted* ack, uint16_t thread_id);
 
-int learner_deliver_next(struct learner* l, paxos_accepted* out);
-int learner_thread_deliver_next(struct learner *l, paxos_accepted* out, int thread_id, iid_t current_iid);
+int learner_deliver_next(struct learner* l, paxos_accepted* out, uint16_t thread_id);
 
 int learner_has_holes(struct learner* l, iid_t* from, iid_t* to);
-int learner_thread_has_holes(struct learner_thread* l_th, iid_t* from, iid_t* to);
 /* Extend learner to run phase 1 and phase 2 in recovery */
-void learner_prepare(struct learner* l, paxos_prepare* out, iid_t iid);
-int learner_receive_promise(struct learner* l, paxos_promise* promise,
-    paxos_accept* accept);
+//void learner_prepare(struct learner* l, paxos_prepare* out, iid_t iid);
+void learner_prepare(struct learner* l, paxos_prepare* out, iid_t iid, uint16_t lth_id);
+int learner_receive_promise(struct learner* l, paxos_promise* promise, paxos_accept* accept);
 int learner_receive_preempted(struct learner* l, paxos_preempted* ack,
     paxos_prepare* out);
 

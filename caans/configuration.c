@@ -9,7 +9,7 @@ int parse_verbosity(char* str, paxos_log_level* verbosity);
 void dump_configuration(struct netpaxos_configuration *conf)
 {
     int i;
-    printf ("--------------------------\n");
+    paxos_log_debug ("--------------------------\n");
     for (i = 0; i < conf->learner_count; i++) {
         paxos_log_debug("learner thread %d: %s %d", i, conf->learner_address[i], conf->learner_port[i]);
     }
@@ -20,7 +20,7 @@ void dump_configuration(struct netpaxos_configuration *conf)
     for (i = 0; i < conf->proposer_count; i++) {
         paxos_log_debug("proposer %d: %s %d", i, conf->proposer_address[i], conf->proposer_port[i]);
     }
-   printf ("--------------------------\n");
+   paxos_log_debug ("--------------------------\n");
 }
 
 int populate_configuration(char* config, struct netpaxos_configuration *conf)

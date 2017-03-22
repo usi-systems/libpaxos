@@ -236,8 +236,8 @@ TEST_P(AcceptorTest, TrimmedInstances) {
 	
 	// acceptors should not prepare/accept/repeat trimmed instances
 	paxos_trim trim = {5};
-	acceptor_receive_trim(a, &trim);
-	
+	//acceptor_receive_trim(a, &trim);
+	acceptor_receive_trim(a, &trim,0);
 	paxos_prepare pre;
 	for (int i = 1; i < 6; ++i) {
 		pre = (paxos_prepare){i, ballot, value_ballot, acceptor_id, {vsize, value}};

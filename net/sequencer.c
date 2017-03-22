@@ -17,7 +17,7 @@ sequencer_handle_proposal(struct paxos_ctx *ctx, char* buf, int size)
 {
     uint16_t* be_threadid = (uint16_t *)(buf + sizeof(uint16_t) + sizeof(uint32_t) + sizeof(uint16_t));
     uint32_t* inst_be = (uint32_t *)(buf + sizeof(uint16_t));
-
+    uint16_t* be_acceptor_counter_id = (uint16_t *)(buf + (sizeof(uint16_t) * 3) + sizeof(uint32_t));
     uint16_t t = ntohs(*be_threadid);
     
     if (t == ALL)
@@ -26,21 +26,30 @@ sequencer_handle_proposal(struct paxos_ctx *ctx, char* buf, int size)
         for (i = 0; i < NUM_OF_THREAD; i++)
         {
             *inst_be = htonl(ctx->sequencer->current_instance[i]++);
-            printf("**All---Thread id %u current_instance %u\n", i, ntohl(*inst_be));
+            paxos_log_debug("**All---Thread id %u current_instance %u\n", i, ntohl(*inst_be));
+            *be_threadid = htons(t);
+            *be_acceptor_counter_id = htons(i);
+            //paxos_log_debug("before sending, thread %u net_thread %u\n", ntohs(*be_threadid), *be_threadid);
+            int n = sendto(ctx->sock, buf, size, 0,
+                (struct sockaddr *)&ctx->acceptor_sin, sizeof(ctx->acceptor_sin));
+            // paxos_log_debug("packet accept has size of %d\n", size); size 102
+            if (n < 0)
+                error_at_line(1, errno, __FILE__, __LINE__, "%s\n", strerror(errno));
         }
     }
-    else{
+    else
+    {
 
         *inst_be = htonl(ctx->sequencer->current_instance[t]++);
-        printf("**Specific---Thread id %u current_instance %u\n", t, ntohl(*inst_be));
+        paxos_log_debug("**Specific---Thread id %u current_instance %u\n", t, ntohl(*inst_be));
+        *be_threadid = htons(t);
+        //paxos_log_debug("before sending, thread %u net_thread %u\n", ntohs(*be_threadid), *be_threadid);
+        int n = sendto(ctx->sock, buf, size, 0,
+                (struct sockaddr *)&ctx->acceptor_sin, sizeof(ctx->acceptor_sin));
+        // paxos_log_debug("packet accept has size of %d\n", size); size 102
+        if (n < 0)
+            error_at_line(1, errno, __FILE__, __LINE__, "%s\n", strerror(errno));
     }
-    *be_threadid = htons(t);
-    //printf("before sending, thread %u net_thread %u\n", ntohs(*be_threadid), *be_threadid);
-    int n = sendto(ctx->sock, buf, size, 0,
-        (struct sockaddr *)&ctx->acceptor_sin, sizeof(ctx->acceptor_sin));
-   // printf("packet accept has size of %d\n", size); size 102
-    if (n < 0)
-        error_at_line(1, errno, __FILE__, __LINE__, "%s\n", strerror(errno));
 }
 
 
@@ -53,7 +62,7 @@ handle_accepted(struct paxos_ctx *ctx, char* buf, int size, struct sockaddr_in *
     // Skip command ID and client address 
     char *retval = (val + sizeof(uint16_t) + sizeof(struct sockaddr_in));
     size_t retsize = size - sizeof(msg.u.accepted) + sizeof(uint16_t) + socklen;
-     printf("packet accepted has size of %zd\n", retsize);
+     paxos_log_debug("packet accepted has size of %zd\n", retsize);
     int n = sendto(ctx->sock, retval, retsize, 0, (struct sockaddr *)remote, socklen);
     ctx->message_per_second++;
     if (n < 0)

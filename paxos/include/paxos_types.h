@@ -43,6 +43,7 @@ struct __attribute__((__packed__)) paxos_prepare
 	uint32_t iid;
 	uint16_t ballot;
 	uint16_t thread_id;
+	uint16_t a_tid;
 	uint16_t value_ballot;
 	uint16_t aid;
 	paxos_value value;
@@ -54,6 +55,7 @@ struct __attribute__((__packed__)) paxos_promise
 	uint32_t iid;
 	uint16_t ballot;
 	uint16_t thread_id;
+	uint16_t a_tid;
 	uint16_t value_ballot;
 	uint16_t aid;
 	paxos_value value;
@@ -65,6 +67,7 @@ struct __attribute__((__packed__)) paxos_accept
 	uint32_t iid;
 	uint16_t ballot;
 	uint16_t thread_id;
+	uint16_t a_tid;
 	uint16_t value_ballot;
 	uint16_t aid;
 	paxos_value value;
@@ -76,6 +79,7 @@ struct __attribute__((__packed__)) paxos_accepted
 	uint32_t iid;
 	uint16_t ballot;
 	uint16_t thread_id;
+	uint16_t a_tid;
 	uint16_t value_ballot;
 	uint16_t aid;
 	paxos_value value;
@@ -87,6 +91,7 @@ struct __attribute__((__packed__)) paxos_preempted
 	uint32_t iid;
 	uint16_t ballot;
 	uint16_t thread_id;
+	uint16_t a_tid;
 	uint16_t value_ballot;
 	uint16_t aid;
 	paxos_value value;
@@ -97,6 +102,8 @@ struct __attribute__((__packed__)) paxos_repeat
 {
 	uint32_t from;
 	uint32_t to;
+	uint16_t thread_id;
+	uint16_t a_tid;
 };
 typedef struct paxos_repeat paxos_repeat;
 

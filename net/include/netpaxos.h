@@ -18,7 +18,7 @@ int check_leveldb;
 struct learner_thread
 {
    
-    int lth_id;
+    uint16_t lth_id;
     struct paxos_ctx *ctx;
     struct event *ev_perf;
 

@@ -106,7 +106,7 @@ void paxos_log_debug(const char* format, ...);
 	This number MUST be a power of 10.
 */
 #define MAX_N_OF_PROPOSERS 10
-
+#define NUM_OF_THREAD 2
 #ifdef __cplusplus
 }
 #endif
