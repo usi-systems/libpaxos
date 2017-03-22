@@ -30,7 +30,6 @@ void on_perf(evutil_socket_t fd, short event, void *arg) {
 }
 static void deliver(int tid, unsigned int inst, char* val, size_t size, void* arg) {
     struct application_ctx *app = arg;
-    printf("thread id %d message %d second %d\n",tid, app->message_per_second, app->at_second);
     app->message_per_second++;
     if (size <= 0)
         return;
@@ -38,7 +37,6 @@ static void deliver(int tid, unsigned int inst, char* val, size_t size, void* ar
 
     struct command *cmd = (struct command*)(val + sizeof(struct client_request) - 1);
     
-   //pthread_mutex_lock (&levelb_mutex);
     if (app->enable_leveldb)
     {
         char *key = cmd->content;
@@ -207,7 +205,7 @@ sigint_handler(int sig)
 
 int main(int argc, char *argv[])
 {
-
+    setbuf(stdout, NULL);
     pthread_t* t;
     int i, *ids;
     // Initialize mutex
