@@ -30,7 +30,7 @@ void on_perf(evutil_socket_t fd, short event, void *arg) {
 }
 static void deliver(int tid, unsigned int inst, char* val, size_t size, void* arg) {
     struct application_ctx *app = arg;
-    paxos_log_debug("thread id %d message %d second %d\n",tid, app->message_per_second, app->at_second);
+    printf("thread id %d message %d second %d\n",tid, app->message_per_second, app->at_second);
     app->message_per_second++;
     if (size <= 0)
         return;
