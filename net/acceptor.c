@@ -5,6 +5,8 @@
 #include <string.h>
 #include <event2/event.h>
 #include <sys/socket.h>
+#include <sys/un.h>
+#include <assert.h>
 #include <signal.h>
 #include "netutils.h"
 #include "netpaxos.h"
@@ -12,20 +14,43 @@
 #include <errno.h>
 #include <error.h>
 
+
 void acceptor_handle_prepare(struct paxos_ctx *ctx, struct paxos_message *msg,
         struct sockaddr_in *remote, socklen_t socklen)
 {
     paxos_message out;
     paxos_prepare* prepare = &msg->u.prepare;
-
-    if (acceptor_receive_prepare(ctx->acceptor_state, prepare, &out) != 0) {
-        size_t msg_len = pack_paxos_message(ctx->buffer, &out);
-        int n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
-            (struct sockaddr *)remote, socklen);
-        if (n < 0)
-            error_at_line(1, errno, __FILE__, __LINE__, "%s\n", strerror(errno));
-        paxos_message_destroy(&out);
+    uint16_t thread_id = prepare->thread_id;
+    int acc_counter_id = prepare->a_tid;
+    paxos_log_debug("-------\n");
+    paxos_log_debug("acceptor_handle_prepare iid %u thread_id %u acc_counter_id %d\n",prepare->iid, thread_id, acc_counter_id);
+    if (thread_id == ALL)
+    {
+        if (acceptor_receive_prepare(ctx->acceptor_state, prepare, &out, acc_counter_id) != 0)
+        {
+            size_t msg_len = pack_paxos_message(ctx->buffer, &out);
+            int n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
+                (struct sockaddr *)remote, socklen);
+            if (n < 0)
+                error_at_line(1, errno, __FILE__, __LINE__, "%s\n", strerror(errno));
+            paxos_message_destroy(&out);
+        }
+            
     }
+    else
+    {
+        if (acceptor_receive_prepare(ctx->acceptor_state, prepare, &out, thread_id) != 0)
+        {
+            size_t msg_len = pack_paxos_message(ctx->buffer, &out);
+            int n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
+                (struct sockaddr *)remote, socklen);
+            if (n < 0)
+                error_at_line(1, errno, __FILE__, __LINE__, "%s\n", strerror(errno));
+            paxos_message_destroy(&out);
+        }
+    }
+    
+    
 }
 
 void acceptor_handle_accept(struct paxos_ctx *ctx, struct paxos_message *msg,
@@ -33,43 +58,55 @@ void acceptor_handle_accept(struct paxos_ctx *ctx, struct paxos_message *msg,
 {
     paxos_message out;
     paxos_accept* accept = &msg->u.accept;
-    printf("*thread_id  %d\n", accept->thread_id);
+    //paxos_log_debug("*thread_id  %d\n", accept->thread_id);
+    int thread_id = accept->thread_id;
+    int acc_counter_id = accept->a_tid;
+    if (thread_id == ALL)
+    {
+        if (acceptor_receive_accept(ctx->acceptor_state, accept, &out, acc_counter_id) != 0)
+        {
 
-    if (acceptor_receive_accept(ctx->acceptor_state, accept, &out) != 0) {
-        if (out.type == PAXOS_ACCEPTED) {
-            int thread_id = out.u.accept.thread_id;
-            size_t msg_len = pack_paxos_message(ctx->buffer, &out);
-
-            int n;
-           
-            if (thread_id == ALL)
+            if (out.type == PAXOS_ACCEPTED)
             {
-                int i;
-                for (i = 0; i < NUM_OF_THREAD; i++)
-                {
-                    n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
-                        (struct sockaddr *)&ctx->learner_sin[i], sizeof(ctx->learner_sin[i]));
-                    printf("---1--- send to learner: thread_id  %d, instance id %u\n", i, out.u.accept.iid);
-                }
-            }
-            else
-            {
+                size_t msg_len = pack_paxos_message(ctx->buffer, &out);
+                int n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
+                            (struct sockaddr *)&ctx->learner_sin[acc_counter_id], 
+                            sizeof(ctx->learner_sin[acc_counter_id]));
+                paxos_log_debug("-1- ALL: send to learner: thread_id %d, instance id %u a_id %d \n", 
+                            acc_counter_id, out.u.accept.iid, out.u.accept.aid) ;
+                if (n < 0)
+                    error_at_line(1, errno, __FILE__, __LINE__, "%s\n", strerror(errno));
+               
                 n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
-                (struct sockaddr *)&ctx->learner_sin[thread_id], sizeof(ctx->learner_sin[thread_id]));
-                 printf("---2--- send to learner: thread_id  %d, instance id %u\n", thread_id, out.u.accept.iid);
-            }
-           
-            
-            
-            if (n < 0)
-                error_at_line(1, errno, __FILE__, __LINE__, "%s\n", strerror(errno));
-            
-            n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
-                (struct sockaddr *)remote, socklen);
-            if (n < 0)
-                error_at_line(1, errno, __FILE__, __LINE__, "%s\n", strerror(errno));
+                            (struct sockaddr *)remote, socklen);
+                if (n < 0)
+                    error_at_line(1, errno, __FILE__, __LINE__, "%s\n", strerror(errno));
+              
+            }  
+             paxos_message_destroy(&out);
         }
-        paxos_message_destroy(&out);
+    }
+    else
+    {
+        if (acceptor_receive_accept(ctx->acceptor_state, accept, &out, thread_id) != 0)
+        {
+            if (out.type == PAXOS_ACCEPTED)
+            {
+                size_t msg_len = pack_paxos_message(ctx->buffer, &out);
+                int n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
+                        (struct sockaddr *)&ctx->learner_sin[thread_id], sizeof(ctx->learner_sin[thread_id]));
+                paxos_log_debug("-2- send to learner: thread_id  %d, instance id %u a_id %u",
+                         thread_id, out.u.accept.iid, out.u.accept.aid);
+                if (n < 0)
+                    error_at_line(1, errno, __FILE__, __LINE__, "%s\n", strerror(errno));
+            
+                n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
+                            (struct sockaddr *)remote, socklen);
+                if (n < 0)
+                    error_at_line(1, errno, __FILE__, __LINE__, "%s\n", strerror(errno));    
+            }
+            paxos_message_destroy(&out);  
+        }
     }
 }
 
@@ -80,17 +117,39 @@ void acceptor_handle_repeat(struct paxos_ctx *ctx, struct paxos_message* msg,
     paxos_message out;
     out.type = PAXOS_ACCEPTED;
     paxos_repeat* repeat = &msg->u.repeat;
-    paxos_log_debug("Handle repeat for iids %d-%d", repeat->from, repeat->to);
-    for (iid = repeat->from; iid <= repeat->to; ++iid) {
-        if (acceptor_receive_repeat(ctx->acceptor_state, iid, &out.u.accepted)) {
-            size_t msg_len = pack_paxos_message(ctx->buffer, &out);
-            int n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
-                (struct sockaddr *)remote, socklen);
-            if (n < 0)
-                error_at_line(1, errno, __FILE__, __LINE__, "%s\n", strerror(errno));
-            paxos_message_destroy(&out);
-        }
+    int thread_id = repeat->thread_id;
+    int acc_counter_id = repeat->a_tid;
+    if (thread_id == ALL)
+    {
+        paxos_log_debug("Handle repeat for iids %d-%d of combined thread id %d", repeat->from, repeat->to, acc_counter_id);
+        for (iid = repeat->from; iid <= repeat->to; ++iid)
+        {
+            if (acceptor_receive_repeat(ctx->acceptor_state, iid, &out.u.accepted, acc_counter_id)) {
+                size_t msg_len = pack_paxos_message(ctx->buffer, &out);
+                int n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
+                        (struct sockaddr *)remote, socklen);
+                if (n < 0)
+                    error_at_line(1, errno, __FILE__, __LINE__, "%s\n", strerror(errno));
+                paxos_message_destroy(&out);
+            }
+        } 
     }
+    else
+    {
+       paxos_log_debug("Handle repeat for iids %d-%d of thread id %d", repeat->from, repeat->to, thread_id);
+        for (iid = repeat->from; iid <= repeat->to; ++iid)
+        {
+            if (acceptor_receive_repeat(ctx->acceptor_state, iid, &out.u.accepted,thread_id)) {
+                size_t msg_len = pack_paxos_message(ctx->buffer, &out);
+                int n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
+                    (struct sockaddr *)remote, socklen);
+                if (n < 0)
+                    error_at_line(1, errno, __FILE__, __LINE__, "%s\n", strerror(errno));
+                paxos_message_destroy(&out);
+            }
+        } 
+    }
+    
 }
 
 void

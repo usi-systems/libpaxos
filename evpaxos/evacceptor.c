@@ -62,7 +62,7 @@ evacceptor_handle_prepare(struct peer* p, paxos_message* msg, void* arg)
 	struct evacceptor* a = (struct evacceptor*)arg;
 	paxos_log_debug("Handle prepare for iid %d ballot %d",
 		prepare->iid, prepare->ballot);
-	if (acceptor_receive_prepare(a->state, prepare, &out) != 0) {
+	if (acceptor_receive_prepare(a->state, prepare, &out, 0) != 0) {
 		send_paxos_message(peer_get_buffer(p), &out);
 		paxos_message_destroy(&out);
 	}
@@ -79,7 +79,7 @@ evacceptor_handle_accept(struct peer* p, paxos_message* msg, void* arg)
 	struct evacceptor* a = (struct evacceptor*)arg;
 	paxos_log_debug("Handle accept for iid %d bal %d", 
 		accept->iid, accept->ballot);
-	if (acceptor_receive_accept(a->state, accept, &out) != 0) {
+	if (acceptor_receive_accept(a->state, accept, &out,0) != 0) {
 		if (out.type == PAXOS_ACCEPTED) {
 			peers_foreach_client(a->peers, peer_send_paxos_message, &out);
 		} else if (out.type == PAXOS_PREEMPTED) {
@@ -98,7 +98,7 @@ evacceptor_handle_repeat(struct peer* p, paxos_message* msg, void* arg)
 	struct evacceptor* a = (struct evacceptor*)arg;
 	paxos_log_debug("Handle repeat for iids %d-%d", repeat->from, repeat->to);
 	for (iid = repeat->from; iid <= repeat->to; ++iid) {
-		if (acceptor_receive_repeat(a->state, iid, &accepted)) {
+		if (acceptor_receive_repeat(a->state, iid, &accepted,0)) {
 			send_paxos_accepted(peer_get_buffer(p), &accepted);
 			paxos_accepted_destroy(&accepted);
 		}
@@ -110,7 +110,8 @@ evacceptor_handle_trim(struct peer* p, paxos_message* msg, void* arg)
 {
 	paxos_trim* trim = &msg->u.trim;
 	struct evacceptor* a = (struct evacceptor*)arg;
-	acceptor_receive_trim(a->state, trim);
+	//acceptor_receive_trim(a->state, trim);
+	acceptor_receive_trim(a->state, trim,0);
 }
 
 static void

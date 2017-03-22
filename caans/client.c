@@ -8,7 +8,7 @@
 #include <time.h>
 #include <string.h>
 #include "message.h"
-
+#include "netpaxos.h"
 #define NS_PER_S 1000000000
 #define AGGREGATE
 #define NUM_OF_THREAD 2
@@ -70,14 +70,16 @@ void send_to_addr(struct client_context *ctx) {
         key = malloc(sizeof(unsigned char));
         value = malloc(sizeof(unsigned char));
         random_string(key);
+        //*key = 'z';
         memset(cmd.content, *key, 15);
         cmd.content[15] = '\0';
         random_string(value);
+        //*value = '3';
         memset(cmd.content+16, *value, 15);
         cmd.content[31] = '\0';
         cmd.thread_id = command_to_thread(key);
 
-        printf ("SET key %c value %c thread_id %d\n", *key, *value, cmd.thread_id);
+        paxos_log_debug ("SET key %c value %c thread_id %d\n", *key, *value, cmd.thread_id);
         
     }
     else if (cmd.op == GET)
@@ -91,7 +93,7 @@ void send_to_addr(struct client_context *ctx) {
         cmd.content[31] = '\0';
         cmd.thread_id = command_to_thread(key);
         clock_gettime(CLOCK_REALTIME, &cmd.ts);
-        printf ("GET key %c thread_id %d\n", *key, cmd.thread_id);
+        paxos_log_debug ("GET key %c thread_id %d\n", *key, cmd.thread_id);
     }
     else if (cmd.op == INC)
     {
@@ -100,14 +102,16 @@ void send_to_addr(struct client_context *ctx) {
         key1 = malloc(sizeof(unsigned char));
         key2 = malloc(sizeof(unsigned char));
         random_string(key1);
+        *key1 = 'x';
         memset(cmd.content, *key1, 15);
         cmd.content[15] = '\0';
         random_string(key2);
+        *key2 = 'y';
         memset(cmd.content+16, *key2, 15);
         cmd.content[31] = '\0';
         cmd.thread_id = ALL;
 
-        printf ("INC key %c %c thread_id %d\n", *key1, *key2, cmd.thread_id);
+        paxos_log_debug ("INC key %c %c thread_id %d\n", *key1, *key2, cmd.thread_id);
     }
     
 
