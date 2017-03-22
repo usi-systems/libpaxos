@@ -69,7 +69,7 @@ static void
 evlearner_deliver_next_closed(struct evlearner* l)
 {
 	paxos_accepted deliver;
-	while (learner_deliver_next(l->state, &deliver)) {
+	while (learner_deliver_next(l->state, &deliver, 0)) {
 		l->delfun(
 			0,
 			deliver.iid,
@@ -88,7 +88,7 @@ static void
 evlearner_handle_accepted(struct peer* p, paxos_message* msg, void* arg)
 {
 	struct evlearner* l = arg;
-	learner_receive_accepted(l->state, &msg->u.accepted);
+	learner_receive_accepted(l->state, &msg->u.accepted, 0);
 	evlearner_deliver_next_closed(l);
 }
 
