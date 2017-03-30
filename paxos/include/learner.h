@@ -50,7 +50,8 @@ int learner_deliver_next(struct learner* l, paxos_accepted* out, uint16_t thread
 
 int learner_has_holes(struct learner* l, iid_t* from, iid_t* to);
 /* Extend learner to run phase 1 and phase 2 in recovery */
-//void learner_prepare(struct learner* l, paxos_prepare* out, iid_t iid);
+void learner_prepare_hole (struct learner* l, paxos_prepare_hole* out,
+						 iid_t* from_inst, iid_t* to_inst, uint16_t l_tid, int *msg_size);
 void learner_prepare(struct learner* l, paxos_prepare* out, iid_t iid, uint16_t lth_id);
 int learner_receive_promise(struct learner* l, paxos_promise* promise, paxos_accept* accept);
 int learner_receive_preempted(struct learner* l, paxos_preempted* ack,

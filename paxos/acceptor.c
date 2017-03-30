@@ -38,6 +38,7 @@ struct acceptor
 };
 
 static void paxos_accepted_to_promise(paxos_accepted* acc, paxos_message* out);
+static void paxos_accepted_to_promise_hole(paxos_accepted* acc, paxos_message* out);
 static void paxos_accept_to_accepted(int id, paxos_accept* acc, paxos_message* out);
 static void paxos_accepted_to_preempted(int id, paxos_accepted* acc, paxos_message* out);
 
@@ -49,7 +50,7 @@ acceptor_new(int id)
 	a = malloc(sizeof(struct acceptor));
 	a->id = id;
 	a->store = malloc (NUM_OF_THREAD * sizeof ( struct storage));
-	a->trim_iid = malloc (sizeof(iid_t));
+	a->trim_iid = malloc (NUM_OF_THREAD * sizeof(iid_t));
 	int i;
 	for (i = 0; i < NUM_OF_THREAD; i++)
 	{
@@ -63,7 +64,7 @@ acceptor_new(int id)
 			return NULL;
 		
 		a->trim_iid[i] = storage_get_trim_instance(&a->store[i]);
-		paxos_log_debug("--thread %u trim_iid %u", i,a->trim_iid[i]);
+		//paxos_log_debug("--thread %u trim_iid %u", i,a->trim_iid[i]);
 		if (storage_tx_commit(&a->store[i]) != 0)
 			return NULL;
 	}
@@ -87,7 +88,7 @@ int
 acceptor_receive_prepare(struct acceptor* a, 
 	paxos_prepare* req, paxos_message* out, int t_id)
 {
-	paxos_log_debug("\nreceive prepare message of thread_id %d with iid %u a->trim_iid[%d] %u", t_id,req->iid, t_id, a->trim_iid[t_id]);
+	paxos_log_debug("*receive prepare message iid %u thread_id %d a->trim_iid[%d] %u",req->iid, t_id, a->trim_iid[t_id]);
 	paxos_accepted acc;
 	if (req->iid <= a->trim_iid[t_id])
 		return 0;
@@ -95,11 +96,12 @@ acceptor_receive_prepare(struct acceptor* a,
 	if (storage_tx_begin(&a->store[t_id]) != 0)
 		return 0;
 	int found = storage_get_record(&a->store[t_id], req->iid, &acc);
-	paxos_log_debug("prepare found %d req->iid %u acc->ballot %u acc->value_ballot %u",
-						found, req->iid, acc.ballot, acc.value_ballot);
-	if (!found || acc.ballot <= req->ballot)
+	paxos_log_debug("prepare found %d req->iid %u  req->ballot %u acc->ballot %u acc->value_ballot %u",
+						found, req->iid,req->ballot, acc.ballot, acc.value_ballot);
+	if (!found || acc.ballot < req->ballot)
 	{
-		paxos_log_debug ("Storaged iid %u with thread_id %u a_tid %u",req->iid, acc.thread_id, acc.a_tid);
+		paxos_log_debug ("Storaged iid %u with thread_id %u a_tid %u aid %u",
+							req->iid, acc.thread_id, acc.a_tid, acc.aid);
 		paxos_log_debug("Preparing iid: %u, ballot: %u thread_id %u", req->iid, req->ballot, acc.thread_id);
 		acc.aid = a->id;
 		acc.iid = req->iid;
@@ -115,13 +117,45 @@ acceptor_receive_prepare(struct acceptor* a,
 	paxos_accepted_to_promise(&acc, out);
 	return 1;
 }
-
+int
+acceptor_receive_prepare_hole(struct acceptor* a, 
+	paxos_prepare* req, paxos_message* out, int t_id)
+{
+	paxos_log_debug("*receive prepare hole message iid %u thread_id %d a->trim_iid[%d] %u",req->iid, t_id, t_id, a->trim_iid[t_id]);
+	paxos_accepted acc;
+	if (req->iid <= a->trim_iid[t_id])
+		return 0;
+	memset(&acc, 0, sizeof(paxos_accepted));
+	if (storage_tx_begin(&a->store[t_id]) != 0)
+		return 0;
+	int found = storage_get_record(&a->store[t_id], req->iid, &acc);
+	paxos_log_debug("prepare found %d req->iid %u  req->ballot %u acc->ballot %u acc->value_ballot %u",
+						found, req->iid,req->ballot, acc.ballot, acc.value_ballot);
+	if (!found || acc.ballot < req->ballot)
+	{
+		paxos_log_debug ("Storaged iid %u with thread_id %u a_tid %u aid %u",
+							req->iid, acc.thread_id, acc.a_tid, acc.aid);
+		paxos_log_debug("Preparing iid: %u, ballot: %u thread_id %u", req->iid, req->ballot, acc.thread_id);
+		acc.aid = a->id;
+		acc.iid = req->iid;
+		acc.ballot = req->ballot;
+		
+		if (storage_put_record(&a->store[t_id], &acc) != 0) {
+			storage_tx_abort(&a->store[t_id]);
+			return 0;
+		}
+	}
+	if (storage_tx_commit(&a->store[t_id]) != 0)
+		return 0;
+	paxos_accepted_to_promise_hole(&acc, out);
+	return 1;
+}
 int
 acceptor_receive_accept(struct acceptor* a,
 	paxos_accept* req, paxos_message* out, int t_id)
 {
-	paxos_log_debug("-------\n");
-	paxos_log_debug("\nreceive accept message of thread_id %d with iid %u a->trim_iid[%d] %u", t_id,req->iid, t_id, a->trim_iid[t_id]);
+	paxos_log_debug("*receive accept message of thread_id %d with iid %u a->trim_iid[%d] %u", t_id,req->iid, t_id, a->trim_iid[t_id]);
+	paxos_log_debug("iid %u, aid %u", req->iid, req->aid);
 	paxos_accepted acc;
 	if (req->iid <= a->trim_iid[t_id])
 		return 0;
@@ -130,10 +164,19 @@ acceptor_receive_accept(struct acceptor* a,
 		return 0;
 
 	int found = storage_get_record(&a->store[t_id], req->iid, &acc);
-	paxos_log_debug("accept found %d req->iid %u req->value_size %d",found,req->iid, req->value.paxos_value_len);
+	paxos_log_debug("accept found %d req->iid %u req->value_size %d req->value %s",
+						found,req->iid, 
+						req->value.paxos_value_len,
+						req->value.paxos_value_val);
 	if (!found || acc.ballot <= req->ballot) {
-		paxos_log_debug("Accepting iid: %u, ballot: %u, thread_id %u", req->iid, req->ballot, req->thread_id);
+		paxos_log_debug("Accepting iid: %u, ballot: %u, thread_id %u aid %u",
+						req->iid,
+						req->ballot, 
+						req->thread_id,
+						req->aid);
+
 		paxos_accept_to_accepted(a->id, req, out);
+
 		if (storage_put_record(&a->store[t_id], &(out->u.accepted)) != 0) {
 			storage_tx_abort(&a->store[t_id]);
 			return 0;
@@ -193,7 +236,7 @@ paxos_accepted_to_promise(paxos_accepted* acc, paxos_message* out)
 		acc->aid,
 		{acc->value.paxos_value_len, acc->value.paxos_value_val}
 	};
-	paxos_log_debug("paxos_accepted_to_promise iid %u ballot %u t_id %u a_tid %u value_ballot %u acceptor id %u, value %s",
+	paxos_log_debug("send promise iid %u ballot %u t_id %u a_tid %u value_ballot %u acceptor id %u, value %s",
 		out->u.promise.iid,
 		out->u.promise.ballot,
 		out->u.promise.thread_id,
@@ -202,7 +245,29 @@ paxos_accepted_to_promise(paxos_accepted* acc, paxos_message* out)
 		out->u.promise.aid,
 		out->u.promise.value.paxos_value_val);
 }
-
+static void
+paxos_accepted_to_promise_hole(paxos_accepted* acc, paxos_message* out)
+{
+	out->type = PAXOS_PROMISE_HOLE;
+	out->u.promise = (paxos_promise) {
+		acc->iid,
+		acc->ballot,
+		acc->thread_id,
+		acc->a_tid,
+		acc->value_ballot,
+		acc->aid,
+		{acc->value.paxos_value_len, acc->value.paxos_value_val}
+	};
+	paxos_log_debug("send promise hole type %u iid %u ballot %u t_id %u a_tid %u value_ballot %u acceptor id %u, value %s",
+		out->type,
+		out->u.promise.iid,
+		out->u.promise.ballot,
+		out->u.promise.thread_id,
+		out->u.promise.a_tid,
+		out->u.promise.value_ballot,
+		out->u.promise.aid,
+		out->u.promise.value.paxos_value_val);
+}
 static void
 paxos_accept_to_accepted(int id, paxos_accept* acc, paxos_message* out)
 {

@@ -79,13 +79,29 @@ paxos_value_free(paxos_value* v)
 		free(v);
 	}
 }
-
+void
+paxos_hole_value_free(paxos_hole* v)
+{
+	if (v) {
+		if (v->paxos_hole_iid)
+			free(v->paxos_hole_iid);
+		free(v);
+	}
+}
 static void
 paxos_value_destroy(paxos_value* v)
 {
 	if (v->paxos_value_len > 0) {
 		free(v->paxos_value_val);	
 		v->paxos_value_val = NULL;
+	}
+}
+static void
+paxos_hole_value_destroy(paxos_hole* v)
+{
+	if (v->paxos_hole_len > 0) {
+		free(v->paxos_hole_iid);	
+		v->paxos_hole_iid = NULL;
 	}
 }
 
@@ -121,6 +137,12 @@ paxos_client_value_destroy(paxos_client_value* p)
 }
 
 void
+paxos_prepare_hole_destroy(paxos_prepare_hole* p)
+{
+	paxos_value_destroy(&p->value);
+	paxos_hole_value_destroy(&p->hole);
+}
+void
 paxos_message_destroy(paxos_message* m)
 {
 	switch (m->type) {
@@ -135,6 +157,12 @@ paxos_message_destroy(paxos_message* m)
 		break;
 	case PAXOS_CLIENT_VALUE:
 		paxos_client_value_destroy(&m->u.client_value);
+		break;
+	case PAXOS_PREPARE_HOLE:
+		//paxos_prepare_hole_destroy(&m->u.prepare_hole);
+		break;
+	case PAXOS_ACCEPT_HOLE:
+		//paxos_accept_destroy(&m->u.accept);
 		break;
 	default: break;
 	}

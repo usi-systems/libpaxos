@@ -5,7 +5,7 @@
 #include <sys/socket.h>
 #include "paxos.h"
 #include <pthread.h>
-#define BUFSIZE 128
+#define BUFSIZE 384
 #define NUM_OF_THREAD 2
 #define ALL 65
 
@@ -20,8 +20,8 @@ struct learner_thread
    
     uint16_t lth_id;
     struct paxos_ctx *ctx;
-    struct event *ev_perf;
-
+    //struct event *ev_perf;
+    //struct event *hole_watcher;
 };
 
 struct leveldb_ctx *common_levelb;
@@ -91,6 +91,7 @@ struct paxos_ctx *make_proposer(struct netpaxos_configuration *conf,
 
 //void set_instance_id (struct learner* l, iid_t iid);
 struct learner_thread* make_learner(int learner_id, struct netpaxos_configuration *conf, deliver_function f, void *arg);
+//struct paxos_ctx* make_learner(int learner_id, struct netpaxos_configuration *conf, deliver_function f, void *arg);
 
 struct paxos_ctx *make_replica(struct netpaxos_configuration *conf,int thread_id,
                                         deliver_function f, void *arg);

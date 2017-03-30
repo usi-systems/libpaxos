@@ -31,6 +31,20 @@
 
 #include <stdint.h>
 
+struct __attribute__((__packed__)) paxos_hole
+{
+	int paxos_hole_len;
+	uint32_t *paxos_hole_iid;
+};
+typedef struct paxos_hole paxos_hole;
+
+struct __attribute__((__packed__)) paxos_thread
+{
+	uint16_t paxos_thread_len;
+	uint16_t *paxos_thread_iid;
+};
+typedef struct paxos_thread paxos_thread;
+
 struct __attribute__((__packed__)) paxos_value
 {
 	int paxos_value_len;
@@ -50,6 +64,19 @@ struct __attribute__((__packed__)) paxos_prepare
 };
 typedef struct paxos_prepare paxos_prepare;
 
+struct __attribute__((__packed__)) paxos_prepare_hole
+{
+	uint32_t iid;
+	uint16_t ballot;
+	uint16_t thread_id;
+	uint16_t a_tid;
+	uint16_t value_ballot;
+	uint16_t aid;
+	paxos_value value;
+	paxos_hole hole;
+};
+typedef struct paxos_prepare_hole paxos_prepare_hole;
+
 struct __attribute__((__packed__)) paxos_promise
 {
 	uint32_t iid;
@@ -62,6 +89,18 @@ struct __attribute__((__packed__)) paxos_promise
 };
 typedef struct paxos_promise paxos_promise;
 
+struct __attribute__((__packed__)) paxos_promise_hole
+{
+	uint32_t iid;
+	uint16_t ballot;
+	uint16_t thread_id;
+	uint16_t a_tid;
+	uint16_t value_ballot;
+	uint16_t aid;
+	paxos_value value;
+};
+typedef struct paxos_promise_hole paxos_promise_hole;
+
 struct __attribute__((__packed__)) paxos_accept
 {
 	uint32_t iid;
@@ -73,6 +112,17 @@ struct __attribute__((__packed__)) paxos_accept
 	paxos_value value;
 };
 typedef struct paxos_accept paxos_accept;
+struct __attribute__((__packed__)) paxos_accept_hole
+{
+	uint32_t iid;
+	uint16_t ballot;
+	uint16_t thread_id;
+	uint16_t a_tid;
+	uint16_t value_ballot;
+	uint16_t aid;
+	paxos_value value;
+};
+typedef struct paxos_accept_hole paxos_accept_hole;
 
 struct __attribute__((__packed__)) paxos_accepted
 {
@@ -86,7 +136,7 @@ struct __attribute__((__packed__)) paxos_accepted
 };
 typedef struct paxos_accepted paxos_accepted;
 
-struct __attribute__((__packed__)) paxos_preempted
+struct __attribute__((__packed__)) paxos_accepted_hole
 {
 	uint32_t iid;
 	uint16_t ballot;
@@ -94,6 +144,18 @@ struct __attribute__((__packed__)) paxos_preempted
 	uint16_t a_tid;
 	uint16_t value_ballot;
 	uint16_t aid;
+	paxos_value value;
+};
+typedef struct paxos_accepted_hole paxos_accepted_hole;
+
+struct __attribute__((__packed__)) paxos_preempted
+{
+	uint32_t iid;
+	uint16_t ballot;
+	uint16_t thread_id;
+	uint16_t a_tid;
+	uint16_t value_ballot;
+	uint16_t aid;	
 	paxos_value value;
 };
 typedef struct paxos_preempted paxos_preempted;
@@ -136,7 +198,10 @@ enum paxos_message_type
 	PAXOS_REPEAT,
 	PAXOS_TRIM,
 	PAXOS_ACCEPTOR_STATE,
-	PAXOS_CLIENT_VALUE
+	PAXOS_CLIENT_VALUE,
+	PAXOS_PREPARE_HOLE,
+	PAXOS_PROMISE_HOLE,
+	PAXOS_ACCEPT_HOLE,
 };
 typedef enum paxos_message_type paxos_message_type;
 
@@ -154,6 +219,7 @@ struct __attribute__((__packed__)) paxos_message
 		paxos_trim trim;
 		paxos_acceptor_state state;
 		paxos_client_value client_value;
+		paxos_prepare_hole prepare_hole;
 	} u;
 };
 typedef struct paxos_message paxos_message;

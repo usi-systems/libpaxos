@@ -17,9 +17,10 @@ sequencer_handle_proposal(struct paxos_ctx *ctx, char* buf, int size)
 {
     uint16_t* be_threadid = (uint16_t *)(buf + sizeof(uint16_t) + sizeof(uint32_t) + sizeof(uint16_t));
     uint32_t* inst_be = (uint32_t *)(buf + sizeof(uint16_t));
-    uint16_t* be_acceptor_counter_id = (uint16_t *)(buf + (sizeof(uint16_t) * 3) + sizeof(uint32_t));
-    uint16_t t = ntohs(*be_threadid);
-    
+    uint16_t* be_acceptor_counter_id = (uint16_t *)(buf + sizeof(uint16_t) + sizeof(uint32_t) + sizeof(uint16_t)+ + sizeof(uint16_t));
+    uint16_t t =  ntohs(*be_threadid);
+
+    //printf ("thread id %u\n",t);
     if (t == ALL)
     {
         int i;
@@ -43,6 +44,7 @@ sequencer_handle_proposal(struct paxos_ctx *ctx, char* buf, int size)
         *inst_be = htonl(ctx->sequencer->current_instance[t]++);
         paxos_log_debug("**Specific---Thread id %u current_instance %u\n", t, ntohl(*inst_be));
         *be_threadid = htons(t);
+        *be_acceptor_counter_id = htons(t);
         //paxos_log_debug("before sending, thread %u net_thread %u\n", ntohs(*be_threadid), *be_threadid);
         int n = sendto(ctx->sock, buf, size, 0,
                 (struct sockaddr *)&ctx->acceptor_sin, sizeof(ctx->acceptor_sin));

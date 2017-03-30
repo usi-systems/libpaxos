@@ -3,6 +3,7 @@
 
 #include "paxos_types.h"
 void pack_paxos_prepare(char* p, paxos_prepare* v);
+void pack_paxos_prepare_hole (char* p, paxos_prepare_hole* v);
 void pack_paxos_promise(char* p, paxos_promise* v);
 void pack_paxos_accept(char* p, paxos_accept* v);
 void pack_paxos_accepted(char* p, paxos_accepted* v);
@@ -13,6 +14,7 @@ void pack_paxos_acceptor_state(char* p, paxos_acceptor_state* v);
 void pack_paxos_client_value(char* p, paxos_client_value* v);
 size_t pack_paxos_message(char* p, paxos_message* v);
 void unpack_paxos_prepare(paxos_prepare* v, char* p);
+void unpack_paxos_prepare_hole(paxos_prepare_hole* v, char* p);
 void unpack_paxos_promise(paxos_promise* v, char* p);
 void unpack_paxos_accept(paxos_accept* v, char* p);
 void unpack_paxos_accepted(paxos_accepted* v, char* p);

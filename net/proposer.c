@@ -23,7 +23,8 @@ static struct timespec timeout;
 
 static int tx_buffer_len;
 
-static void flush_buffer(evutil_socket_t fd, short what, void *arg) {
+static void flush_buffer(evutil_socket_t fd, short what, void *arg)
+{
     int retval = sendmmsg(fd, tx_buffer, tx_buffer_len, 0);
     if (retval == -1)
         perror("sendmmsg()");

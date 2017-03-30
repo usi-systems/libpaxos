@@ -1,0 +1,32 @@
+Searching 137 files for "acceptor_handle_accept" (regex, case sensitive)
+
+/Users/loanton/research/workspace/libpaxos/build:
+    ERROR: Unable to open file
+
+/Users/loanton/research/workspace/libpaxos/evpaxos/evacceptor.c:
+   73  */
+   74  static void 
+   75: evacceptor_handle_accept(struct peer* p, paxos_message* msg, void* arg)
+   76  {	
+   77  	paxos_message out;
+   ..
+  135  	
+  136  	peers_subscribe(p, PAXOS_PREPARE, evacceptor_handle_prepare, acceptor);
+  137: 	peers_subscribe(p, PAXOS_ACCEPT, evacceptor_handle_accept, acceptor);
+  138  	peers_subscribe(p, PAXOS_REPEAT, evacceptor_handle_repeat, acceptor);
+  139  	peers_subscribe(p, PAXOS_TRIM, evacceptor_handle_trim, acceptor);
+
+/Users/loanton/research/workspace/libpaxos/net/acceptor.c:
+   54  }
+   55  
+   56: void acceptor_handle_accept(struct paxos_ctx *ctx, struct paxos_message *msg,
+   57      struct sockaddr_in *remote, socklen_t socklen)
+   58  {
+   ..
+  183  
+  184          if (msg.type == PAXOS_ACCEPT) {
+  185:             acceptor_handle_accept(ctx, &msg, &remote, len);
+  186          } else if (msg.type == PAXOS_PREPARE) {
+  187              acceptor_handle_prepare(ctx, &msg, &remote, len);
+
+4 matches across 2 files

@@ -15,6 +15,63 @@
 #include <error.h>
 
 
+void acceptor_handle_prepare_hole(struct paxos_ctx *ctx, struct paxos_message *msg,
+        struct sockaddr_in *remote, socklen_t socklen)
+{
+    paxos_message out;
+    paxos_prepare_hole* prepare_hole = &msg->u.prepare_hole;
+    paxos_prepare * prepare = malloc (sizeof(struct paxos_prepare));
+
+    uint16_t thread_id = prepare_hole->thread_id;
+    int acc_counter_id;
+    int no_holes = prepare_hole->hole.paxos_hole_len;
+
+    paxos_log_debug("-------");
+   /* paxos_log_debug("prepare_hole->ballot %u, thread_id %u prepare_hole->a_tid %u", 
+                            prepare_hole->ballot, thread_id, prepare_hole->a_tid);*/
+    
+    prepare->ballot = prepare_hole->ballot;
+    prepare->thread_id = thread_id;
+    prepare->a_tid = prepare_hole->a_tid;
+    prepare->aid = prepare_hole->aid;
+    prepare->value_ballot = prepare_hole->value_ballot;
+    prepare->value.paxos_value_len = 0;
+    prepare->value.paxos_value_val = NULL;
+   
+    
+    /*paxos_log_debug("recieve prepare last iid %u thread_id %u acc_counter_id %d with no.holes %d\n",
+                                    prepare_hole->iid, thread_id, acc_counter_id, no_holes );*/
+    int i;
+    for (i = 0; i < no_holes; i++)
+    {
+        prepare->iid = prepare_hole->hole.paxos_hole_iid[i];
+        paxos_log_debug("received iid %u a_tid %u ballot %u thread_id %u",
+                        prepare->iid, 
+                        prepare->a_tid, 
+                        prepare->ballot, 
+                        prepare->thread_id);
+        switch(thread_id){
+            case ALL:
+                acc_counter_id = prepare_hole->a_tid;
+                break;
+            default:
+                acc_counter_id = thread_id;
+                break;
+        };
+        if (acceptor_receive_prepare_hole(ctx->acceptor_state, prepare, &out, acc_counter_id) != 0)
+        {
+            size_t msg_len = pack_paxos_message(ctx->buffer, &out);
+            int n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
+                (struct sockaddr *)remote, socklen);
+            if (n < 0)
+                error_at_line(1, errno, __FILE__, __LINE__, "%s\n", strerror(errno));
+            paxos_message_destroy(&out);
+        }
+    }
+    
+    
+}
+
 void acceptor_handle_prepare(struct paxos_ctx *ctx, struct paxos_message *msg,
         struct sockaddr_in *remote, socklen_t socklen)
 {
@@ -22,8 +79,8 @@ void acceptor_handle_prepare(struct paxos_ctx *ctx, struct paxos_message *msg,
     paxos_prepare* prepare = &msg->u.prepare;
     uint16_t thread_id = prepare->thread_id;
     int acc_counter_id = prepare->a_tid;
-    paxos_log_debug("-------\n");
-    paxos_log_debug("acceptor_handle_prepare iid %u thread_id %u acc_counter_id %d\n",prepare->iid, thread_id, acc_counter_id);
+    paxos_log_debug("-------");
+    paxos_log_debug("receive prepare iid %u thread_id %u acc_counter_id %d",prepare->iid, thread_id, acc_counter_id);
     if (thread_id == ALL)
     {
         if (acceptor_receive_prepare(ctx->acceptor_state, prepare, &out, acc_counter_id) != 0)
@@ -58,58 +115,85 @@ void acceptor_handle_accept(struct paxos_ctx *ctx, struct paxos_message *msg,
 {
     paxos_message out;
     paxos_accept* accept = &msg->u.accept;
-    //paxos_log_debug("*thread_id  %d\n", accept->thread_id);
+    paxos_log_debug("-------");
+    paxos_log_debug("receive accept message");
+    paxos_log_debug("paxos message has %d len %s value----paxos accept has %d len %s value",
+                        msg->u.accept.value.paxos_value_len, 
+                        msg->u.accept.value.paxos_value_val,
+                        accept->value.paxos_value_len,
+                        accept->value.paxos_value_val);
     int thread_id = accept->thread_id;
     int acc_counter_id = accept->a_tid;
-    if (thread_id == ALL)
+    switch(thread_id){
+        case ALL:
+            acc_counter_id= accept->a_tid;
+            break;
+        default:
+            acc_counter_id = thread_id;
+            break;
+    };
+    if (acceptor_receive_accept(ctx->acceptor_state, accept, &out, acc_counter_id) != 0)
     {
-        if (acceptor_receive_accept(ctx->acceptor_state, accept, &out, acc_counter_id) != 0)
+        if (out.type == PAXOS_ACCEPTED)
         {
-
-            if (out.type == PAXOS_ACCEPTED)
-            {
-                size_t msg_len = pack_paxos_message(ctx->buffer, &out);
-                int n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
+            size_t msg_len = pack_paxos_message(ctx->buffer, &out);
+            int n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
                             (struct sockaddr *)&ctx->learner_sin[acc_counter_id], 
                             sizeof(ctx->learner_sin[acc_counter_id]));
-                paxos_log_debug("-1- ALL: send to learner: thread_id %d, instance id %u a_id %d \n", 
+            paxos_log_debug("-1- ALL: send to learner: thread_id %d, instance id %u a_id %d \n", 
                             acc_counter_id, out.u.accept.iid, out.u.accept.aid) ;
-                if (n < 0)
-                    error_at_line(1, errno, __FILE__, __LINE__, "%s\n", strerror(errno));
+            if (n < 0)
+                error_at_line(1, errno, __FILE__, __LINE__, "%s\n", strerror(errno));
                
-                n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
+            n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
                             (struct sockaddr *)remote, socklen);
-                if (n < 0)
-                    error_at_line(1, errno, __FILE__, __LINE__, "%s\n", strerror(errno));
+            if (n < 0)
+                error_at_line(1, errno, __FILE__, __LINE__, "%s\n", strerror(errno));
               
-            }  
-             paxos_message_destroy(&out);
-        }
+        }  
+        paxos_message_destroy(&out);
     }
-    else
+}
+void acceptor_handle_accept_hole(struct paxos_ctx *ctx, struct paxos_message *msg,
+    struct sockaddr_in *remote, socklen_t socklen)
+{
+    paxos_message out;
+    paxos_accept* accept = &msg->u.accept;
+    paxos_log_debug("-------");
+    paxos_log_debug("receive accept hole message");
+    /*paxos_log_debug("paxos message has %d len %s value----paxos accept has %d len %s value",
+                        msg->u.accept.value.paxos_value_len, 
+                        msg->u.accept.value.paxos_value_val,
+                        accept->value.paxos_value_len,
+                        accept->value.paxos_value_val);*/
+    int thread_id = accept->thread_id;
+    int acc_counter_id;
+    //paxos_log_debug("thread_id %d",thread_id);
+    switch(thread_id){
+        case ALL:
+            acc_counter_id= accept->a_tid;
+            break;
+        default:
+            acc_counter_id = thread_id;
+            break;
+    };
+    //paxos_log_debug("acc_counter_id %d",acc_counter_id);
+    if (acceptor_receive_accept(ctx->acceptor_state, accept, &out, acc_counter_id) != 0)
     {
-        if (acceptor_receive_accept(ctx->acceptor_state, accept, &out, thread_id) != 0)
-        {
             if (out.type == PAXOS_ACCEPTED)
             {
                 size_t msg_len = pack_paxos_message(ctx->buffer, &out);
                 int n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
-                        (struct sockaddr *)&ctx->learner_sin[thread_id], sizeof(ctx->learner_sin[thread_id]));
-                paxos_log_debug("-2- send to learner: thread_id  %d, instance id %u a_id %u",
-                         thread_id, out.u.accept.iid, out.u.accept.aid);
+                        (struct sockaddr *)&ctx->learner_sin[acc_counter_id], sizeof(ctx->learner_sin[acc_counter_id]));
+                paxos_log_debug("-*-send to learner: thread_id  %d acc_counter_id %d instance id %u a_id %u",
+                         acc_counter_id, acc_counter_id, out.u.accept.iid, out.u.accept.aid);
                 if (n < 0)
                     error_at_line(1, errno, __FILE__, __LINE__, "%s\n", strerror(errno));
-            
-                n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
-                            (struct sockaddr *)remote, socklen);
-                if (n < 0)
-                    error_at_line(1, errno, __FILE__, __LINE__, "%s\n", strerror(errno));    
             }
             paxos_message_destroy(&out);  
-        }
     }
+    
 }
-
 void acceptor_handle_repeat(struct paxos_ctx *ctx, struct paxos_message* msg,
     struct sockaddr_in *remote, socklen_t socklen)
 {
@@ -189,8 +273,11 @@ void acceptor_read(evutil_socket_t fd, short what, void *arg)
             acceptor_handle_repeat(ctx, &msg, &remote, len);
         } else if (msg.type == PAXOS_ACCEPTED) { // use ACCEPTED for benchmarking
             //acceptor_handle_benchmark(ctx, &msg, n, &remote, len);
+        } else if (msg.type == PAXOS_PREPARE_HOLE) {
+            acceptor_handle_prepare_hole(ctx, &msg, &remote, len);
+        } else if (msg.type == PAXOS_ACCEPT_HOLE) {
+             acceptor_handle_accept_hole(ctx, &msg, &remote, len);
         }
-
         paxos_message_destroy(&msg);
     }
 }

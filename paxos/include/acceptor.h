@@ -41,6 +41,8 @@ struct acceptor* acceptor_new(int id);
 void acceptor_free(struct acceptor* a);
 int acceptor_receive_prepare(struct acceptor* a,
 	paxos_prepare* req, paxos_message* out, int t_id);
+int acceptor_receive_prepare_hole(struct acceptor* a,
+	paxos_prepare* req, paxos_message* out, int t_id);
 int acceptor_receive_accept(struct acceptor* a,
 	paxos_accept* req, paxos_message* out, int t_id);
 int acceptor_receive_repeat(struct acceptor* a,

@@ -273,6 +273,10 @@ void msgpack_pack_paxos_message(msgpack_packer* p, paxos_message* v)
 	case PAXOS_CLIENT_VALUE:
 		msgpack_pack_paxos_client_value(p, &v->u.client_value);
 		break;
+	case PAXOS_PREPARE_HOLE:
+		break;
+	default:
+		break;
 	}
 }
 
@@ -306,6 +310,10 @@ void msgpack_unpack_paxos_message(msgpack_object* o, paxos_message* v)
 		break;
 	case PAXOS_CLIENT_VALUE:
 		msgpack_unpack_paxos_client_value(o, &v->u.client_value);
+		break;
+	case PAXOS_PREPARE_HOLE:
+		break;
+	default:
 		break;
 	}
 }

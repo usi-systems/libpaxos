@@ -134,6 +134,7 @@ learner_set_instance_id(struct learner* l, iid_t iid)
 void
 learner_receive_accepted(struct learner* l, paxos_accepted* ack, uint16_t thread_id)
 {	
+	//paxos_log_debug("---learner_receive_accepted---");
 	if (l->late_start) {
 		l->late_start = 0;
 		l->current_iid = ack->iid;
@@ -149,7 +150,7 @@ learner_receive_accepted(struct learner* l, paxos_accepted* ack, uint16_t thread
 	inst = learner_get_instance_or_create(l, ack->iid);
 	
 	instance_update(inst, ack, l->acceptors, thread_id);
-	
+	//paxos_log_debug("1.check quorum");
 	if (instance_has_quorum(inst, l->acceptors, thread_id)
 		&& (inst->iid > l->highest_iid_closed))
 		l->highest_iid_closed = inst->iid;
@@ -171,8 +172,11 @@ int
 learner_deliver_next(struct learner* l, paxos_accepted* out, uint16_t thread_id)
 {
 	struct instance* inst = learner_get_current_instance(l);
+	//paxos_log_debug("---learner_delivers___");
 	if (inst == NULL || !instance_has_quorum(inst, l->acceptors, thread_id))
 		return 0;
+	paxos_log_debug("finale value %s iid %u thread_id %u", 
+		inst->final_value->value.paxos_value_val, inst->final_value->iid, inst->final_value->thread_id);
 	memcpy(out, inst->final_value, sizeof(paxos_accepted));
 	paxos_value_copy(&out->value, &inst->final_value->value);
 	learner_delete_instance(l, inst);
@@ -191,6 +195,39 @@ learner_has_holes(struct learner* l, iid_t* from, iid_t* to)
 	return 0;
 }
 
+void
+learner_prepare_hole (struct learner* l, paxos_prepare_hole* out, iid_t* from_inst, iid_t* to_inst, uint16_t l_tid, int *msg_size)
+{
+
+	int iid;
+	uint16_t max_ballot = 0;
+	struct gap* gap;
+	int no_iid =  *to_inst - *from_inst + 1;
+	uint32_t arr [no_iid];
+	out->hole.paxos_hole_len = no_iid;
+	out->hole.paxos_hole_iid = (uint32_t *) malloc(sizeof(uint32_t) * no_iid);
+	for (iid = *from_inst; iid <= *to_inst; iid++)
+	{	 
+		int idx = iid - *from_inst;
+		gap = get_gap_or_create(l, iid, l_tid);
+		assert(gap != NULL);
+		paxos_log_debug("(*)gap->thread_id %u of thread %u gap->a_tid %u gap->iid %u", gap->thread_id, l_tid, gap->a_tid, gap->iid);
+		if (gap->ballot >= max_ballot)
+			max_ballot = gap->ballot;
+		arr[idx] = gap->iid;
+		paxos_log_debug("gap->ballot %u iid %u", gap->ballot, gap->iid);
+	}
+	out->iid = gap->iid;
+	out->ballot = max_ballot;	
+	out->thread_id = gap->thread_id;
+	out->a_tid = gap->a_tid;
+	out->value.paxos_value_len = 0;
+	out->value.paxos_value_val = NULL;
+	memcpy(out->hole.paxos_hole_iid, arr, sizeof(uint32_t) * no_iid);
+	*msg_size = sizeof(paxos_message)+ (no_iid * sizeof(uint32_t));
+	//paxos_log_debug("size paxos %d size of uint32 %d", sizeof(paxos_message), sizeof(uint32_t)) ;
+	//paxos_log_debug("msg_size %d", *msg_size);
+}
 
 void
 learner_prepare(struct learner* l, paxos_prepare* out, iid_t iid, uint16_t l_tid)
@@ -225,8 +262,10 @@ learner_receive_promise(struct learner* l, paxos_promise* promise,
 	accept->ballot = gap->ballot;
 	accept->thread_id = gap->thread_id;
 	accept->a_tid = gap->a_tid;
+	//paxos_log_debug("aid -- gap->a_tid %u accept->a_tid %u", gap->a_tid, accept->a_tid);
 	accept->aid = promise->aid;
-	if (gap->highest_accepted_value) {
+	if (gap->highest_accepted_value)
+	{
 		paxos_value_copy(&accept->value, gap->highest_accepted_value);
 		assert(accept->value.paxos_value_len ==
 			gap->highest_accepted_value->paxos_value_len);
@@ -234,7 +273,7 @@ learner_receive_promise(struct learner* l, paxos_promise* promise,
 		accept->value.paxos_value_len = 0;
 		accept->value.paxos_value_val = NULL;
 	}
-	paxos_log_debug("send accept_msg to acceptor iid %u ballot %u t_id %u a_tid %u value_ballot %u acceptor id %u, value %s",
+	paxos_log_debug("send accept_msg to acceptor, iid %u ballot %u t_id %u a_tid %u value_ballot %u aid %u, value %s",
 		accept->iid,
 		accept->ballot,
 		accept->thread_id,
@@ -269,19 +308,19 @@ is_majority_promised(struct gap* gap)
 static void
 update_accepted_value(struct gap* gap, paxos_promise* promise)
 {
-	paxos_log_debug("--Gap highest_accepted_ballot %u Promise value_ballot %u", 
-						gap->highest_accepted_ballot, promise->value_ballot);
+	//paxos_log_debug("--Gap highest_accepted_ballot %u Promise value_ballot %u", 
+	//					gap->highest_accepted_ballot, promise->value_ballot);
 
 	if (gap->highest_accepted_ballot <= promise->value_ballot)
 	{
 		gap->highest_accepted_ballot = promise->value_ballot;
-		paxos_log_debug("--Promise paxos_value_len %d", promise->value.paxos_value_len);
+		//paxos_log_debug("--Promise paxos_value_len %d", promise->value.paxos_value_len);
 		if (promise->value.paxos_value_len)
 		{
 			if (gap->highest_accepted_value == NULL)
 				gap->highest_accepted_value = malloc(sizeof(paxos_value*));
 			paxos_value_copy(gap->highest_accepted_value, &promise->value);
-			paxos_log_debug("--Gap paxos_value_len %d",gap->highest_accepted_value->paxos_value_len);
+			//paxos_log_debug("--Gap paxos_value_len %d",gap->highest_accepted_value->paxos_value_len);
 		}
 	}
 }
@@ -444,7 +483,7 @@ static void
 instance_update(struct instance* inst, paxos_accepted* accepted, int acceptors, uint16_t thread_id)
 {	
 	if (inst->iid == 0) {
-		paxos_log_debug("Received first message for iid: %u thread id %u", accepted->iid, thread_id);
+		paxos_log_debug("Received first message for iid: %u thread id %u aid %u", accepted->iid, thread_id,accepted->aid);
 		inst->iid = accepted->iid;
 		inst->last_update_ballot = accepted->ballot;
 	}
@@ -460,7 +499,14 @@ instance_update(struct instance* inst, paxos_accepted* accepted, int acceptors, 
 		return;
 	}
 	paxos_accepted* prev_accepted = inst->acks[accepted->aid];
-	paxos_log_debug("accepted->aid %u "	"with accepted->iid %u thread_id %u", accepted->aid, accepted->iid, thread_id);
+
+	/*paxos_log_debug("accepted->aid %u "	"with accepted->iid %u thread_id %u accepted->len %d accepted->value %s",
+						accepted->aid, 
+						accepted->iid, 
+						thread_id, 
+						accepted->value.paxos_value_len, 
+						accepted->value.paxos_value_val);*/
+
 	if (prev_accepted != NULL && prev_accepted->ballot >= accepted->ballot) {
 		//paxos_log_debug("prev_accepted->ballot %u accepted->ballot %u\n",
 		//				prev_accepted->ballot, accepted->ballot);
@@ -487,21 +533,34 @@ instance_has_quorum(struct instance* inst, int acceptors, uint16_t thread_id)
 		return 1;
 	
 	for (i = 0; i < acceptors; i++) {
+		//paxos_log_debug("i %d",i);
 		curr_ack = inst->acks[i];
 	
 		// Skip over missing acceptor acks
 		if (curr_ack == NULL) continue;
 		
 		// Count the ones "agreeing" with the last added
-		if (curr_ack->ballot == inst->last_update_ballot) {
+		if (curr_ack->ballot == inst->last_update_ballot)
+		{
 			count++;
 			a_valid_index = i;
+			/*paxos_log_debug("*ack aid %d iid %u thread_id %u value %s at learner_thread_id %u",
+						i, 
+						inst->acks[i]->iid, 
+						inst->acks[i]->thread_id,
+						inst->acks[i]->value.paxos_value_val,
+						thread_id);*/
 		}
 	}
 
 	if (count >= paxos_quorum(acceptors)) {
-		paxos_log_debug("Reached quorum, iid: %u thread id %u is closed!", inst->iid, thread_id);
 		inst->final_value = inst->acks[a_valid_index];
+		paxos_log_debug("*Reached quorum, iid: %u thread id %u at aid %d iid %u value %s is closed!", 
+			inst->iid, 
+			thread_id,
+			inst->final_value->aid,
+			inst->final_value->iid,
+			inst->final_value->value.paxos_value_val);
 		return 1;
 	}
 	return 0;
@@ -521,7 +580,7 @@ instance_add_accept(struct instance* inst, paxos_accepted* accepted)
 	inst->last_update_ballot = accepted->ballot;
 }
 
-/*
+/*s
 	Returns a copy of it's argument.
 */
 static paxos_accepted*
@@ -533,6 +592,12 @@ paxos_accepted_dup(paxos_accepted* ack)
 	paxos_value_copy(&copy->value, &ack->value);
 	return copy;
 }
+
+/*static void
+paxos_hole_iid_copy(paxos_hole* dst, paxos_hole* src)
+{
+	
+}*/
 
 static void
 paxos_value_copy(paxos_value* dst, paxos_value* src)

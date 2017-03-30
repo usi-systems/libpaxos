@@ -14,6 +14,7 @@
 #define VALUE_BALLOT_OFFSET 12
 #define AID_OFFSET 14
 #define VALUE_OFFSET 16
+
 /* paxos_repeat offsets */
 #define FROM_OFFSET 2
 #define TO_OFFSET 6
@@ -30,6 +31,7 @@ void pack_uint32(char *p, uint32_t value, int offset)
 {
     uint32_t *serialize = (uint32_t *)(p + offset);
     *serialize = htonl(value);
+    //printf("pack_uint32 %u\n", *serialize);
 }
 
 void pack_uint16(char *p, uint16_t value, int offset)
@@ -40,15 +42,24 @@ void pack_uint16(char *p, uint16_t value, int offset)
 
 void pack_value(char *p, paxos_value *v, int offset)
 {
+    //printf("paxos_value_len %d offset %d\n",v->paxos_value_len, offset);
     pack_uint32(p, v->paxos_value_len, offset);
     char *value =  (char *)(p + offset + 4);
     memcpy(value, v->paxos_value_val, v->paxos_value_len);
+}
+void pack_hole_value(char *p, paxos_hole *v, int offset)
+{
+    //printf("paxos_hole_len %d offset %d\n",v->paxos_hole_len, offset);
+    pack_uint32(p, v->paxos_hole_len, offset);
+    uint32_t *hole_value =  (uint32_t *)(p + offset + 4);
+    memcpy(hole_value, v->paxos_hole_iid, v->paxos_hole_len * sizeof(uint32_t));
 }
 
 void unpack_uint32(uint32_t *out_value, char *p, int offset)
 {
     uint32_t *raw_bytes = (uint32_t *)(p + offset);
     *out_value = ntohl(*raw_bytes);
+   //printf("unpack_uint32 %u\n", *out_value);
 }
 
 void unpack_uint16(uint16_t *out_value, char *p, int offset)
@@ -59,6 +70,7 @@ void unpack_uint16(uint16_t *out_value, char *p, int offset)
 
 void unpack_value(paxos_value *v, char *p, int offset)
 {
+    //printf("unpaxos_value_len %d offset %d\n",v->paxos_value_len, offset);
     unpack_uint32((uint32_t *)&v->paxos_value_len, p, offset);
     char *value =  (char *)(p + offset + 4);
     if (v->paxos_value_len > 0) {
@@ -67,6 +79,18 @@ void unpack_value(paxos_value *v, char *p, int offset)
         v->paxos_value_val[v->paxos_value_len] = '\0';
     } else {
         v->paxos_value_val = NULL;
+    }
+}
+void unpack_hole_value(paxos_hole *v, char *p, int offset)
+{
+    //printf("unpaxos_hole_len %d offset %d\n",v->paxos_hole_len, offset);
+    unpack_uint32((uint32_t *)&v->paxos_hole_len, p, offset);
+    uint32_t *value =  (uint32_t *)(p + offset + 4);
+    if (v->paxos_hole_len > 0) {
+        v->paxos_hole_iid = malloc(v->paxos_hole_len + 1);
+        memcpy(v->paxos_hole_iid, value, v->paxos_hole_len * sizeof(uint32_t));
+    } else {
+        v->paxos_hole_iid = NULL;
     }
 }
 
@@ -81,7 +105,20 @@ void pack_paxos_prepare(char* p, paxos_prepare* v)
     pack_uint16(p, v->aid, AID_OFFSET);
     pack_value(p, &v->value, VALUE_OFFSET);
 }
-
+void pack_paxos_prepare_hole (char* p, paxos_prepare_hole* v)
+{
+    //printf("pack\n");
+    pack_uint16(p, PAXOS_PREPARE_HOLE, MSGTYPE_OFFSET);
+    pack_uint32(p, v->iid, IID_OFFSET);
+    pack_uint16(p, v->ballot, BALLOT_OFFSET);
+    pack_uint16(p, v->thread_id, THREAD_ID_OFFSET);
+    pack_uint16(p, v->a_tid, ACCEPTOR_COUNTER_ID);
+    pack_uint16(p, v->value_ballot, VALUE_BALLOT_OFFSET);
+    pack_uint16(p, v->aid, AID_OFFSET);
+    pack_value(p, &v->value, VALUE_OFFSET);
+    //printf("sizeof char * %lu\n", sizeof(char *));
+    pack_hole_value(p, &v->hole, (VALUE_OFFSET + 4 + sizeof(char *)));
+}
 void unpack_paxos_prepare(paxos_prepare* v, char* p)
 {
     unpack_uint32(&v->iid, p, IID_OFFSET);
@@ -91,6 +128,17 @@ void unpack_paxos_prepare(paxos_prepare* v, char* p)
     unpack_uint16(&v->value_ballot, p, VALUE_BALLOT_OFFSET);
     unpack_uint16(&v->aid, p, AID_OFFSET);
     unpack_value(&v->value, p, VALUE_OFFSET);
+}
+void unpack_paxos_prepare_hole(paxos_prepare_hole* v, char* p)
+{
+    unpack_uint32(&v->iid, p, IID_OFFSET);
+    unpack_uint16(&v->ballot, p, BALLOT_OFFSET);
+    unpack_uint16(&v->thread_id, p, THREAD_ID_OFFSET);
+    unpack_uint16(&v->a_tid, p, ACCEPTOR_COUNTER_ID);
+    unpack_uint16(&v->value_ballot, p, VALUE_BALLOT_OFFSET);
+    unpack_uint16(&v->aid, p, AID_OFFSET);
+    unpack_value(&v->value, p, VALUE_OFFSET);
+    unpack_hole_value(&v->hole, p, (VALUE_OFFSET + 4 + sizeof(char *)));
 }
 
 void pack_paxos_promise(char* p, paxos_promise* v)
@@ -104,7 +152,17 @@ void pack_paxos_promise(char* p, paxos_promise* v)
     pack_uint16(p, v->aid, AID_OFFSET);
     pack_value(p, &v->value, VALUE_OFFSET);
 }
-
+void pack_paxos_promise_hole(char* p, paxos_promise* v)
+{
+    pack_uint16(p, PAXOS_PROMISE_HOLE, MSGTYPE_OFFSET);
+    pack_uint32(p, v->iid, IID_OFFSET);
+    pack_uint16(p, v->ballot, BALLOT_OFFSET);
+    pack_uint16(p, v->thread_id, THREAD_ID_OFFSET);
+    pack_uint16(p, v->a_tid, ACCEPTOR_COUNTER_ID);
+    pack_uint16(p, v->value_ballot, VALUE_BALLOT_OFFSET);
+    pack_uint16(p, v->aid, AID_OFFSET);
+    pack_value(p, &v->value, VALUE_OFFSET);
+}
 void unpack_paxos_promise(paxos_promise* v, char* p)
 {
     unpack_uint32(&v->iid, p, IID_OFFSET);
@@ -115,6 +173,7 @@ void unpack_paxos_promise(paxos_promise* v, char* p)
     unpack_uint16(&v->aid, p, AID_OFFSET);
     unpack_value(&v->value, p, VALUE_OFFSET);
 }
+
 
 void pack_paxos_accept(char* p, paxos_accept* v)
 {
@@ -127,7 +186,17 @@ void pack_paxos_accept(char* p, paxos_accept* v)
     pack_uint16(p, v->aid, AID_OFFSET);
     pack_value(p, &v->value, VALUE_OFFSET);
 }
-
+void pack_paxos_accept_hole(char* p, paxos_accept* v)
+{
+    pack_uint16(p, PAXOS_ACCEPT_HOLE, MSGTYPE_OFFSET);
+    pack_uint32(p, v->iid, IID_OFFSET);
+    pack_uint16(p, v->ballot, BALLOT_OFFSET);
+    pack_uint16(p, v->thread_id, THREAD_ID_OFFSET);
+    pack_uint16(p, v->a_tid, ACCEPTOR_COUNTER_ID);
+    pack_uint16(p, v->value_ballot, VALUE_BALLOT_OFFSET);
+    pack_uint16(p, v->aid, AID_OFFSET);
+    pack_value(p, &v->value, VALUE_OFFSET);
+}
 void unpack_paxos_accept(paxos_accept* v, char* p)
 {
     unpack_uint32(&v->iid, p, IID_OFFSET);
@@ -277,6 +346,18 @@ size_t pack_paxos_message(char* p, paxos_message* v)
         pack_paxos_client_value(p, &v->u.client_value);
         msglen = sizeof(paxos_message);
         break;
+    case PAXOS_PREPARE_HOLE:
+        pack_paxos_prepare_hole(p, &v->u.prepare_hole);
+        msglen = sizeof(paxos_message) + v->u.prepare_hole.hole.paxos_hole_len;
+        break;
+     case PAXOS_PROMISE_HOLE:
+        pack_paxos_promise_hole(p, &v->u.promise);
+        msglen = sizeof(paxos_message) + v->u.promise.value.paxos_value_len;
+        break;
+    case PAXOS_ACCEPT_HOLE:
+        pack_paxos_accept_hole(p, &v->u.accept);
+        msglen = sizeof(paxos_message) + v->u.accept.value.paxos_value_len;
+        break;
     default:
         break;
     }
@@ -314,6 +395,15 @@ void unpack_paxos_message(paxos_message* v, char* p)
         break;
     case PAXOS_CLIENT_VALUE:
         unpack_paxos_client_value(&v->u.client_value, p);
+        break;
+    case PAXOS_PREPARE_HOLE:
+        unpack_paxos_prepare_hole(&v->u.prepare_hole, p);
+        break;
+     case PAXOS_PROMISE_HOLE:
+        unpack_paxos_promise(&v->u.promise, p);
+        break;
+    case PAXOS_ACCEPT_HOLE:
+        unpack_paxos_accept(&v->u.accept, p);
         break;
     default:
         break;

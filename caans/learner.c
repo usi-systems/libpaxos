@@ -24,7 +24,7 @@ struct netpaxos_configuration conf;
 
 void on_perf(evutil_socket_t fd, short event, void *arg) {
     struct application_ctx *app = arg;
-    printf("%4d %8d\n", app->at_second++, app->message_per_second);
+    printf("%4d %8d %d\n", app->at_second++, app->message_per_second, app->thread_id);
     app->message_per_second = 0;
 
 }
@@ -42,6 +42,7 @@ static void deliver(int tid, unsigned int inst, char* val, size_t size, void* ar
         char *key = cmd->content;
         if (cmd->op == SET) {
             char *value = cmd->content + 16;
+             paxos_log_debug("key %s and  value  %s\n",key, value);
             int res = add_entry(app->leveldb, 0, key, 16, value, 16);
             if (res) {
                 fprintf(stderr, "Add entry failed.\n");
@@ -102,12 +103,14 @@ static void deliver(int tid, unsigned int inst, char* val, size_t size, void* ar
 
     /* TEST only the first learner responds */
     // if (cmd->command_id % app->node_count == app->node_id) {
+
     if (app->node_id == 0)
     {
         // print_addr(&req->cliaddr);
         int n = sendto(app->paxos->sock, retval, content_length(req), 0,
                         (struct sockaddr *)&req->cliaddr,
                         sizeof(req->cliaddr));
+        //print_addr(&req->cliaddr);
         if (n < 0)
             perror("deliver: sendto error");
     }
@@ -117,11 +120,11 @@ void usage(char *prog) {
     printf("Usage: %s configuration-file learner_id number_of_learner [enable_leveldb]\n", prog);
 }
 
-static void
+/*static void
 learner_thread_free(struct learner_thread* l, struct application_ctx* app)
 {
     //bufferevent_free
-    event_free(l->ev_perf);
+    //event_free(l->ev_perf);
     event_base_free(l->ctx->base);
     free_paxos_ctx(l->ctx);
     free_paxos_ctx(app->paxos);
@@ -130,7 +133,7 @@ learner_thread_free(struct learner_thread* l, struct application_ctx* app)
     free(app);
     paxos_log_debug("Exit properly");
     free(l);
-}
+}*/
 
 
 static void*
@@ -157,22 +160,41 @@ start_thread(void* v)
     }
     //start learner thread
     l = make_learner(learner_id, &conf, deliver, app);
+    //struct paxos_ctx *paxos = make_learner(learner_id, &conf, deliver, app);
     learners[learner_id] = l;
     app->paxos = l->ctx;
     if (app->enable_leveldb)
         app->leveldb = common_levelb;
-    
-    l->ev_perf = event_new(l->ctx->base, -1, EV_TIMEOUT|EV_PERSIST, on_perf, app);
+    app->thread_id = learner_id;
+
+    struct event *ev_perf = event_new(l->ctx->base, -1, EV_TIMEOUT|EV_PERSIST, on_perf, app);
     struct timeval one_second = {1, 0};
-    event_add(l->ev_perf, &one_second);
+    event_add(ev_perf, &one_second);
+
+    /*struct timeval hole_time = {1, 0};
+    hole_time.tv_sec = 1;
+    //check holes every 1s + ~100 ms 
+    hole_time.tv_usec = 100000 * (rand() % 7);
+
+    l->hole_watcher = event_new(l->ctx->base, l->ctx->sock, EV_TIMEOUT|EV_PERSIST, check_holes, l);
+    event_add(l->hole_watcher, &(hole_time));*/
+
 
     event_base_priority_init(l->ctx->base, 4);
-    event_priority_set(l->ev_perf, 0);
+    event_priority_set(ev_perf, 0);
     
     //start paxos in learner (event_base_dispatch)
     start_paxos(app->paxos);
+    event_free(ev_perf);
+    free_paxos_ctx(app->paxos);
+    free(app->proxies);
+    if (app->enable_leveldb)
+    {
+        free_leveldb_context(app->leveldb);
+    }
+    free(app);
     //event_base_dispatch(l->ctx->base);
-    learner_thread_free(l, app);
+    //earner_thread_free(l, app);
     pthread_exit(NULL);
 }
 
@@ -271,7 +293,7 @@ int main(int argc, char *argv[])
     free(ids);
     free_configuration(&conf);
     free(learners);
-    
+    paxos_log_debug("Exit properly");
 
     return 0; 
 }

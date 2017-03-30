@@ -22,6 +22,7 @@ struct application_ctx {
     struct leveldb_ctx *leveldb;
     int amount_of_write;
     struct event *ev_read;
+    int thread_id;
 };
 
 void start_proxy(struct application_ctx *ctx, int proxy_port);
