@@ -77,18 +77,15 @@ void send_to_addr(struct client_context *ctx) {
         random_string(key);
         //*key = 'z';
         memset(cmd.content, *key, 15);
-        //memset(cmd.content, ctx->key[0], 15);
         cmd.content[15] = '\0';
         random_string(value);
         //*value = '3';
         memset(cmd.content+16, *value, 15);
-        //memset(cmd.content+16, ctx->value[0], 15);
         cmd.content[31] = '\0';
-        //cmd.thread_id = command_to_thread(&ctx->key[0]);
         cmd.thread_id = command_to_thread(key);
+        //cmd.thread_id = 1;
         ctx->thread_id = cmd.thread_id;
         clock_gettime(CLOCK_REALTIME, &cmd.ts);
-        //paxos_log_debug("SET key %c value %c thread_id %d\n", ctx->key[0], ctx->value[0], cmd.thread_id);
         paxos_log_debug("SET key %c value %c thread_id %d\n", *key, *value, cmd.thread_id);
         
     }
@@ -112,11 +109,11 @@ void send_to_addr(struct client_context *ctx) {
         key1 = malloc(sizeof(unsigned char));
         key2 = malloc(sizeof(unsigned char));
         random_string(key1);
-        *key1 = 'x';
+        //*key1 = 'x';
         memset(cmd.content, *key1, 15);
         cmd.content[15] = '\0';
         random_string(key2);
-        *key2 = 'y';
+        //*key2 = 'y';
         memset(cmd.content+16, *key2, 15);
         cmd.content[31] = '\0';
         cmd.thread_id = ALL;
@@ -189,25 +186,15 @@ usage(const char* name)
   printf("  %-30s%s\n", "-h, --help", "Output this message and exit");
   printf("  %-30s%s\n", "-r, --remote-ip-address", "the address of proxy");
   printf("  %-30s%s\n", "-p, --port", "port");
-  /*printf("  %-30s%s\n", "-i, --identifier", "Operation SET/GET/INC");
-  printf("  %-30s%s\n", "-o, --object", "Object X,Y,Z");
-  printf("  %-30s%s\n", "-v, --object-00value", "the 00value of object SET");*/
+  printf("  %-30s%s\n", "-i, --identifier", "SET/GET/INC");
   
   exit(1);
 }
 
 int main(int argc, char *argv[])
 {
-    /*if (argc < 3) {
-        printf("Syntax: %s [hostname] [port] [GET/SET/INC] X \n"
-               "Example: %s 192.168.1.110 6789 GET X\n",argv[0], argv[0]);
-        return 1;
-    }*/
-    int i = 1, port, sleep_time;
-    //char *object = NULL, *object_value = NULL, 
+    int i = 1, port;
     char *identifier = NULL;
-    //char *key = NULL, *value = NULL;
-    //char *name[] = {"GET", "SET", "INC"};
 
     struct hostent *server;
     struct client_context ctx;
@@ -223,31 +210,13 @@ int main(int argc, char *argv[])
             port = atoi(argv[++i]);
         else if (strcmp(argv[i], "-i") == 0 || strcmp(argv[i], "--identifier") == 0)
             identifier = argv[++i];
-        /*else if (strcmp(argv[i], "-k") == 0 || strcmp(argv[i], "--key") == 0)
-            key = argv[++i];
-        else if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--value") == 0)
-            value = argv[++i];*/
-        else if (strcmp(argv[i], "-s") == 0 || strcmp(argv[i], "--sleep") == 0)
-            sleep_time = atoi(argv[++i]);
-        /*else if (strcmp(argv[i], "-o") == 0 || strcmp(argv[i], "--object") == 0)
-            object = argv[++i];
-        else if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--object-value") == 0)
-            object_value = argv[++i];*/
         i++;
     }
     if (server == NULL) {
         fprintf(stderr, "ERROR, no such host as %s\n", argv[1]);
         return EXIT_FAILURE;
     }
-    /*if (strcmp(identifier, "SET") == 0)
-        ctx.op = SET;
-    else if (strcmp(identifier, "GET") == 0)
-        ctx.op = GET;
-    else if (strcmp(identifier, "INC") == 0)
-        ctx.op = INC;*/
-    //srand(time(NULL));
 
-    //identifier = name[rand() % (sizeof(name) /  sizeof (name[0]))];
     if (strcmp(identifier, "SET") == 0)
         ctx.op = SET;
     else if (strcmp(identifier, "GET") == 0)
@@ -255,42 +224,12 @@ int main(int argc, char *argv[])
     else if (strcmp(identifier, "INC") == 0)
         ctx.op = INC;
 
-    //if(sleep_time == 0)
-      //  sleep(0.1);
-    paxos_log_debug("sleep %d",sleep_time);
-
-    //ctx.op = INC;
-
     ctx.command_id = 0;
     memset(&ctx.server_addr, 0, sizeof ctx.server_addr);
     ctx.server_addr.sin_family = AF_INET;
     memcpy((char *)&(ctx.server_addr.sin_addr.s_addr), (char *)server->h_addr, server->h_length);
     ctx.server_addr.sin_port = htons(port);
     
-    //memset(ctx.key, *key, 1);
-    //memset(ctx.value, *value,1);
-    
-    /*if (server == NULL) {
-        fprintf(stderr, "ERROR, no such host as %s\n", argv[1]);
-        return EXIT_FAILURE;
-    }
-
-    struct client_context ctx;
-    ctx.latency = 0.0;
-    ctx.nb_messages = 0;
-    srand(time(NULL));
-    ctx.op = GET;
-    if (argc > 3) {
-        if (strcmp(argv[3], "SET") == 0) {
-            ctx.op = SET;
-        }
-    }
-    ctx.command_id = 0;
-    memset(&ctx.server_addr, 0, sizeof ctx.server_addr);
-    ctx.server_addr.sin_family = AF_INET;
-    memcpy((char *)&(ctx.server_addr.sin_addr.s_addr), (char *)server->h_addr, server->h_length);
-    ctx.server_addr.sin_port = htons(atoi(argv[2]));
-    */
     srand(time(NULL));
     ctx.base = event_base_new();
     int sock = new_dgram_socket();
@@ -308,7 +247,7 @@ int main(int argc, char *argv[])
     ev_sigterm = evsignal_new(ctx.base, SIGTERM, handle_signal, &ctx);
     evsignal_add(ev_sigterm, NULL);
 #ifdef AGGREGATE
-    struct timeval hundred_ms = {0, 250}; //250micro
+    struct timeval hundred_ms = {0, 250}; //250 microsecond
     struct event *ev_perf = event_new(ctx.base, -1, EV_TIMEOUT|EV_PERSIST, on_perf, &ctx);
     event_add(ev_perf, &hundred_ms);
 #endif

@@ -11,6 +11,8 @@
 
 pthread_mutex_t execute_mutex;
 pthread_cond_t execute;
+pthread_attr_t attr;
+cpu_set_t cpus;
 
 pthread_attr_t attr;
 int check_leveldb;

@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,6 +8,8 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 #include <signal.h>
+#include <unistd.h>
+#include <sched.h>
 #include "netpaxos.h"
 #include "netutils.h"
 #include "configuration.h"
@@ -120,27 +123,12 @@ void usage(char *prog) {
     printf("Usage: %s configuration-file learner_id number_of_learner [enable_leveldb]\n", prog);
 }
 
-/*static void
-learner_thread_free(struct learner_thread* l, struct application_ctx* app)
-{
-    //bufferevent_free
-    //event_free(l->ev_perf);
-    event_base_free(l->ctx->base);
-    free_paxos_ctx(l->ctx);
-    free_paxos_ctx(app->paxos);
-    free(app->proxies);
-    free_leveldb_context(app->leveldb);
-    free(app);
-    paxos_log_debug("Exit properly");
-    free(l);
-}*/
-
-
 static void*
 start_thread(void* v)
 {
     int learner_id = *((int*)v);
     paxos_log_debug("Learner thread %d: starting....\n", learner_id);
+    printf("ID: %lu, CPU: %d thread_id %d\n", pthread_self(), sched_getcpu(), learner_id);
     struct learner_thread* l = malloc (sizeof(struct learner_thread));
 
     struct application_ctx *app = malloc(sizeof (struct application_ctx));
@@ -160,8 +148,8 @@ start_thread(void* v)
     }
     //start learner thread
     l = make_learner(learner_id, &conf, deliver, app);
-    //struct paxos_ctx *paxos = make_learner(learner_id, &conf, deliver, app);
     learners[learner_id] = l;
+
     app->paxos = l->ctx;
     if (app->enable_leveldb)
         app->leveldb = common_levelb;
@@ -170,14 +158,6 @@ start_thread(void* v)
     struct event *ev_perf = event_new(l->ctx->base, -1, EV_TIMEOUT|EV_PERSIST, on_perf, app);
     struct timeval one_second = {1, 0};
     event_add(ev_perf, &one_second);
-
-    /*struct timeval hole_time = {1, 0};
-    hole_time.tv_sec = 1;
-    //check holes every 1s + ~100 ms 
-    hole_time.tv_usec = 100000 * (rand() % 7);
-
-    l->hole_watcher = event_new(l->ctx->base, l->ctx->sock, EV_TIMEOUT|EV_PERSIST, check_holes, l);
-    event_add(l->hole_watcher, &(hole_time));*/
 
 
     event_base_priority_init(l->ctx->base, 4);
@@ -199,10 +179,15 @@ start_thread(void* v)
 }
 
 static void 
-start_learner(int * learner_id, pthread_t* t)
+start_learner(int *learner_id, pthread_t* t)
 {
     int rc = 0;
-    if ((rc = pthread_create(t, NULL, start_thread, learner_id)))
+    CPU_ZERO(&cpus);
+    CPU_SET(*learner_id, &cpus);
+    int numberOfProcessors = sysconf(_SC_NPROCESSORS_ONLN);
+    printf("Number of processors: %d thread id %d\n", numberOfProcessors, *learner_id);
+    pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
+    if ((rc = pthread_create(t,  &attr, start_thread, learner_id)))
     {       
         fprintf(stderr, "error: pthread_create, rc: %d\n",rc);
     }
@@ -234,6 +219,8 @@ int main(int argc, char *argv[])
     
     pthread_mutex_init(&execute_mutex, NULL);
     pthread_cond_init(&execute, NULL);
+    pthread_attr_init(&attr);
+
     if (argc < 4) 
     {
         usage(argv[0]);

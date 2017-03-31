@@ -300,7 +300,6 @@ struct paxos_ctx *make_acceptor(struct netpaxos_configuration *conf, int aid)
         subcribe_to_multicast_group(conf->acceptor_address, sock);
     }
 
-    // ip_to_sockaddr(conf->learner_address, conf->learner_port, &ctx->learner_sin);
     int i;
     for (i = 0; i < conf->learner_count ; i++)
     {
