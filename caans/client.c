@@ -11,7 +11,7 @@
 #include "message.h"
 #include "netpaxos.h"
 #define NS_PER_S 1000000000
-#define AGGREGATE
+//#define AGGREGATE
 #define NUM_OF_THREAD 2
 #define ALL 65
 
@@ -19,7 +19,8 @@ struct client_context {
     struct event_base *base;
     struct sockaddr_in server_addr;
     enum Operation op;
-    uint16_t command_id;
+    uint32_t command_id;
+    uint32_t current_iid;
     int sock;
     double latency;
     int nb_messages;
@@ -52,6 +53,7 @@ void handle_signal(evutil_socket_t fd, short what, void *arg)
 
 void random_string(unsigned char *s)
 {
+    
     int n = rand() % ('z' - 'a' + 1);
     *s = n + 'a';
 }
@@ -86,7 +88,8 @@ void send_to_addr(struct client_context *ctx) {
         //cmd.thread_id = 1;
         ctx->thread_id = cmd.thread_id;
         clock_gettime(CLOCK_REALTIME, &cmd.ts);
-        paxos_log_debug("SET key %c value %c thread_id %d\n", *key, *value, cmd.thread_id);
+        printf("SET key %c value %c thread_id %d command_id %u current_iid %u\n",
+                     *key, *value, cmd.thread_id, cmd.command_id, ctx->current_iid);
         
     }
     else if (cmd.op == GET)
@@ -124,6 +127,7 @@ void send_to_addr(struct client_context *ctx) {
     
 
     int msg_size = sizeof cmd;   
+    printf("msg_size %d\n", msg_size);
     int n = sendto(ctx->sock , &cmd, msg_size, 0, (struct sockaddr *)&ctx->server_addr, addr_size); //server_addr: dest addr (proxy addr)
     if (n < 0) {
         perror("sendto");
@@ -132,15 +136,15 @@ void send_to_addr(struct client_context *ctx) {
 
 
 void on_perf(evutil_socket_t fd, short event, void *arg) {
-    //struct client_context *ctx = arg;
-    //paxos_log_debug("new send\n");
-    /*if (ctx->nb_messages > 0) {
+    struct client_context *ctx = arg;
+   
+    if (ctx->nb_messages > 0) {
         double average_latency = ctx->latency / ctx->nb_messages / NS_PER_S;
-        printf("**Thread %d %.09f\n", ctx->thread_id, average_latency);
+        printf("%.09f\n", average_latency);
     }
     ctx->latency = 0.0;
-    ctx->nb_messages = 0;*/
-    //send_to_addr(ctx); 
+    ctx->nb_messages = 0;
+    
 }
 
 void on_read(evutil_socket_t fd, short event, void *arg)
@@ -159,15 +163,27 @@ void on_read(evutil_socket_t fd, short event, void *arg)
         struct timespec result;
         if ( timespec_diff(&result, &end, &response.ts) < 1)
         {
-//#ifdef AGGREGATE
+#ifdef AGGREGATE
             ctx->latency += result.tv_sec*NS_PER_S + result.tv_nsec;
             ctx->nb_messages++;
-//#else
-            printf("%d %ld.%09ld\n", ctx->thread_id, result.tv_sec, result.tv_nsec);
-//#endif
+#else
+            //printf("%d %ld.%09ld\n", result->thread_id, result.tv_sec, result.tv_nsec);
+            printf("received from leaner command_id %u thread_id %u\n", response.command_id, response.thread_id);
+#endif
         }
-        send_to_addr(ctx);  
+        if(response.command_id < ctx->current_iid)
+        {
+            printf("previous iid %u current_iid %u "
+                "thread_id_respone %u "
+                "thread_id_client_context %u " 
+                "Do not send the next message\n",
+                response.command_id, ctx->current_iid,
+                response.thread_id, ctx->thread_id);
+            return;
+        }
     }
+    ctx->current_iid++;
+    send_to_addr(ctx);  
       
 }
 
@@ -193,6 +209,7 @@ usage(const char* name)
 
 int main(int argc, char *argv[])
 {
+    setbuf(stdout, NULL);
     int i = 1, port;
     char *identifier = NULL;
 
@@ -230,7 +247,6 @@ int main(int argc, char *argv[])
     memcpy((char *)&(ctx.server_addr.sin_addr.s_addr), (char *)server->h_addr, server->h_length);
     ctx.server_addr.sin_port = htons(port);
     
-    srand(time(NULL));
     ctx.base = event_base_new();
     int sock = new_dgram_socket();
     evutil_make_socket_nonblocking(sock);
@@ -251,6 +267,8 @@ int main(int argc, char *argv[])
     struct event *ev_perf = event_new(ctx.base, -1, EV_TIMEOUT|EV_PERSIST, on_perf, &ctx);
     event_add(ev_perf, &hundred_ms);
 #endif
+    ctx.current_iid = 0;
+    //srand(time(NULL));
     send_to_addr(&ctx);
 
     event_base_dispatch(ctx.base);

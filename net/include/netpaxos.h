@@ -5,7 +5,7 @@
 #include <sys/socket.h>
 #include "paxos.h"
 #include <pthread.h>
-#define BUFSIZE 384
+#define BUFSIZE 386
 #define NUM_OF_THREAD 2
 #define ALL 65
 
@@ -22,8 +22,6 @@ struct learner_thread
    
     uint16_t lth_id;
     struct paxos_ctx *ctx;
-    //struct event *ev_perf;
-    //struct event *hole_watcher;
 };
 
 struct leveldb_ctx *common_levelb;

@@ -11,9 +11,9 @@
 #include "netutils.h"
 #include "message.h"
 
-#define VLEN 1024
+#define VLEN 1026
 #define TIMEOUT 1
-#define REQ_SIZE 56
+#define REQ_SIZE 58
 static struct mmsghdr msgs[VLEN];
 static struct iovec iovecs[VLEN];
 static char bufs[VLEN][REQ_SIZE+1];

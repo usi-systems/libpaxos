@@ -209,13 +209,9 @@ make_learner (int learner_id, struct netpaxos_configuration *conf, deliver_funct
 
     l->ctx->base = event_base_new();
     l->lth_id = learner_id;
-    //l->late_start = !paxos_config.learner_catch_up;
-    //l->acceptors = conf->acceptor_count;
-    //printf("I am here . Thread learner %d\n",learner_id);
     evutil_socket_t sock = create_server_socket(conf->learner_port[learner_id]);
     evutil_make_socket_nonblocking(sock);
     l->ctx->sock = sock;
-   // printf("Thread learner %d socket %d\n", learner_id, sock);
     setRcvBuf(l->ctx->sock);
     if (net_ip__is_multicast_ip(conf->learner_address[learner_id])) {
         subcribe_to_multicast_group(conf->learner_address[learner_id], sock);
@@ -258,63 +254,3 @@ make_learner (int learner_id, struct netpaxos_configuration *conf, deliver_funct
 
     return l;
 }
-/*struct paxos_ctx*
-make_learner (int learner_id, struct netpaxos_configuration *conf, deliver_function f, void *arg)
-{
-    struct learner_thread* l;
-    l = malloc (sizeof(struct learner_thread));
-
-    l->ctx = malloc(sizeof(struct paxos_ctx));
-    init_paxos_ctx(l->ctx);
-
-    l->ctx->base = event_base_new();
-    l->lth_id = learner_id;
-    //l->late_start = !paxos_config.learner_catch_up;
-    //l->acceptors = conf->acceptor_count;
-    //printf("I am here . Thread learner %d\n",learner_id);
-    evutil_socket_t sock = create_server_socket(conf->learner_port[learner_id]);
-    evutil_make_socket_nonblocking(sock);
-    l->ctx->sock = sock;
-   // printf("Thread learner %d socket %d\n", learner_id, sock);
-    setRcvBuf(l->ctx->sock);
-    if (net_ip__is_multicast_ip(conf->learner_address[learner_id])) {
-        subcribe_to_multicast_group(conf->learner_address[learner_id], sock);
-    }
-
-    ip_to_sockaddr(conf->acceptor_address, conf->acceptor_port, &(l->ctx->acceptor_sin));
-    int i;
-    memset(msgs, 0, sizeof(msgs));
-    for (i = 0; i < VLEN; i++) {
-        iovecs[i].iov_base         = bufs[i];
-        iovecs[i].iov_len          = BUFSIZE;
-        msgs[i].msg_hdr.msg_iov    = &iovecs[i];
-        msgs[i].msg_hdr.msg_iovlen = 1;
-    }
-    timeout.tv_sec = TIMEOUT;
-    timeout.tv_nsec = 0;
-
-    max_received = 0;
-    
-    
-    time_t t;
-    srand((unsigned) time(&t));
-
-    l->ctx->ev_read = event_new(l->ctx->base, sock, EV_READ|EV_PERSIST,learner_read_cb, l);
-    event_add(l->ctx->ev_read, NULL);
-
-    l->ctx->learner_state = learner_new(conf->acceptor_count);
-    learner_set_instance_id(l->ctx->learner_state, 0);
-
-    l->ctx->deliver = f;
-    l->ctx->deliver_arg = arg;
-
-    l->ctx->tv.tv_sec = 1;
-    // check holes every 1s + ~100 ms 
-    l->ctx->tv.tv_usec = 100000 * (rand() % 7);
-    //l->ctx->tv.tv_usec = 0;
-
-    l->ctx->hole_watcher = event_new(l->ctx->base, sock, EV_TIMEOUT|EV_PERSIST, check_holes, l);
-    event_add(l->ctx->hole_watcher, &(l->ctx->tv));
-
-    return l->ctx;
-}*/

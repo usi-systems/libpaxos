@@ -25,7 +25,7 @@ struct client_request* create_client_request(char *data, uint16_t data_size, uin
     struct client_request *request = (struct client_request*)malloc(message_size);
     request->length = message_size;
 
-    int offset = sizeof(struct timespec) + sizeof(uint16_t);
+    int offset = sizeof(struct timespec) + sizeof(uint32_t);
     get_threadid (tid, data, offset);
 
     memcpy(request->content, data, data_size);

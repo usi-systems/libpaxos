@@ -50,7 +50,7 @@ static void deliver(int tid, unsigned int inst, char* val, size_t size, void* ar
             if (res) {
                 fprintf(stderr, "Add entry failed.\n");
             }
-            paxos_log_debug("SET(%s, %s) thread_id %d\n", key, value, tid);
+            paxos_log_debug("SET(%s, %s) thread_id %d", key, value, tid);
         }
         else if (cmd->op == GET) {
             /* check if the value is stored */
@@ -62,7 +62,7 @@ static void deliver(int tid, unsigned int inst, char* val, size_t size, void* ar
             } 
             else {
                 if (stored_value != NULL) {
-                    paxos_log_debug("GET key %s with the stored value %s size %zu at thread_id %d\n", key, stored_value, vsize, tid);
+                    paxos_log_debug("GET key %s with the stored value %s size %zu at thread_id %d", key, stored_value, vsize, tid);
                     free(stored_value);
                 }
             }
@@ -84,18 +84,18 @@ static void deliver(int tid, unsigned int inst, char* val, size_t size, void* ar
             else{
                 if (f_stored_value != NULL && s_stored_value != NULL)
                 {
-                    paxos_log_debug("first key %s of first value  %s\n",key, f_stored_value);
-                    paxos_log_debug("second key %s second value %s\n", s_key, s_stored_value);
+                    paxos_log_debug("first key %s of first value %s",key, f_stored_value);
+                    paxos_log_debug("second key %s second value %s", s_key, s_stored_value);
                     char result_value[32];
                     memset(result_value, f_stored_value[0], 8);
                     memset(result_value+8, s_stored_value[0], 7);
                     result_value[15] = '\0';
-                    paxos_log_debug("first value %s second value %s => result_value %s\n", f_stored_value,s_stored_value , result_value);
+                    paxos_log_debug("first value %s second value %s => result_value %s", f_stored_value,s_stored_value , result_value);
                     int r = add_entry(app->leveldb, 0, key, 16, result_value, 16);
                     if (r) {
                         fprintf(stderr, "Add entry failed.\n");
                     }
-                    paxos_log_debug("INC(%s, %s) with value %s on thread_id %d\n", key, s_key, result_value, tid);
+                    paxos_log_debug("INC(%s, %s) with value %s on thread_id %d", key, s_key, result_value, tid);
                 }
             }
         }
@@ -174,7 +174,7 @@ start_thread(void* v)
     }
     free(app);
     //event_base_dispatch(l->ctx->base);
-    //earner_thread_free(l, app);
+    //learner_thread_free(l, app);
     pthread_exit(NULL);
 }
 

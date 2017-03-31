@@ -15,12 +15,10 @@ enum Operation {
 
 struct command {
     struct timespec ts;
-    uint16_t command_id;
+    uint32_t command_id;
     uint16_t thread_id;
     enum Operation op;
     char content[32];
-    //char *object;
-    //char *object_value;
 };
 
 
