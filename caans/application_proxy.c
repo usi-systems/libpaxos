@@ -11,15 +11,14 @@
 #include "netutils.h"
 #include "message.h"
 
-#define VLEN 1026
+#define VLEN 1024
 #define TIMEOUT 1
-#define REQ_SIZE 58
+#define REQ_SIZE 64
 static struct mmsghdr msgs[VLEN];
 static struct iovec iovecs[VLEN];
 static char bufs[VLEN][REQ_SIZE+1];
 static struct sockaddr_in remotes[VLEN];
 static struct timespec timeout;
-uint16_t t_id = 0;
 
 void handle_request(evutil_socket_t fd, short event, void *arg) {
 
@@ -32,11 +31,18 @@ void handle_request(evutil_socket_t fd, short event, void *arg) {
     }
     
     for (i = 0; i < retval; i++) {
+        uint16_t t_id, cid;
+        uint32_t cmd_id;
         int recv_bytes = iovecs[i].iov_len;
-        struct client_request *req = create_client_request(bufs[i], recv_bytes, &t_id);
+        //printf("----------\n");
+        //printf("recv_bytes(data_size) %d\n", recv_bytes);
+        struct client_request *req = create_client_request(bufs[i], recv_bytes, &cid, &t_id, &cmd_id);
+        //printf("handle_request client_id_%u thread_id_%u cmd_id %u\n", cid, t_id, cmd_id);
         req->cliaddr = remotes[i];
         // hexdump((char*)req, req->length);
         submit(app->paxos, (char*)req, message_length(req), t_id);
+        //printf("message_length %d\n", message_length(req));
+        //printf("sockaddr_in %ld\n", sizeof(req->cliaddr)); 16
         app->current_request_id++;
     }
 }

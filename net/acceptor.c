@@ -14,7 +14,6 @@
 #include <errno.h>
 #include <error.h>
 
-
 void acceptor_handle_prepare_hole(struct paxos_ctx *ctx, struct paxos_message *msg,
         struct sockaddr_in *remote, socklen_t socklen)
 {
@@ -45,7 +44,7 @@ void acceptor_handle_prepare_hole(struct paxos_ctx *ctx, struct paxos_message *m
     for (i = 0; i < no_holes; i++)
     {
         prepare->iid = prepare_hole->hole.paxos_hole_iid[i];
-        paxos_log_debug("received iid %u a_tid %u ballot %u thread_id %u",
+        paxos_log_debug("received iid %u a_tid %u ballot %u thread_id_%u",
                         prepare->iid, 
                         prepare->a_tid, 
                         prepare->ballot, 
@@ -114,44 +113,35 @@ void acceptor_handle_accept(struct paxos_ctx *ctx, struct paxos_message *msg,
     struct sockaddr_in *remote, socklen_t socklen)
 {
     paxos_message out;
+    memset(&out, 0, sizeof(paxos_message));
+
     paxos_accept* accept = &msg->u.accept;
     paxos_log_debug("-------");
     paxos_log_debug("receive accept message");
-    paxos_log_debug("paxos message has %d len %s value----paxos accept has %d len %s value",
-                        msg->u.accept.value.paxos_value_len, 
-                        msg->u.accept.value.paxos_value_val,
-                        accept->value.paxos_value_len,
-                        accept->value.paxos_value_val);
-    int thread_id = accept->thread_id;
     int acc_counter_id = accept->a_tid;
-    switch(thread_id){
-        case ALL:
-            acc_counter_id= accept->a_tid;
-            break;
-        default:
-            acc_counter_id = thread_id;
-            break;
-    };
+
     if (acceptor_receive_accept(ctx->acceptor_state, accept, &out, acc_counter_id) != 0)
     {
         if (out.type == PAXOS_ACCEPTED)
         {
+            memset(ctx->buffer, 0, BUFSIZE);
             size_t msg_len = pack_paxos_message(ctx->buffer, &out);
+            paxos_log_debug("msglen %u", msg_len);
             int n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
                             (struct sockaddr *)&ctx->learner_sin[acc_counter_id], 
                             sizeof(ctx->learner_sin[acc_counter_id]));
-            paxos_log_debug("-1- ALL: send to learner: thread_id %d, instance id %u a_id %d \n", 
-                            acc_counter_id, out.u.accept.iid, out.u.accept.aid) ;
             if (n < 0)
                 error_at_line(1, errno, __FILE__, __LINE__, "%s\n", strerror(errno));
+
+            paxos_log_debug("-*-send to learner: thread_id_%d iid %u acceptor_id %d acc_counter_id %d", 
+                            out.u.accept.thread_id, out.u.accept.iid, out.u.accept.aid, acc_counter_id) ;
                
             n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
                             (struct sockaddr *)remote, socklen);
             if (n < 0)
                 error_at_line(1, errno, __FILE__, __LINE__, "%s\n", strerror(errno));
-              
-        }  
-        paxos_message_destroy(&out);
+        } 
+        paxos_message_destroy(&out); 
     }
 }
 void acceptor_handle_accept_hole(struct paxos_ctx *ctx, struct paxos_message *msg,
@@ -161,23 +151,7 @@ void acceptor_handle_accept_hole(struct paxos_ctx *ctx, struct paxos_message *ms
     paxos_accept* accept = &msg->u.accept;
     paxos_log_debug("-------");
     paxos_log_debug("receive accept hole message");
-    /*paxos_log_debug("paxos message has %d len %s value----paxos accept has %d len %s value",
-                        msg->u.accept.value.paxos_value_len, 
-                        msg->u.accept.value.paxos_value_val,
-                        accept->value.paxos_value_len,
-                        accept->value.paxos_value_val);*/
-    int thread_id = accept->thread_id;
-    int acc_counter_id;
-    //paxos_log_debug("thread_id %d",thread_id);
-    switch(thread_id){
-        case ALL:
-            acc_counter_id= accept->a_tid;
-            break;
-        default:
-            acc_counter_id = thread_id;
-            break;
-    };
-    //paxos_log_debug("acc_counter_id %d",acc_counter_id);
+    int acc_counter_id = accept->a_tid;
     if (acceptor_receive_accept(ctx->acceptor_state, accept, &out, acc_counter_id) != 0)
     {
             if (out.type == PAXOS_ACCEPTED)
@@ -185,8 +159,9 @@ void acceptor_handle_accept_hole(struct paxos_ctx *ctx, struct paxos_message *ms
                 size_t msg_len = pack_paxos_message(ctx->buffer, &out);
                 int n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
                         (struct sockaddr *)&ctx->learner_sin[acc_counter_id], sizeof(ctx->learner_sin[acc_counter_id]));
-                paxos_log_debug("-*-send to learner: thread_id  %d acc_counter_id %d instance id %u a_id %u",
-                         acc_counter_id, acc_counter_id, out.u.accept.iid, out.u.accept.aid);
+                paxos_log_debug("-*-send to learner: thread_id_%d iid %u acceptor_id %d acc_counter_id %d", 
+                            out.u.accept.thread_id, out.u.accept.iid, out.u.accept.aid, acc_counter_id);
+                print_addr(&ctx->learner_sin[acc_counter_id]);
                 if (n < 0)
                     error_at_line(1, errno, __FILE__, __LINE__, "%s\n", strerror(errno));
             }
@@ -205,7 +180,7 @@ void acceptor_handle_repeat(struct paxos_ctx *ctx, struct paxos_message* msg,
     int acc_counter_id = repeat->a_tid;
     if (thread_id == ALL)
     {
-        paxos_log_debug("Handle repeat for iids %d-%d of combined thread id %d", repeat->from, repeat->to, acc_counter_id);
+        paxos_log_debug("Handle repeat for iids %d-%d of combined thread_id_%d", repeat->from, repeat->to, acc_counter_id);
         for (iid = repeat->from; iid <= repeat->to; ++iid)
         {
             if (acceptor_receive_repeat(ctx->acceptor_state, iid, &out.u.accepted, acc_counter_id)) {
@@ -220,7 +195,7 @@ void acceptor_handle_repeat(struct paxos_ctx *ctx, struct paxos_message* msg,
     }
     else
     {
-       paxos_log_debug("Handle repeat for iids %d-%d of thread id %d", repeat->from, repeat->to, thread_id);
+       paxos_log_debug("Handle repeat for iids %d-%d of thread_id_%d", repeat->from, repeat->to, thread_id);
         for (iid = repeat->from; iid <= repeat->to; ++iid)
         {
             if (acceptor_receive_repeat(ctx->acceptor_state, iid, &out.u.accepted,thread_id)) {

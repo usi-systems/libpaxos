@@ -15,18 +15,25 @@
 #define NUM_OF_THREAD 2
 #define ALL 65
 
+int flag;
+unsigned char key_array [] = {'x', 'y'};
+unsigned char value_array[] = {'1', '2'};
+time_t rawtime;
+struct tm *info;
+char buffer[1024];
+
 struct client_context {
     struct event_base *base;
     struct sockaddr_in server_addr;
     enum Operation op;
     uint32_t command_id;
     uint32_t current_iid;
+    uint16_t client_id;
     int sock;
     double latency;
     int nb_messages;
     unsigned char key[1];
     unsigned char value[1];
-    int thread_id;
 };
 
 int
@@ -53,7 +60,6 @@ void handle_signal(evutil_socket_t fd, short what, void *arg)
 
 void random_string(unsigned char *s)
 {
-    
     int n = rand() % ('z' - 'a' + 1);
     *s = n + 'a';
 }
@@ -72,25 +78,40 @@ void send_to_addr(struct client_context *ctx) {
     cmd.op = ctx->op;
     if (cmd.op == SET)
     {
-        unsigned char *key, *value;
+        //unsigned char *key, *value;
         
-        key = malloc(sizeof(unsigned char));
-        value = malloc(sizeof(unsigned char));
-        random_string(key);
+        //key = malloc(sizeof(unsigned char));
+        //value = malloc(sizeof(unsigned char));
+        
+        //random_string(key);
         //*key = 'z';
-        memset(cmd.content, *key, 15);
-        cmd.content[15] = '\0';
-        random_string(value);
-        //*value = '3';
-        memset(cmd.content+16, *value, 15);
-        cmd.content[31] = '\0';
-        cmd.thread_id = command_to_thread(key);
-        //cmd.thread_id = 1;
-        ctx->thread_id = cmd.thread_id;
-        clock_gettime(CLOCK_REALTIME, &cmd.ts);
-        printf("SET key %c value %c thread_id %d command_id %u current_iid %u\n",
-                     *key, *value, cmd.thread_id, cmd.command_id, ctx->current_iid);
+        //memset(cmd.content, *key, 15);
         
+        memset(cmd.content, key_array[flag], 15);
+        cmd.content[15] = '\0';
+        
+        //random_string(value);
+        //*value = '3';
+        //memset(cmd.content+16, *value, 15);
+        memset(cmd.content+16, value_array[flag], 15);
+        cmd.content[31] = '\0';
+        //cmd.thread_id = command_to_thread(key);
+        //cmd.thread_id = command_to_thread(&key_array[flag]);
+        cmd.thread_id = flag;
+        flag = 1 - flag;
+        //ctx->thread_id = cmd.thread_id;
+        cmd.client_id = ctx->client_id;
+        clock_gettime(CLOCK_REALTIME, &cmd.ts);
+
+        //paxos_log_debug("SET key %c value %c thread_id_%d command_id %u current_iid %u\n",
+        //             *key, *value, cmd.thread_id, cmd.command_id, ctx->current_iid);
+        /*time( &rawtime );
+
+        info = localtime( &rawtime );
+
+        strftime(buffer,sizeof(buffer),"%d %b %H:%M:%S. ", info);
+        paxos_log_debug("%sSET key %c value %c thread_id_%d command_id %u current_iid %u\n",
+                    buffer, key_array[flag],value_array[flag], cmd.thread_id, cmd.command_id, ctx->current_iid);*/
     }
     else if (cmd.op == GET)
     {
@@ -102,9 +123,10 @@ void send_to_addr(struct client_context *ctx) {
         memset(cmd.content+16, '\0', 15);
         cmd.content[31] = '\0';
         cmd.thread_id = command_to_thread(key);
-        ctx->thread_id = cmd.thread_id;
+        //ctx->thread_id = cmd.thread_id;
+        cmd.client_id = ctx->client_id;
         clock_gettime(CLOCK_REALTIME, &cmd.ts);
-        paxos_log_debug ("GET key %c thread_id %d\n", *key, cmd.thread_id);
+        paxos_log_debug ("GET key %c thread_id_%d\n", *key, cmd.thread_id);
     }
     else if (cmd.op == INC)
     {
@@ -120,14 +142,18 @@ void send_to_addr(struct client_context *ctx) {
         memset(cmd.content+16, *key2, 15);
         cmd.content[31] = '\0';
         cmd.thread_id = ALL;
-        ctx->thread_id = cmd.thread_id;
+        //ctx->thread_id = cmd.thread_id;
+        cmd.client_id = ctx->client_id;
         clock_gettime(CLOCK_REALTIME, &cmd.ts);
-        paxos_log_debug ("INC key %c %c thread_id %d\n", *key1, *key2, cmd.thread_id);
+        paxos_log_debug ("INC key %c %c thread_id_%d\n", *key1, *key2, cmd.thread_id);
     }
     
 
-    int msg_size = sizeof cmd;   
-    printf("msg_size %d\n", msg_size);
+    int msg_size = sizeof(cmd);   
+    /*printf("msg_size %d timespec %lu enum %lu msgz %ld\n", 
+        msg_size, sizeof(cmd.ts), sizeof(cmd.op), sizeof (struct command));
+    printf("cmd content %lu thread_id %lu command_id %lu client_id %lu\n",
+     sizeof(cmd.content), sizeof(cmd.thread_id), sizeof(cmd.command_id), sizeof(cmd.client_id));*/
     int n = sendto(ctx->sock , &cmd, msg_size, 0, (struct sockaddr *)&ctx->server_addr, addr_size); //server_addr: dest addr (proxy addr)
     if (n < 0) {
         perror("sendto");
@@ -167,18 +193,18 @@ void on_read(evutil_socket_t fd, short event, void *arg)
             ctx->latency += result.tv_sec*NS_PER_S + result.tv_nsec;
             ctx->nb_messages++;
 #else
-            //printf("%d %ld.%09ld\n", result->thread_id, result.tv_sec, result.tv_nsec);
-            printf("received from leaner command_id %u thread_id %u\n", response.command_id, response.thread_id);
+            //printf("t_%d %ld.%09ld\n", response.thread_id, result.tv_sec, result.tv_nsec);s
+            printf("%ld.%09ld\n", result.tv_sec, result.tv_nsec);
+            //paxos_log_debug("received from leaner command_id %u thread_id_%u\n", response.command_id, response.thread_id);
 #endif
         }
         if(response.command_id < ctx->current_iid)
         {
-            printf("previous iid %u current_iid %u "
-                "thread_id_respone %u "
-                "thread_id_client_context %u " 
+            paxos_log_debug("respone iid %u current_iid %u "
+                "response thread_id_%u "
                 "Do not send the next message\n",
                 response.command_id, ctx->current_iid,
-                response.thread_id, ctx->thread_id);
+                response.thread_id);
             return;
         }
     }
@@ -212,6 +238,7 @@ int main(int argc, char *argv[])
     setbuf(stdout, NULL);
     int i = 1, port;
     char *identifier = NULL;
+    int c_id;
 
     struct hostent *server;
     struct client_context ctx;
@@ -227,6 +254,8 @@ int main(int argc, char *argv[])
             port = atoi(argv[++i]);
         else if (strcmp(argv[i], "-i") == 0 || strcmp(argv[i], "--identifier") == 0)
             identifier = argv[++i];
+        else if (strcmp(argv[i], "-id") == 0 || strcmp(argv[i], "--client-id") == 0)
+            c_id = atoi(argv[++i]);
         i++;
     }
     if (server == NULL) {
@@ -240,8 +269,10 @@ int main(int argc, char *argv[])
         ctx.op = GET;
     else if (strcmp(identifier, "INC") == 0)
         ctx.op = INC;
-
-    ctx.command_id = 0;
+    srand(time(NULL));
+    flag = 0;
+    ctx.command_id = 1;
+    ctx.client_id = c_id;
     memset(&ctx.server_addr, 0, sizeof ctx.server_addr);
     ctx.server_addr.sin_family = AF_INET;
     memcpy((char *)&(ctx.server_addr.sin_addr.s_addr), (char *)server->h_addr, server->h_length);
@@ -267,8 +298,7 @@ int main(int argc, char *argv[])
     struct event *ev_perf = event_new(ctx.base, -1, EV_TIMEOUT|EV_PERSIST, on_perf, &ctx);
     event_add(ev_perf, &hundred_ms);
 #endif
-    ctx.current_iid = 0;
-    //srand(time(NULL));
+    ctx.current_iid = 1;
     send_to_addr(&ctx);
 
     event_base_dispatch(ctx.base);

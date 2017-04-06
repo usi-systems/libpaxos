@@ -27,7 +27,7 @@ struct netpaxos_configuration conf;
 
 void on_perf(evutil_socket_t fd, short event, void *arg) {
     struct application_ctx *app = arg;
-    printf("%4d %8d %d\n", app->at_second++, app->message_per_second, app->thread_id);
+    printf("%4d %8d t_%d\n", app->at_second++, app->message_per_second, app->thread_id);
     app->message_per_second = 0;
 
 }
@@ -45,12 +45,13 @@ static void deliver(int tid, unsigned int inst, char* val, size_t size, void* ar
         char *key = cmd->content;
         if (cmd->op == SET) {
             char *value = cmd->content + 16;
-             paxos_log_debug("key %s and  value  %s\n",key, value);
+            //paxos_log_debug("key %s and  value  %s",key, value);
             int res = add_entry(app->leveldb, 0, key, 16, value, 16);
             if (res) {
                 fprintf(stderr, "Add entry failed.\n");
             }
-            paxos_log_debug("SET(%s, %s) thread_id %d", key, value, tid);
+            paxos_log_debug("SET(%s, %s) thread_id_%d learner_id_%u iid %d command_id %u client_id_%u\n", 
+                                        key, value, cmd->thread_id, tid, inst, cmd->command_id, cmd->client_id);
         }
         else if (cmd->op == GET) {
             /* check if the value is stored */
@@ -62,14 +63,15 @@ static void deliver(int tid, unsigned int inst, char* val, size_t size, void* ar
             } 
             else {
                 if (stored_value != NULL) {
-                    paxos_log_debug("GET key %s with the stored value %s size %zu at thread_id %d", key, stored_value, vsize, tid);
+                    paxos_log_debug("GET key %s with the stored value %s size %zu at thread_id_%d tid %u command_id %u client_id_%u",
+                                 key, stored_value, vsize, tid, cmd->thread_id, cmd->command_id, cmd->client_id);
                     free(stored_value);
                 }
             }
         }
         else if (cmd->op == INC)
         {
-            paxos_log_debug("received at thread id %d\n", tid);
+            paxos_log_debug("received at learner_id_%d\n", tid);
             char *s_key = cmd->content + 16;
             char *f_stored_value = NULL, *s_stored_value = NULL;
             size_t f_vsize = 0, s_vsize = 0;
@@ -95,7 +97,8 @@ static void deliver(int tid, unsigned int inst, char* val, size_t size, void* ar
                     if (r) {
                         fprintf(stderr, "Add entry failed.\n");
                     }
-                    paxos_log_debug("INC(%s, %s) with value %s on thread_id %d", key, s_key, result_value, tid);
+                    paxos_log_debug("INC(%s, %s) with value %s on thread_id_%d tid %u command_id %u client_id_%u", 
+                        key, s_key, result_value, tid, cmd->thread_id, cmd->command_id, cmd->client_id);
                 }
             }
         }
@@ -113,7 +116,6 @@ static void deliver(int tid, unsigned int inst, char* val, size_t size, void* ar
         int n = sendto(app->paxos->sock, retval, content_length(req), 0,
                         (struct sockaddr *)&req->cliaddr,
                         sizeof(req->cliaddr));
-        //print_addr(&req->cliaddr);
         if (n < 0)
             perror("deliver: sendto error");
     }
@@ -127,8 +129,8 @@ static void*
 start_thread(void* v)
 {
     int learner_id = *((int*)v);
-    paxos_log_debug("Learner thread %d: starting....\n", learner_id);
-    printf("ID: %lu, CPU: %d thread_id %d\n", pthread_self(), sched_getcpu(), learner_id);
+    paxos_log_debug("learnerid_%d: starting....", learner_id);
+    paxos_log_debug("ID: %lu, CPU: %d learner_id_%d", pthread_self(), sched_getcpu(), learner_id);
     struct learner_thread* l = malloc (sizeof(struct learner_thread));
 
     struct application_ctx *app = malloc(sizeof (struct application_ctx));
@@ -185,7 +187,7 @@ start_learner(int *learner_id, pthread_t* t)
     CPU_ZERO(&cpus);
     CPU_SET(*learner_id, &cpus);
     int numberOfProcessors = sysconf(_SC_NPROCESSORS_ONLN);
-    printf("Number of processors: %d thread id %d\n", numberOfProcessors, *learner_id);
+    paxos_log_debug("Number of processors: %d learner_id_%d\n", numberOfProcessors, *learner_id);
     pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
     if ((rc = pthread_create(t,  &attr, start_thread, learner_id)))
     {       
@@ -271,7 +273,7 @@ int main(int argc, char *argv[])
     for (i = 0; i < NUM_OF_THREAD; i++)
     {
         pthread_join(t[i], NULL);
-        paxos_log_debug("Learner thread %d finished!\n", ids[i]);
+        paxos_log_debug("learner_id_%d finished!\n", ids[i]);
     }
       /* Clean up and exit */
     pthread_mutex_destroy(&execute_mutex);

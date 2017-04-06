@@ -13,20 +13,8 @@
 #include "message_pack.h"
 
 #define MAX_GAPS 20
-
-#define VLEN 1024
 #define TIMEOUT 1
 int counter = 0;
-static struct mmsghdr msgs[VLEN];
-static struct iovec iovecs[VLEN];
-static char bufs[VLEN][BUFSIZE+1];
-static struct timespec timeout;
-
-static uint32_t max_received;
-
-//static struct mmsghdr tx_buffer[VLEN];
-//static struct iovec tx_iovecs[VLEN];
-
 
 static void
 send_paxos_message(struct learner_thread *l, paxos_message* msg, int msg_size){
@@ -47,13 +35,14 @@ void check_holes(evutil_socket_t fd, short event, void *arg)
 
     if (learner_has_holes(l->ctx->learner_state, &from_inst, &to_inst))
     {
-        paxos_log_debug("Learner thread %u has holes from %d to %d", l->lth_id, from_inst, to_inst);
+        paxos_log_debug("learner_id_%u has holes from %d to %d", l->lth_id, from_inst, to_inst);
         paxos_message out;
         out.type = PAXOS_PREPARE_HOLE;
         if ((to_inst - from_inst) > MAX_GAPS)
             to_inst = from_inst + MAX_GAPS;
         learner_prepare_hole (l->ctx->learner_state, &out.u.prepare_hole, &from_inst, &to_inst, l->lth_id, &message_size);
-        paxos_log_debug("send prepare message for iid %u ballot %u t_id %u a_tid %u value_ballot %u",
+        paxos_log_debug("learner_id_%u send prepare message for iid %u ballot %u thread_id_%u a_tid %u value_ballot %u",
+            l->lth_id,
             out.u.prepare_hole.iid,
             out.u.prepare_hole.ballot,
             out.u.prepare_hole.thread_id,
@@ -66,14 +55,19 @@ void check_holes(evutil_socket_t fd, short event, void *arg)
 void on_paxos_accepted(paxos_message *msg, struct learner_thread *l_th) {
 
     uint16_t tid = l_th->lth_id;
-    if(msg->u.accepted.a_tid == tid){
+    if(msg->u.accepted.a_tid != tid)
+    {   
+        paxos_log_debug("**thread_id_%u in message iid %u vs learner_id_%u",
+         msg->u.accepted.a_tid, msg->u.accepted.iid, tid);
+        return;
+    }
 
 
     learner_receive_accepted(l_th->ctx->learner_state, &msg->u.accepted, tid);
 
     paxos_accepted chosen_value;
-    
-    //paxos_log_debug("---------------------");
+    memset(&chosen_value, 0, sizeof(paxos_accepted));
+    paxos_log_debug("---------------------");
    
     while (learner_deliver_next(l_th->ctx->learner_state, &chosen_value, tid)) {
        
@@ -84,8 +78,9 @@ void on_paxos_accepted(paxos_message *msg, struct learner_thread *l_th) {
             
             if (counter == NUM_OF_THREAD)
             {
-                paxos_log_debug("thread %u reached", tid);
-                paxos_log_debug("-1 execute iid %u of thread %u len %d value %s", 
+                paxos_log_debug("learner_id_%u reached", tid);
+                paxos_log_debug("-1 learner_id_%u execute iid %u of thread_id_%u len %d value %s", 
+                    tid,
                     chosen_value.iid, chosen_value.thread_id, 
                     chosen_value.value.paxos_value_len,
                     chosen_value.value.paxos_value_val );
@@ -101,14 +96,19 @@ void on_paxos_accepted(paxos_message *msg, struct learner_thread *l_th) {
             }
             else{
 
-                paxos_log_debug("thread %d wait",tid);
+                paxos_log_debug("learner_id_%d wait",tid);
                 pthread_cond_wait(&execute, &execute_mutex);
         
             }
             pthread_mutex_unlock(&execute_mutex);
         }
         else{
-            paxos_log_debug("-2 execute iid %u of thread %u", chosen_value.iid, chosen_value.thread_id);
+            paxos_log_debug("-2 learner_id_%u execute iid %u of thread_id_%u len %d value %s", 
+                    tid,
+                    chosen_value.iid, 
+                    chosen_value.thread_id,
+                    chosen_value.value.paxos_value_len,
+                    chosen_value.value.paxos_value_val);
             l_th->ctx->deliver(
                     tid,
                     chosen_value.iid,
@@ -118,7 +118,7 @@ void on_paxos_accepted(paxos_message *msg, struct learner_thread *l_th) {
             paxos_accepted_destroy(&chosen_value);
         }  
     }
-    }
+    
 
 }
 
@@ -160,20 +160,24 @@ void learner_read_cb(evutil_socket_t fd, short what, void *arg) {
     if (what&EV_READ) {
         int retval;
         int i;
-        retval = recvmmsg(fd, msgs, VLEN, 0, &timeout);
-        if (retval == -1) {
+        retval = recvmmsg(fd, l->msgs, VLEN, 0, &l->timeout);
+        if (retval == -1)
+        {
             perror("recvmmsg()");
             exit(EXIT_FAILURE);
         }
 
         for (i = 0; i < retval; i++) {
-            bufs[i][msgs[i].msg_len] = 0;
-            if (max_received < retval) {
-                max_received = retval;
+
+            l->bufs[i][l->msgs[i].msg_len] = 0;
+            
+            if (l->max_received < retval) 
+            {
+                l->max_received = retval;
                 // printf("max_received %d\n", max_received);
             }
             struct paxos_message msg;
-            unpack_paxos_message(&msg, bufs[i]);
+            unpack_paxos_message(&msg, l->bufs[i]);
 
             switch(msg.type) {
                 case PAXOS_ACCEPTED:
@@ -218,18 +222,25 @@ make_learner (int learner_id, struct netpaxos_configuration *conf, deliver_funct
     }
 
     ip_to_sockaddr(conf->acceptor_address, conf->acceptor_port, &(l->ctx->acceptor_sin));
+   
     int i;
-    memset(msgs, 0, sizeof(msgs));
-    for (i = 0; i < VLEN; i++) {
-        iovecs[i].iov_base         = bufs[i];
-        iovecs[i].iov_len          = BUFSIZE;
-        msgs[i].msg_hdr.msg_iov    = &iovecs[i];
-        msgs[i].msg_hdr.msg_iovlen = 1;
-    }
-    timeout.tv_sec = TIMEOUT;
-    timeout.tv_nsec = 0;
+    //l->iovecs = (iovec*) malloc (sizeof(iovec) * VLEN);
+    //l->msgs = (mmsghdr*) malloc (sizeof(mmsghdr) * VLEN);
+    l->iovecs = malloc (sizeof( struct iovec) * VLEN);
+    l->msgs = malloc (sizeof( struct mmsghdr) * VLEN);
+    memset(l->msgs, 0, sizeof(l->msgs) * VLEN);
+    memset(l->iovecs, 0, sizeof(l->iovecs) * VLEN);
 
-    max_received = 0;
+    for (i = 0; i < VLEN; i++) {
+        l->iovecs[i].iov_base         = l->bufs[i];
+        l->iovecs[i].iov_len          = BUFSIZE;
+        l->msgs[i].msg_hdr.msg_iov    = &(l->iovecs[i]);
+        l->msgs[i].msg_hdr.msg_iovlen = 1;
+    }
+    l->timeout.tv_sec = TIMEOUT;
+    l->timeout.tv_nsec = 0;
+
+    l->max_received = 0;
     
     
     time_t t;

@@ -27,7 +27,7 @@ sequencer_handle_proposal(struct paxos_ctx *ctx, char* buf, int size)
         for (i = 0; i < NUM_OF_THREAD; i++)
         {
             *inst_be = htonl(ctx->sequencer->current_instance[i]++);
-            paxos_log_debug("**All---Thread id %u current_instance %u\n", i, ntohl(*inst_be));
+            paxos_log_debug("**All---thread_id_%u current_instance %u", i, ntohl(*inst_be));
             *be_threadid = htons(t);
             *be_acceptor_counter_id = htons(i);
             //paxos_log_debug("before sending, thread %u net_thread %u\n", ntohs(*be_threadid), *be_threadid);
@@ -42,13 +42,13 @@ sequencer_handle_proposal(struct paxos_ctx *ctx, char* buf, int size)
     {
 
         *inst_be = htonl(ctx->sequencer->current_instance[t]++);
-        paxos_log_debug("**Specific---Thread id %u current_instance %u\n", t, ntohl(*inst_be));
+        paxos_log_debug("**Specific---thread_id_%u current_instance %u", t, ntohl(*inst_be));
         *be_threadid = htons(t);
         *be_acceptor_counter_id = htons(t);
-        //paxos_log_debug("before sending, thread %u net_thread %u\n", ntohs(*be_threadid), *be_threadid);
+        paxos_log_debug("before sending, thread_id_%u aid %u", ntohs(*be_threadid), ntohs( *be_acceptor_counter_id));
         int n = sendto(ctx->sock, buf, size, 0,
                 (struct sockaddr *)&ctx->acceptor_sin, sizeof(ctx->acceptor_sin));
-        // paxos_log_debug("packet accept has size of %d\n", size); size 102
+        paxos_log_debug("packet accept has size of %d\n", size); //size 102
         if (n < 0)
             error_at_line(1, errno, __FILE__, __LINE__, "%s\n", strerror(errno));
     }
@@ -98,10 +98,115 @@ handle_packet_in(evutil_socket_t fd, short what, void *arg)
         }
     }
 }
+/*void squencer_handle_accept(struct paxos_ctx *ctx, struct paxos_message *msg,
+    struct sockaddr_in *remote, socklen_t socklen)
+{
+    //paxos_message out;
+    paxos_accept* accept = &msg->u.accept;
+    paxos_log_debug("paxos message has %d len %s value----paxos accept has %d len %s value",
+                        msg->u.accept.value.paxos_value_len, 
+                        msg->u.accept.value.paxos_value_val,
+                        accept->value.paxos_value_len,
+                        accept->value.paxos_value_val);
+    int thread_id = accept->thread_id;
+    //int acc_counter_id = accept->a_tid;
+    if (thread_id == ALL)
+    {
+        int i;
+        for (i = 0; i < NUM_OF_THREAD; i++)
+        {
+            struct paxos_message out = {
+                .type = PAXOS_ACCEPT,
+                .u.accept.iid = ctx->sequencer->current_instance[i]++,
+                .u.accept.ballot = 0,
+                .u.accept.thread_id  = thread_id,
+                .u.accept.a_tid = i,
+                .u.accept.value_ballot = 0,
+                .u.accept.aid = 0,
+                .u.accept.value.paxos_value_len = msg->u.accept.value.paxos_value_len,
+                .u.accept.value.paxos_value_val = msg->u.accept.value.paxos_value_val
+            };
 
+            size_t msg_len = pack_paxos_message(ctx->buffer, &out);
+            int n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
+                    (struct sockaddr *)&ctx->acceptor_sin, sizeof(ctx->acceptor_sin));
+            
+            if (n < 0)
+            error_at_line(1, errno, __FILE__, __LINE__, "%s\n", strerror(errno));
+    
+        }
+    }
+    else if (thread_id == 0 || thread_id == 1){
+        struct paxos_message out = {
+                .type = PAXOS_ACCEPT,
+                .u.accept.iid =  ctx->sequencer->current_instance[thread_id]++,
+                .u.accept.ballot = 0,
+                .u.accept.thread_id  = thread_id,
+                .u.accept.a_tid = thread_id,
+                .u.accept.value_ballot = 0,
+                .u.accept.aid = 0,
+                .u.accept.value.paxos_value_len = msg->u.accept.value.paxos_value_len,
+                .u.accept.value.paxos_value_val = msg->u.accept.value.paxos_value_val
+            };
+
+        paxos_log_debug("send paxos message iid %u ballot %u thread_id_%u acceptor_counter_id %u"
+            "len %d value %s",
+            out.u.accept.iid, 
+            out.u.accept.ballot,
+            out.u.accept.thread_id,
+            out.u.accept.a_tid,
+            out.u.accept.value.paxos_value_len,
+            out.u.accept.value.paxos_value_val);
+
+        char* val = out.u.accept.value.paxos_value_val;
+            //size_t size = out.u.accept.value.paxos_value_len;
+        struct command *cmd = (struct command*)(val + sizeof(struct client_request) - 1);
+        char *key = cmd->content;
+        char *value = cmd->content + 16;
+        paxos_log_debug("SET(%s, %s) thread_id_%d msg->thread_id_%u iid %u command_id_%u client_id_%u\n", 
+                                        key, value, 
+                                        cmd->thread_id,
+                                        out.u.accept.thread_id,
+                                        out.u.accept.iid,
+                                        cmd->command_id, 
+                                        cmd->client_id);
+
+        size_t msg_len = pack_paxos_message(ctx->buffer, &out);
+        int n = sendto(ctx->sock, ctx->buffer, msg_len, 0,
+                        (struct sockaddr *)&ctx->acceptor_sin, sizeof(ctx->acceptor_sin));
+            
+        if (n < 0)
+            error_at_line(1, errno, __FILE__, __LINE__, "%s\n", strerror(errno));
+    }
+    
+}*/
+/*static void
+handle_packet(evutil_socket_t fd, short what, void *arg)
+{
+   
+    struct paxos_ctx *ctx = arg;
+    if (what&EV_READ) {
+        memset(ctx->buffer, 0, BUFSIZE);
+        struct sockaddr_in remote;
+        socklen_t len = sizeof(remote);
+
+        int n = recvfrom(fd, ctx->buffer, BUFSIZE, 0,
+                            (struct sockaddr *)&remote, &len);
+        if (n < 0)
+            perror("recvfrom");
+
+        struct paxos_message msg;
+        unpack_paxos_message(&msg, ctx->buffer);
+        if (msg.type == PAXOS_ACCEPT) {
+            squencer_handle_accept(ctx, &msg, &remote, len);
+        }
+         paxos_message_destroy(&msg);
+     }
+
+}*/
 struct sequencer*
 sequencer_new() {
-    struct sequencer* sq = malloc(sizeof(struct sequencer));
+    struct sequencer* sq = malloc(sizeof(struct sequencer) + (NUM_OF_THREAD * sizeof(uint32_t)));
     int i;
     for (i = 0; i < NUM_OF_THREAD; i++)
     {
@@ -113,7 +218,7 @@ sequencer_new() {
 
 struct paxos_ctx *make_sequencer(struct netpaxos_configuration *conf)
 {
-    struct paxos_ctx *ctx = malloc( sizeof(struct paxos_ctx));
+    struct paxos_ctx *ctx = malloc(sizeof(struct paxos_ctx));
     init_paxos_ctx(ctx);
 
     ctx->sequencer = sequencer_new();

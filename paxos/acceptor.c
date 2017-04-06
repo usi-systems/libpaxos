@@ -49,7 +49,7 @@ acceptor_new(int id)
 	struct acceptor* a;
 	a = malloc(sizeof(struct acceptor));
 	a->id = id;
-	a->store = malloc (NUM_OF_THREAD * sizeof ( struct storage));
+	a->store = malloc (NUM_OF_THREAD * sizeof (struct storage));
 	a->trim_iid = malloc (NUM_OF_THREAD * sizeof(iid_t));
 	int i;
 	for (i = 0; i < NUM_OF_THREAD; i++)

@@ -1,13 +1,26 @@
 #ifndef NETPAXOS_H_
 #define NETPAXOS_H_
-
 #include <event2/event.h>
 #include <sys/socket.h>
 #include "paxos.h"
 #include <pthread.h>
-#define BUFSIZE 386
+
+#define BUFSIZE 392
 #define NUM_OF_THREAD 2
 #define ALL 65
+#define VLEN 1024
+
+
+struct learner_thread
+{
+    uint16_t lth_id;
+    struct paxos_ctx *ctx;
+    struct mmsghdr *msgs;
+    struct iovec *iovecs;
+    char bufs[VLEN][BUFSIZE+1];
+    struct timespec timeout;
+    uint32_t max_received;
+};
 
 pthread_mutex_t execute_mutex;
 pthread_cond_t execute;
@@ -17,12 +30,6 @@ cpu_set_t cpus;
 pthread_attr_t attr;
 int check_leveldb;
 
-struct learner_thread
-{
-   
-    uint16_t lth_id;
-    struct paxos_ctx *ctx;
-};
 
 struct leveldb_ctx *common_levelb;
 struct learner_thread** learners;

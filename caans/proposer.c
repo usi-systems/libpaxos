@@ -22,7 +22,7 @@ int main(int argc, char *argv[])
     int proposer_id = atoi(argv[2]);
     int listen_port = atoi(argv[3]);
     struct application_ctx *app = malloc(sizeof(struct application_ctx));
-    app->current_request_id = 0;
+    app->current_request_id = 1;
 
     struct netpaxos_configuration conf;
     populate_configuration(argv[1], &conf);

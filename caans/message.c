@@ -3,6 +3,10 @@
 #include <stdio.h>
 #include "message.h"
 #include <time.h>
+#define CMD_ID_OFFSET 0
+#define CLIENT_ID_OFFSET 4
+#define THREAD_ID_OFFSET 6
+
 uint16_t content_length(struct client_request *request)
 {
     return request->length - (sizeof(struct client_request) - 1);
@@ -13,21 +17,28 @@ uint16_t message_length(struct client_request *request)
     return request->length;
 }
 
-void get_threadid (uint16_t *out, char *p, int offset)
+void get_uint16_t (uint16_t *out, char *p, int offset)
 {
     uint16_t *raw_bytes = (uint16_t *)(p + offset);
     *out = *raw_bytes;
 }
 
-struct client_request* create_client_request(char *data, uint16_t data_size, uint16_t *tid)
+void get_uint32_t(uint32_t *out, char *p, int offset)
+{
+    uint32_t *raw_bytes = (uint32_t *)(p + offset);
+    *out = *raw_bytes;
+}
+struct client_request* create_client_request(char *data, uint16_t data_size,  uint16_t *cid, uint16_t *tid, uint32_t *cmd_id)
 {
     uint16_t message_size = sizeof(struct client_request) + data_size - 1;
     struct client_request *request = (struct client_request*)malloc(message_size);
     request->length = message_size;
 
-    int offset = sizeof(struct timespec) + sizeof(uint32_t);
-    get_threadid (tid, data, offset);
+    get_uint32_t(cmd_id, data, CMD_ID_OFFSET);
+    get_uint16_t(cid, data, CLIENT_ID_OFFSET);
+    get_uint16_t(tid, data, THREAD_ID_OFFSET);
 
+    //printf("create_client_request: client_id_%u thread_id_%u cmd_id %u\n", *cid, *tid, *cmd_id);
     memcpy(request->content, data, data_size);
 
     return request;

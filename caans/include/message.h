@@ -14,11 +14,12 @@ enum Operation {
 };
 
 struct command {
-    struct timespec ts;
     uint32_t command_id;
+    uint16_t client_id;
     uint16_t thread_id;
     enum Operation op;
     char content[32];
+    struct timespec ts;
 };
 
 
@@ -31,7 +32,7 @@ struct __attribute__((__packed__)) client_request {
 unsigned long hash(unsigned char *str);
 uint16_t content_length(struct client_request *request);
 uint16_t message_length(struct client_request *request);
-struct client_request* create_client_request(char *data, uint16_t data_size, uint16_t *tid);
+struct client_request* create_client_request(char *data, uint16_t data_size, uint16_t *cid, uint16_t *tid,  uint32_t *cmd_id);
 void print_message(struct client_request *request);
 void hexdump_message(struct client_request *request);
 void get_threadid (uint16_t *out, char *p, int offset);

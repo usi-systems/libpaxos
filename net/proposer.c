@@ -32,7 +32,7 @@ static void flush_buffer(evutil_socket_t fd, short what, void *arg)
 }
 
 void submit(struct paxos_ctx *ctx, char *value, int size, uint16_t thread_id) {
-    paxos_log_debug("before submit, thread_id is  %d\n", thread_id);
+    //printf("before submit, thread_id_%d\n", thread_id);
 
     struct paxos_message msg = {
         .type = PAXOS_ACCEPT,
@@ -59,6 +59,7 @@ void submit(struct paxos_ctx *ctx, char *value, int size, uint16_t thread_id) {
     tx_buffer_len++;
 
     flush_buffer(ctx->sock, EV_TIMEOUT, NULL);
+    paxos_message_destroy(&msg);
 }
 
 void proposer_read_cb(evutil_socket_t fd, short what, void *arg) {
