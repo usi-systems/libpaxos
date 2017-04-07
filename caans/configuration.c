@@ -37,7 +37,7 @@ int populate_configuration(char* config, struct netpaxos_configuration *conf)
     conf->coordinator_address = NULL;
     /* Initialize number of proposers to 10 */
     conf->proposer_count = 0;
-    conf->max_num_proposer = 10;
+    conf->max_num_proposer = 11;
     conf->proposer_port = calloc(conf->max_num_proposer, sizeof(int));
     conf->proposer_address = calloc(conf->max_num_proposer, sizeof(char*));
     int i;
@@ -83,10 +83,6 @@ int populate_configuration(char* config, struct netpaxos_configuration *conf)
                 conf->acceptor_port = atoi(token);
             }
             if (strcmp(token, "learner") == 0) {
-                /*token = strtok(NULL, delim);
-                conf->learner_address = strdup(token);
-                token = strtok(NULL, delim);
-                conf->learner_port = atoi(token);*/
                 token = strtok(NULL, delim);
                 conf->learner_address[conf->learner_count] = strdup(token);
                 token = strtok(NULL, delim);
@@ -148,10 +144,16 @@ void free_configuration(struct netpaxos_configuration *conf)
     }
     free(conf->proposer_port);
     free(conf->proposer_address);
-    if (conf->learner_address)
-        free(conf->learner_address);
-    if (conf->acceptor_address)
+
+    for (i = 0; i < conf->max_num_learner_thread; i++) {
+        if (conf->learner_address[i] != NULL)
+            free(conf->learner_address[i]);
+    }
+    free(conf->learner_port);
+    free(conf->learner_address);
+
+    if (conf->acceptor_address != NULL)
         free(conf->acceptor_address);
-    if (conf->coordinator_address)
+    if (conf->coordinator_address != NULL)
         free(conf->coordinator_address);
 }

@@ -35,13 +35,14 @@ void handle_request(evutil_socket_t fd, short event, void *arg) {
         uint32_t cmd_id;
         int recv_bytes = iovecs[i].iov_len;
         //printf("----------\n");
-        //printf("recv_bytes(data_size) %d\n", recv_bytes);
+        paxos_log_debug("recv_bytes(data_size) %d\n", recv_bytes);
         struct client_request *req = create_client_request(bufs[i], recv_bytes, &cid, &t_id, &cmd_id);
         //printf("handle_request client_id_%u thread_id_%u cmd_id %u\n", cid, t_id, cmd_id);
         req->cliaddr = remotes[i];
         // hexdump((char*)req, req->length);
+        paxos_log_debug("message_length %d\n", message_length(req));
         submit(app->paxos, (char*)req, message_length(req), t_id);
-        //printf("message_length %d\n", message_length(req));
+        
         //printf("sockaddr_in %ld\n", sizeof(req->cliaddr)); 16
         app->current_request_id++;
     }

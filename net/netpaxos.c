@@ -74,6 +74,7 @@ void free_paxos_ctx(struct paxos_ctx *ctx)
         event_free(ctx->ev_sigterm);
     if (ctx->timeout_ev)
         event_free(ctx->timeout_ev);
+    free(ctx->learner_sin);
     event_base_free(ctx->base);
     free(ctx->buffer);
     free(ctx);

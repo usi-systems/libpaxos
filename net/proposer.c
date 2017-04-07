@@ -32,8 +32,6 @@ static void flush_buffer(evutil_socket_t fd, short what, void *arg)
 }
 
 void submit(struct paxos_ctx *ctx, char *value, int size, uint16_t thread_id) {
-    //printf("before submit, thread_id_%d\n", thread_id);
-
     struct paxos_message msg = {
         .type = PAXOS_ACCEPT,
         .u.accept.iid = 1,
@@ -49,7 +47,7 @@ void submit(struct paxos_ctx *ctx, char *value, int size, uint16_t thread_id) {
     char buffer[BUFSIZE];
     pack_paxos_message(buffer, &msg);
     size_t msg_len = sizeof(struct paxos_message) + size;
-
+    paxos_log_debug("total size %u", msg_len);
     tx_iovecs[tx_buffer_len].iov_base = buffer;
     tx_iovecs[tx_buffer_len].iov_len = msg_len;
     tx_buffer[tx_buffer_len].msg_hdr.msg_name = &ctx->coordinator_sin;

@@ -78,40 +78,37 @@ void send_to_addr(struct client_context *ctx) {
     cmd.op = ctx->op;
     if (cmd.op == SET)
     {
-        //unsigned char *key, *value;
+        unsigned char *key, *value;
         
-        //key = malloc(sizeof(unsigned char));
-        //value = malloc(sizeof(unsigned char));
+        key = malloc(sizeof(unsigned char));
+        value = malloc(sizeof(unsigned char));
         
-        //random_string(key);
+        random_string(key);
         //*key = 'z';
-        //memset(cmd.content, *key, 15);
+        memset(cmd.content, *key, 15);
         
-        memset(cmd.content, key_array[flag], 15);
+        //memset(cmd.content, key_array[flag], 15);
         cmd.content[15] = '\0';
         
-        //random_string(value);
+        random_string(value);
         //*value = '3';
-        //memset(cmd.content+16, *value, 15);
-        memset(cmd.content+16, value_array[flag], 15);
+        memset(cmd.content+16, *value, 15);
+        //memset(cmd.content+16, value_array[flag], 15);
         cmd.content[31] = '\0';
-        //cmd.thread_id = command_to_thread(key);
+        cmd.thread_id = command_to_thread(key);
         //cmd.thread_id = command_to_thread(&key_array[flag]);
-        cmd.thread_id = flag;
-        flag = 1 - flag;
+        //cmd.thread_id = flag;
+       
         //ctx->thread_id = cmd.thread_id;
         cmd.client_id = ctx->client_id;
         clock_gettime(CLOCK_REALTIME, &cmd.ts);
 
-        //paxos_log_debug("SET key %c value %c thread_id_%d command_id %u current_iid %u\n",
-        //             *key, *value, cmd.thread_id, cmd.command_id, ctx->current_iid);
-        /*time( &rawtime );
+        paxos_log_debug("SET key %c value %c thread_id_%d command_id %u current_iid %u\n",
+                     *key, *value, cmd.thread_id, cmd.command_id, ctx->current_iid);
 
-        info = localtime( &rawtime );
-
-        strftime(buffer,sizeof(buffer),"%d %b %H:%M:%S. ", info);
-        paxos_log_debug("%sSET key %c value %c thread_id_%d command_id %u current_iid %u\n",
+        /*paxos_log_debug("%sSET key %c value %c thread_id_%d command_id %u current_iid %u\n",
                     buffer, key_array[flag],value_array[flag], cmd.thread_id, cmd.command_id, ctx->current_iid);*/
+        // flag = 1 - flag;
     }
     else if (cmd.op == GET)
     {
