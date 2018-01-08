@@ -22,6 +22,7 @@ add_subdirectory(evpaxos)
 add_subdirectory(sample)
 add_subdirectory(net)
 add_subdirectory(caans)
+add_subdirectory(benchmark)
 
 enable_testing()
 add_subdirectory(unit)
