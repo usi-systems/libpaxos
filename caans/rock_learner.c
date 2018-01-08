@@ -10,7 +10,7 @@
 #include "configuration.h"
 #include "application_proxy.h"
 #include "message.h"
-#include "leveldb_context.h"
+#include "rocksdb_context.h"
 
 void on_perf(evutil_socket_t fd, short event, void *arg) {
     struct application_ctx *app = arg;
@@ -27,12 +27,11 @@ void deliver(unsigned int inst, char* val, size_t size, void* arg) {
 
     struct command *cmd = (struct command*)(val + sizeof(struct client_request) - 1);
     if (app->enable_db) {
-        struct leveldb_ctx* db = (struct leveldb_ctx*)app->db;
         char *key = cmd->content;
         if (cmd->op == SET) {
             char *value = cmd->content + 16;
             paxos_log_debug("SET(%s, %s)", key, value);
-            int res = add_entry(db, 0, key, 16, value, 16);
+            int res = add_entry(app->db, 0, key, 16, value, 16);
             if (res) {
                 fprintf(stderr, "Add entry failed.\n");
             }
@@ -41,10 +40,10 @@ void deliver(unsigned int inst, char* val, size_t size, void* arg) {
             /* check if the value is stored */
             char *stored_value = NULL;
             size_t vsize = 0;
-            int res = get_value(db, key, 16, &stored_value, &vsize);
+            int res = get_value(app->db, key, 16, &stored_value, &vsize);
             if (res) {
                 fprintf(stderr, "get value failed.\n");
-            } 
+            }
             else {
                 if (stored_value != NULL) {
                     paxos_log_debug("Stored value %s, size %zu", stored_value, vsize);
@@ -69,7 +68,7 @@ void deliver(unsigned int inst, char* val, size_t size, void* arg) {
 }
 
 void usage(char *prog) {
-    printf("Usage: %s configuration-file learner_id number_of_learner [enable_leveldb]\n", prog);
+    printf("Usage: %s configuration-file learner_id number_of_learner [enable_rocksdb]\n", prog);
 }
 
 
@@ -117,7 +116,7 @@ int main(int argc, char *argv[]) {
     app->paxos = paxos;
 
     if (app->enable_db) {
-        app->db = (void *)new_leveldb_context();
+        app->db = (struct rocksdb_context*) new_rocksdb_context();
     }
 
     struct event *ev_perf = event_new(paxos->base, -1, EV_TIMEOUT|EV_PERSIST, on_perf, app);
@@ -132,7 +131,7 @@ int main(int argc, char *argv[]) {
     free_paxos_ctx(app->paxos);
     free(app->proxies);
     if (app->enable_db) {
-        free_leveldb_context((struct leveldb_ctx*)app->db);
+        free_db_context((struct rocksdb_ctx*)app->db);
     }
     free(app);
     free_configuration(&conf);

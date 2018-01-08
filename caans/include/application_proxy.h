@@ -5,7 +5,6 @@
 #include "uthash.h"
 #include "netpaxos.h"
 #include "configuration.h"
-#include "leveldb_context.h"
 
 #define BUFFER_SIZE 64
 
@@ -18,8 +17,8 @@ struct application_ctx {
     struct sockaddr_in *proxies;
     int at_second;
     int message_per_second;
-    int enable_leveldb;
-    struct leveldb_ctx *leveldb;
+    int enable_db;
+    void *db;
     int amount_of_write;
     struct event *ev_read;
 };

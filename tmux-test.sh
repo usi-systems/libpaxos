@@ -13,12 +13,12 @@ tmux_test ()  {
 	# tmux split-window -v -t paxos
 	tmux split-window -v -t paxos
 	tmux select-layout -t paxos tiled
-	tmux send-keys -t paxos:0.0 "./$BIN/server_caans $CONFIG 0 1" C-m
+	tmux send-keys -t paxos:0.0 "./$BIN/rock_learner $CONFIG 0 1" C-m
 	tmux send-keys -t paxos:0.1 "./$BIN/sw_acceptor $CONFIG 0" C-m
 	sleep 2
 	tmux send-keys -t paxos:0.4 "./$BIN/sw_coordinator $CONFIG" C-m
 	tmux send-keys -t paxos:0.2 "./$BIN/proxy_caans $CONFIG 0 6789" C-m
-	tmux send-keys -t paxos:0.3 "./$BIN/client_caans 10.20.2.132 6789" C-m
+	tmux send-keys -t paxos:0.3 "./$BIN/c_bench 10.20.2.132 6789" C-m
 	tmux attach-session -t paxos
 	tmux kill-session -t paxos
 }

@@ -23,6 +23,7 @@ add_subdirectory(sample)
 add_subdirectory(net)
 add_subdirectory(caans)
 add_subdirectory(benchmark)
+add_subdirectory(rockspaxos)
 
 enable_testing()
 add_subdirectory(unit)
