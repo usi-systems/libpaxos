@@ -6,10 +6,8 @@
 #include "learner.h"
 
 #define NUM_ACCEPTORS 3
-#define INSTANCE_ID 0
-#define MAX_INSTANCE 10E6
-
-int force_quit;
+#define INSTANCE_ID 1
+#define MAX_INSTANCE 10000000
 
 void *produce_accepted(void *arg);
 void *consume_accepted(void *arg);
@@ -19,6 +17,7 @@ struct producer_parm {
     int producer_id;
     struct learner* learner;
     int delivered_total;
+    char log_to_file;
 };
 
 #define NS_PER_S 10E9
@@ -47,13 +46,7 @@ int main(int argc, char* argv[])
     struct producer_parm parms[NUM_THREADS];
     pthread_t consumers[NUM_THREADS];
     int i, ret;
-    force_quit = 0;
 
-    struct timespec start;
-    struct timespec end;
-
-
-    clock_gettime(CLOCK_REALTIME, &start);
     for (i = 0; i < NUM_THREADS; i++)
     {
         parms[i].learner = learner_new(NUM_ACCEPTORS);
@@ -80,15 +73,6 @@ int main(int argc, char* argv[])
         pthread_join(consumers[i], NULL);
         learner_free(parms[i].learner);
     }
-    clock_gettime(CLOCK_REALTIME, &end);
-    struct timespec result;
-    timespec_diff(&result, &end, &start);
-    float timelap = (float)(NS_PER_S*result.tv_sec + result.tv_nsec);
-    for (i = 0; i < NUM_THREADS; i++) {
-      float speed = (float)parms[i].delivered_total / timelap * NS_PER_S;
-      printf("Thread %d: Throughput: %3.f / %3.f = %.3f\n", i, (float)parms[i].delivered_total, timelap, speed);
-    }
-
     exit(EXIT_SUCCESS);
 }
 
@@ -99,7 +83,7 @@ void *consume_accepted(void *arg)
 {
     struct producer_parm* parm = arg;
     char hello_word[] = "Hello";
-    int local_iid = parm->producer_id;
+    int local_iid = 0;
 
     struct paxos_value v = {
         .paxos_value_len = 6,
@@ -117,22 +101,43 @@ void *consume_accepted(void *arg)
     int i;
 
     paxos_accepted out;
+    FILE *fp;
+    if (parm->log_to_file) {
+      char log_fn[10];
+      sprintf(log_fn, "thr%d.txt", parm->producer_id);
+      fp = fopen(log_fn, "w+");
+    }
+    struct timespec start;
+    struct timespec end;
+    clock_gettime(CLOCK_REALTIME, &start);
     do
     {
-        for (i = 0; i < NUM_ACCEPTORS; i++) {
+        for (i = INSTANCE_ID; i < NUM_ACCEPTORS; i++) {
             msg.aid = i;
-            // printf("Thread %d submit instance %d acceptor %d.\n", parm->producer_id, msg.iid, msg.aid);
+            if (parm->log_to_file) {
+              fprintf(fp, "Thread %d submit instance %d acceptor %d.\n", parm->producer_id, msg.iid, msg.aid);
+            }
             learner_receive_accepted(parm->learner, &msg);
+        }
+        if(learner_deliver_next(parm->learner, &out)) {
+          parm->delivered_total++;
+          if (parm->log_to_file) {
+            fprintf(fp, "Thread %d: current delivered instance %d\n", parm->producer_id, out.iid);
+          }
         }
         local_iid += 1;
         msg.iid = local_iid;
-
-        if(learner_deliver_next(parm->learner, &out))
-            parm->delivered_total++;
-        // printf("Thread %d: current delivered instance %d\n", parm->producer_id, out.iid);
     }
-    while (out.iid < MAX_INSTANCE - 1 && !force_quit);
-    /* Stop all threads */
-    force_quit = 1;
+    while (out.iid < MAX_INSTANCE && msg.iid < 3*MAX_INSTANCE);
+
+    clock_gettime(CLOCK_REALTIME, &end);
+    struct timespec result;
+    timespec_diff(&result, &end, &start);
+    float timelap = (float)(NS_PER_S*result.tv_sec + result.tv_nsec);
+    float speed = parm->delivered_total / timelap * NS_PER_S;
+    printf("Thread %d: Throughput: %3.f / %3.f = %.3f\n", parm->producer_id, (float)parm->delivered_total, timelap, speed);
+    if (parm->log_to_file) {
+      fclose(fp);
+    }
     return NULL;
 }
