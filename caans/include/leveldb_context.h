@@ -2,6 +2,7 @@
 #define _LEVELDB_CONTEXT_H_
 
 #include <leveldb/c.h>
+#define TEST_DB "/tmp/libpaxos_leveldb"
 
 struct leveldb_ctx {
     leveldb_t *db;

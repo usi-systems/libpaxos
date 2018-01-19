@@ -24,6 +24,7 @@ add_subdirectory(net)
 add_subdirectory(caans)
 add_subdirectory(benchmark)
 add_subdirectory(rockspaxos)
+add_subdirectory(leveldb-bench)
 
 enable_testing()
 add_subdirectory(unit)

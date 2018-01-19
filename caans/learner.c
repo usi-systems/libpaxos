@@ -44,7 +44,7 @@ void deliver(unsigned int inst, char* val, size_t size, void* arg) {
             int res = get_value(db, key, 16, &stored_value, &vsize);
             if (res) {
                 fprintf(stderr, "get value failed.\n");
-            } 
+            }
             else {
                 if (stored_value != NULL) {
                     paxos_log_debug("Stored value %s, size %zu", stored_value, vsize);
@@ -118,6 +118,7 @@ int main(int argc, char *argv[]) {
 
     if (app->enable_db) {
         app->db = (void *)new_leveldb_context();
+        open_db(app->db, TEST_DB);
     }
 
     struct event *ev_perf = event_new(paxos->base, -1, EV_TIMEOUT|EV_PERSIST, on_perf, app);

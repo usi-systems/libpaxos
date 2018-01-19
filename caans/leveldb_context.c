@@ -3,7 +3,6 @@
 #include <string.h>
 #include "leveldb_context.h"
 
-#define TEST_DB "/tmp/libpaxos_leveldb"
 
 enum boolean {
     false,
@@ -15,7 +14,6 @@ struct leveldb_ctx* new_leveldb_context() {
     ctx->options = leveldb_options_create();
     ctx->woptions = leveldb_writeoptions_create();
     ctx->roptions = leveldb_readoptions_create();
-    open_db(ctx, TEST_DB);
     return ctx;
 }
 
@@ -82,5 +80,3 @@ void free_leveldb_context(struct leveldb_ctx *ctx) {
     leveldb_options_destroy(ctx->options);
     free(ctx);
 }
-
-
