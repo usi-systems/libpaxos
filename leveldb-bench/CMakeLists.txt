@@ -4,7 +4,7 @@ include_directories(${CMAKE_SOURCE_DIR}/paxos/include)
 include_directories(/usr/local/include/leveldb/include)
 link_directories(/usr/local/lib)
 
-set(TEST_SOURCES multi_thread.c multi_thread_multi_db.c)
+set(TEST_SOURCES multi_thread.c multi_thread_writebatch.c multi_thread_multi_db.c)
 
 foreach(p ${TEST_SOURCES})
 	get_filename_component(target "${p}" NAME_WE)
