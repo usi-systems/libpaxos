@@ -174,10 +174,14 @@ int deliver(unsigned int __rte_unused inst, __rte_unused char* val,
 		(const char*)ap->value, value_len);
 		if (rocksdb_writebatch_count(lp_worker->wrbatch) == ROCKSDB_WRITEBATCH_SIZE) {
 			rocksdb_write(lp_worker->db, app.writeoptions, lp_worker->wrbatch, &err);
-			rocksdb_writebatch_clear(lp_worker->wrbatch);
 			if (err != NULL) {
 				printf("WriteBatch Error: %s\n", err);
 			}
+			rocksdb_flush(lp_worker->db, lp_worker->flops, &err);
+			if (err != NULL) {
+				printf("Flush to disk Error: %s\n", err);
+			}
+			rocksdb_writebatch_clear(lp_worker->wrbatch);
 		}
 		lp_worker->write_count++;
 	}

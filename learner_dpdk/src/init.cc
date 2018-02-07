@@ -96,6 +96,8 @@ app_init_rocksdb(void)
     rocksdb_options_set_create_if_missing(app.options, 1);
     // Write asynchronously
     app.writeoptions = rocksdb_writeoptions_create();
+	// Disable WAL (Flush to disk manually)
+	rocksdb_writeoptions_disable_WAL(app.writeoptions, 1);
     rocksdb_writeoptions_set_sync(app.writeoptions, 0);
 	app.readoptions = rocksdb_readoptions_create();
 
@@ -113,6 +115,11 @@ app_init_rocksdb(void)
 		  rte_panic("Cannot open DB: %s\n", err);
 		}
 		lp_worker->wrbatch = rocksdb_writebatch_create();
+		lp_worker->cp = rocksdb_checkpoint_object_create(lp_worker->db, &err);
+		if (err != NULL) {
+		  rte_panic("Cannot create checkpoint object: %s\n", err);
+		}
+		lp_worker->flops = rocksdb_flushoptions_create();
 	}
 }
 

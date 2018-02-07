@@ -320,6 +320,8 @@ struct app_lcore_params_worker {
 	/* Rocksdb */
 	rocksdb_t *db;
 	rocksdb_writebatch_t* wrbatch;
+	rocksdb_checkpoint_t *cp;
+	rocksdb_flushoptions_t* flops;
 };
 
 struct app_lcore_params {
