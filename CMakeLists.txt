@@ -25,6 +25,7 @@ add_subdirectory(caans)
 add_subdirectory(benchmark)
 add_subdirectory(rockspaxos)
 add_subdirectory(leveldb-bench)
+add_subdirectory(learner_dpdk)
 
 enable_testing()
 add_subdirectory(unit)
