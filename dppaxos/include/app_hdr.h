@@ -35,6 +35,7 @@ extern "C" {
 #endif
 
 struct app_hdr {
+    uint64_t request_id;
     uint8_t msg_type;
     uint32_t key_len;
 	uint8_t key[KEY_LEN];

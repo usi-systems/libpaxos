@@ -38,7 +38,7 @@
 
 #include "paxos.h"
 #include "main.h"
-#include "dpdk_paxos.h"
+#include "dpp_paxos.h"
 
 static const char *dest_ips[4] = { 	"192.168.4.95", "192.168.4.96",
 									"192.168.4.97", "192.168.4.98" };

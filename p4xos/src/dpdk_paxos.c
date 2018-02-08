@@ -39,7 +39,7 @@
 #include "paxos.h"
 #include "learner.h"
 #include "main.h"
-#include "dpdk_paxos.h"
+#include "dpp_paxos.h"
 
 void
 handle_paxos_message(struct app_lcore_params_worker *lp, struct rte_mbuf *pkt_in)

@@ -39,7 +39,7 @@
 #include <rte_lpm.h>
 
 #include "main.h"
-#include "dpdk_paxos.h"
+#include "dpp_paxos.h"
 
 #ifndef APP_LCORE_IO_FLUSH
 #define APP_LCORE_IO_FLUSH           1000000
