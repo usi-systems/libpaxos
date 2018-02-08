@@ -211,22 +211,12 @@
 #error "APP_DEFAULT_NUM_ACCEPTORS is too big"
 #endif
 
-/* Paxos logic */
-#ifndef DB_NAME_LENGTH
-#define DB_NAME_LENGTH 128
+#ifndef MAX_APP_MESSAGE_LEN
+#define MAX_APP_MESSAGE_LEN 1024
 #endif
-#if (DB_NAME_LENGTH > 128)
-#error "DB_NAME_LENGTH is too big"
+#if (MAX_APP_MESSAGE_LEN >= 1450)
+#error "APP_DEFAULT_NUM_ACCEPTORS is too big"
 #endif
-
-#ifndef ROCKSDB_WRITEBATCH_SIZE
-#define ROCKSDB_WRITEBATCH_SIZE 144
-#endif
-#if (ROCKSDB_WRITEBATCH_SIZE > 144)
-#error "ROCKSDB_WRITEBATCH_SIZE is too big"
-#endif
-
-#include "rocksdb/c.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -312,19 +302,11 @@ struct app_lcore_params_worker {
 	uint32_t rings_in_iters[APP_MAX_IO_LCORES];
 	uint32_t rings_out_count[APP_MAX_NIC_PORTS];
 	uint32_t rings_out_iters[APP_MAX_NIC_PORTS];
-	uint32_t delivered_count;
-	uint32_t write_count;
-	uint32_t read_count;
-	uint64_t last_cycle;
 
 	/* Libpaxos */
 	struct learner *learner;
 	deliver_cb deliver;
-	/* Rocksdb */
-	rocksdb_t *db;
-	rocksdb_writebatch_t* wrbatch;
-	rocksdb_checkpoint_t *cp;
-	rocksdb_flushoptions_t* flops;
+	void*	deliver_arg;
 };
 
 struct app_lcore_params {
@@ -377,11 +359,6 @@ struct app_params {
 
 	/* Paxos configuration */
 	uint8_t num_acceptors;
-
-	/* Rocksdb */
-	rocksdb_options_t *options;
-	rocksdb_writeoptions_t *writeoptions;
-	rocksdb_readoptions_t *readoptions;
 } __rte_cache_aligned;
 
 extern struct app_params app;
@@ -399,7 +376,9 @@ int app_is_socket_used(uint32_t socket);
 uint32_t app_get_lcores_io_rx(void);
 uint32_t app_get_lcores_worker(void);
 void app_print_params(void);
+void submit(char* value, int size);
 void app_set_deliver_callback(deliver_cb);
+void app_set_deliver_arg(void* arg);
 #ifdef __cplusplus
 }  /* end extern "C" */
 #endif

@@ -433,7 +433,7 @@ app_lcore_main_loop_io(void)
 	uint32_t bsz_tx_wr = app.burst_size_io_tx_write;
 
 	uint8_t pos_lb = app.pos_lb;
-	send_initial_requests(lp);
+
 	for ( ; ; ) {
 		if (APP_LCORE_IO_FLUSH && (unlikely(i == APP_LCORE_IO_FLUSH))) {
 			if (likely(lp->rx.n_nic_queues > 0)) {
@@ -542,15 +542,6 @@ app_lcore_worker(
 					(unsigned) lp->worker_id,
 					port,
 					((double) lp->rings_out_count[port]) / ((double) lp->rings_out_iters[port]));
-				uint64_t now = rte_rdtsc();
-				uint64_t duration = now - lp->last_cycle;
-				printf("\t\tWorker %u read %u, write %u, delivers rate %2.f\n",
-					lp->worker_id,
-					lp->read_count,
-					lp->write_count,
-					((double)lp->delivered_count / (double) duration));
-				lp->last_cycle = now;
-				lp->delivered_count = 0;
 				lp->rings_out_iters[port] = 0;
 				lp->rings_out_count[port] = 0;
 			}

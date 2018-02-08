@@ -43,7 +43,6 @@
 #include "main.h"
 #include "learner.h"
 
-const char DBPath[] = "/tmp/";
 
 static void
 app_assign_worker_ids(void)
@@ -79,47 +78,6 @@ app_create_worker_learner(void)
 
 		lp_worker->learner = learner_new(app.num_acceptors);
 		learner_set_instance_id(lp_worker->learner, 1);
-	}
-}
-
-static void
-app_init_rocksdb(void)
-{
-	uint32_t lcore;
-	char *err = NULL;
-	uint64_t mem_budget = 1048576;
-	app.options = rocksdb_options_create();
-	long cpus = sysconf(_SC_NPROCESSORS_ONLN);
-	rocksdb_options_increase_parallelism(app.options, (int)(cpus));
-	rocksdb_options_optimize_level_style_compaction(app.options, mem_budget);
-	// create the DB if it's not already present
-    rocksdb_options_set_create_if_missing(app.options, 1);
-    // Write asynchronously
-    app.writeoptions = rocksdb_writeoptions_create();
-	// Disable WAL (Flush to disk manually)
-	rocksdb_writeoptions_disable_WAL(app.writeoptions, 1);
-    rocksdb_writeoptions_set_sync(app.writeoptions, 0);
-	app.readoptions = rocksdb_readoptions_create();
-
-	/* Create a learner for each worker */
-	for (lcore = 0; lcore < APP_MAX_LCORES; lcore ++) {
-		struct app_lcore_params_worker *lp_worker = &app.lcore_params[lcore].worker;
-
-		if (app.lcore_params[lcore].type != e_APP_LCORE_WORKER) {
-			continue;
-		}
-		char db_name[DB_NAME_LENGTH];
-		snprintf(db_name, DB_NAME_LENGTH, "%s/p4xos-worker-%d", DBPath, lcore);
-		lp_worker->db = rocksdb_open(app.options, db_name, &err);
-		if (err != NULL) {
-		  rte_panic("Cannot open DB: %s\n", err);
-		}
-		lp_worker->wrbatch = rocksdb_writebatch_create();
-		lp_worker->cp = rocksdb_checkpoint_object_create(lp_worker->db, &err);
-		if (err != NULL) {
-		  rte_panic("Cannot create checkpoint object: %s\n", err);
-		}
-		lp_worker->flops = rocksdb_flushoptions_create();
 	}
 }
 
@@ -553,7 +511,6 @@ app_init(void)
 {
 	app_assign_worker_ids();
 	app_create_worker_learner();
-	app_init_rocksdb();
 	app_init_mbuf_pools();
 	app_init_lpm_tables();
 	app_init_rings_rx();
@@ -573,5 +530,18 @@ void app_set_deliver_callback(deliver_cb deliver_callback) {
 		}
 
 		lp_worker->deliver = deliver_callback;
+	}
+}
+
+void app_set_deliver_arg(void* arg) {
+	uint32_t lcore;
+	for (lcore = 0; lcore < APP_MAX_LCORES; lcore ++) {
+		struct app_lcore_params_worker *lp_worker = &app.lcore_params[lcore].worker;
+
+		if (app.lcore_params[lcore].type != e_APP_LCORE_WORKER) {
+			continue;
+		}
+
+		lp_worker->deliver_arg = arg;
 	}
 }
