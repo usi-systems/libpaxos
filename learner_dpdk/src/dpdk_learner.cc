@@ -39,6 +39,46 @@
 #include <rte_lpm.h>
 
 #include "main.h"
+#include "app_hdr.h"
+
+static
+void deliver(unsigned int __rte_unused inst, __rte_unused char* val,
+			__rte_unused size_t size, __rte_unused void* arg) {
+	char *err = NULL;
+	struct app_lcore_params_worker *lp_worker = (struct app_lcore_params_worker *)arg;
+	struct app_hdr *ap = (struct app_hdr *)val;
+	// printf("type: %d, key %s, value %s\n", ap->msg_type, ap->key, ap->value);
+	if (ap->msg_type == WRITE_OP) {
+		uint32_t key_len = rte_be_to_cpu_32(ap->key_len);
+		uint32_t value_len = rte_be_to_cpu_32(ap->value_len);
+
+		rocksdb_writebatch_put(lp_worker->wrbatch, (const char*)ap->key, key_len,
+		(const char*)ap->value, value_len);
+		if (rocksdb_writebatch_count(lp_worker->wrbatch) == ROCKSDB_WRITEBATCH_SIZE) {
+			rocksdb_write(lp_worker->db, app.writeoptions, lp_worker->wrbatch, &err);
+			if (err != NULL) {
+				printf("WriteBatch Error: %s\n", err);
+			}
+			rocksdb_flush(lp_worker->db, lp_worker->flops, &err);
+			if (err != NULL) {
+				printf("Flush to disk Error: %s\n", err);
+			}
+			rocksdb_writebatch_clear(lp_worker->wrbatch);
+		}
+		lp_worker->write_count++;
+	}
+	else if (ap->msg_type == READ_OP) {
+		size_t len;
+		uint32_t key_len = rte_be_to_cpu_32(ap->key_len);
+	    char *returned_value =
+	        rocksdb_get(lp_worker->db, app.readoptions, (const char*)ap->key, key_len, &len, &err);
+		printf("return value %s\n", returned_value);
+	    free(returned_value);
+		lp_worker->read_count++;
+	}
+
+	lp_worker->delivered_count++;
+}
 
 int
 main(int argc, char **argv)
@@ -63,7 +103,7 @@ main(int argc, char **argv)
 	/* Init */
 	app_init();
 	app_print_params();
-
+	app_set_deliver_callback(deliver);
 	/* Launch per-lcore init on every lcore */
 	rte_eal_mp_remote_launch(app_lcore_main_loop, NULL, CALL_MASTER);
 	RTE_LCORE_FOREACH_SLAVE(lcore) {

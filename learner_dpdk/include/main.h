@@ -232,6 +232,8 @@
 extern "C" {
 #endif
 
+typedef void (*deliver_cb)(unsigned int, char* value, size_t size, void* arg);
+
 struct app_mbuf_array {
 	struct rte_mbuf *array[APP_MBUF_ARRAY_SIZE];
 	uint32_t n_mbufs;
@@ -317,6 +319,7 @@ struct app_lcore_params_worker {
 
 	/* Libpaxos */
 	struct learner *learner;
+	deliver_cb deliver;
 	/* Rocksdb */
 	rocksdb_t *db;
 	rocksdb_writebatch_t* wrbatch;
@@ -396,7 +399,7 @@ int app_is_socket_used(uint32_t socket);
 uint32_t app_get_lcores_io_rx(void);
 uint32_t app_get_lcores_worker(void);
 void app_print_params(void);
-
+void app_set_deliver_callback(deliver_cb);
 #ifdef __cplusplus
 }  /* end extern "C" */
 #endif
