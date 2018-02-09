@@ -19,17 +19,14 @@ include_directories (${CMAKE_SOURCE_DIR}/paxos/include)
 include_directories (${CMAKE_SOURCE_DIR}/p4xos/include)
 include_directories (${CMAKE_SOURCE_DIR}/dppaxos/include)
 
-# aux_source_directory (src SRCS)
-set (SRCS src/dpdk_learner.c)
-set (TARGET dpdk_learner)
-
-add_executable (${TARGET} ${SRCS})
-target_link_libraries (${TARGET}
+aux_source_directory (src SRCS)
+foreach(p ${SRCS})
+	get_filename_component(target "${p}" NAME_WE)
+	add_executable(${target} ${p})
+    target_link_libraries(${target}
     p4xos
     ${ROCKSDB_LIBRARIES}
+    ${LIBEVENT_LIBRARIES} # udp_client only
     ${PLATFORM_LDFLAGS})
-set_target_properties (${TARGET} PROPERTIES COMPILE_FLAGS ${CMAKE_CXX_FLAGS})
-
-add_executable (udp_client src/udp_client.c)
-target_link_libraries (udp_client ${LIBEVENT_LIBRARIES})
-set_target_properties (udp_client PROPERTIES COMPILE_FLAGS ${CMAKE_CXX_FLAGS})
+    set_target_properties (${target} PROPERTIES COMPILE_FLAGS ${CMAKE_CXX_FLAGS})
+endforeach(p)

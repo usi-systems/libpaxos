@@ -333,6 +333,8 @@ struct app_lcore_params_worker {
 	deliver_cb deliver;
 	void*	deliver_arg;
 	worker_cb process_pkt;
+	uint64_t nb_delivery;
+	uint64_t latency;
 };
 
 struct app_lcore_params {
@@ -407,6 +409,7 @@ void app_set_deliver_callback(deliver_cb);
 void app_set_deliver_arg(void* arg);
 void app_set_worker_callback(worker_cb);
 void learner_handler(struct rte_mbuf *pkt_in, void *arg);
+void proposer_handler(struct rte_mbuf *pkt_in, void *arg);
 
 #ifdef __cplusplus
 }  /* end extern "C" */

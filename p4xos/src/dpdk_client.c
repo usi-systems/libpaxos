@@ -90,7 +90,7 @@ set_paxos_hdr(struct paxos_hdr *px, uint32_t inst, char* value, int size) {
 	px->acptid = rte_cpu_to_be_16(0);
 	px->value_len = rte_cpu_to_be_32(size);
     rte_memcpy(&px->value, value, size);
-	px->igress_ts = rte_cpu_to_be_64(0);
+	px->igress_ts = rte_cpu_to_be_64(rte_get_timer_cycles());
 	px->egress_ts = rte_cpu_to_be_64(0);
 }
 

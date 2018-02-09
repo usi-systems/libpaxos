@@ -60,11 +60,11 @@ void deliver(unsigned int __rte_unused inst, __rte_unused char* val,
 	char *err = NULL;
 	struct rocksdb_params *rocks = (struct rocksdb_params *)arg;
 	struct app_hdr *ap = (struct app_hdr *)val;
-	printf("type: %d, key %s, value %s\n", ap->msg_type, ap->key, ap->value);
+	// printf("inst %d, type: %d, key %s, value %s\n", inst, ap->msg_type, ap->key, ap->value);
 	if (ap->msg_type == WRITE_OP) {
 		uint32_t key_len = rte_be_to_cpu_32(ap->key_len);
 		uint32_t value_len = rte_be_to_cpu_32(ap->value_len);
-		printf("Key %s, Value %s\n", ap->key, ap->value);
+		// printf("Key %s, Value %s\n", ap->key, ap->value);
 		// // Single PUT
 		rocksdb_put(rocks->db, rocks->writeoptions, (const char*)ap->key, key_len,
 		(const char*)ap->value, value_len, &err);
@@ -90,10 +90,10 @@ void deliver(unsigned int __rte_unused inst, __rte_unused char* val,
 	else if (ap->msg_type == READ_OP) {
 		size_t len;
 		uint32_t key_len = rte_be_to_cpu_32(ap->key_len);
-		printf("Key %s\n", ap->key);
+		// printf("Key %s\n", ap->key);
 	    char *returned_value =
 	        rocksdb_get(rocks->db, rocks->readoptions, (const char*)ap->key, key_len, &len, &err);
-		printf("return value %s\n", returned_value);
+		// printf("return value %s\n", returned_value);
 		rte_memcpy(ap->value, returned_value, len);
 	    free(returned_value);
 		rocks->read_count++;
