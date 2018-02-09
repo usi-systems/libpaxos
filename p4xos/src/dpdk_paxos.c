@@ -59,8 +59,9 @@ swap_udp_ports(struct udp_hdr *udp) {
 
 
 void
-handle_paxos_message(struct app_lcore_params_worker *lp, struct rte_mbuf *pkt_in)
+learner_handler(struct rte_mbuf *pkt_in, void *arg)
 {
+	struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
 	// struct ether_hdr *eth = rte_pktmbuf_mtod_offset(pkt_in, struct ether_hdr *, 0);
 	size_t ip_offset = sizeof(struct ether_hdr);
 	struct ipv4_hdr *ip = rte_pktmbuf_mtod_offset(pkt_in, struct ipv4_hdr *, ip_offset);

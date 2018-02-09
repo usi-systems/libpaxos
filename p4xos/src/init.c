@@ -536,6 +536,19 @@ void app_set_deliver_callback(deliver_cb deliver_callback) {
 	}
 }
 
+void app_set_worker_callback(worker_cb worker_callback) {
+	uint32_t lcore;
+	for (lcore = 0; lcore < APP_MAX_LCORES; lcore ++) {
+		struct app_lcore_params_worker *lp_worker = &app.lcore_params[lcore].worker;
+
+		if (app.lcore_params[lcore].type != e_APP_LCORE_WORKER) {
+			continue;
+		}
+
+		lp_worker->process_pkt = worker_callback;
+	}
+}
+
 void app_set_deliver_arg(void* arg) {
 	uint32_t lcore;
 	for (lcore = 0; lcore < APP_MAX_LCORES; lcore ++) {

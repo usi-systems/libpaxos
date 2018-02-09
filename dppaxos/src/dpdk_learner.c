@@ -22,20 +22,6 @@ const char DBPath[] = "/tmp/";
 struct rocksdb_params rocks;
 
 
-static uint8_t DEFAULT_KEY[] = "ABCDEFGH1234567";
-static uint8_t DEFAULT_VALUE[] = "ABCDEFGH1234567";
-
-static void
-set_app_hdr(struct app_hdr *ap, uint32_t inst) {
-	ap->msg_type = (inst % 2);
-	ap->key_len = rte_cpu_to_be_32(sizeof(DEFAULT_KEY));
-	ap->value_len = rte_cpu_to_be_32(sizeof(DEFAULT_VALUE));
-	rte_memcpy(ap->key, DEFAULT_KEY, sizeof(DEFAULT_KEY));
-	if (ap->msg_type == WRITE_OP) {
-		rte_memcpy(ap->value, DEFAULT_VALUE, sizeof(DEFAULT_VALUE));
-	}
-}
-
 static void
 init_rocksdb(void)
 {
@@ -142,12 +128,7 @@ main(int argc, char **argv)
 	init_rocksdb();
 	app_set_deliver_callback(deliver);
 	app_set_deliver_arg(&rocks);
-	struct app_hdr ap;
-	uint32_t i;
-	for (i = 0; i < ROCKSDB_WRITEBATCH_SIZE; i++) {
-		set_app_hdr(&ap, i);
-		submit((char*)&ap, sizeof(struct app_hdr));
-	}
+	app_set_worker_callback(learner_handler);
 	/* Launch per-lcore init on every lcore */
 	rte_eal_mp_remote_launch(app_lcore_main_loop, NULL, CALL_MASTER);
 	RTE_LCORE_FOREACH_SLAVE(lcore) {

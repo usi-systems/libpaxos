@@ -512,7 +512,7 @@ app_lcore_worker(
 							   sizeof(struct ether_hdr));
 			ipv4_dst = rte_be_to_cpu_32(ipv4_hdr->dst_addr);
 
-			handle_paxos_message(lp, pkt);
+			lp->process_pkt(pkt, lp);
 
 			if (unlikely(rte_lpm_lookup(lp->lpm_table, ipv4_dst, &port) != 0)) {
 				port = pkt->port;

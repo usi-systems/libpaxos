@@ -247,6 +247,7 @@ extern "C" {
 #endif
 
 typedef void (*deliver_cb)(unsigned int, char* value, size_t size, void* arg);
+typedef void (*worker_cb)(struct rte_mbuf *pkt_in, void *arg);
 
 struct app_mbuf_array {
 	struct rte_mbuf *array[APP_MBUF_ARRAY_SIZE];
@@ -331,6 +332,7 @@ struct app_lcore_params_worker {
 	struct learner *learner;
 	deliver_cb deliver;
 	void*	deliver_arg;
+	worker_cb process_pkt;
 };
 
 struct app_lcore_params {
@@ -403,7 +405,8 @@ void app_print_params(void);
 void submit(char* value, int size);
 void app_set_deliver_callback(deliver_cb);
 void app_set_deliver_arg(void* arg);
-void handle_paxos_message(struct app_lcore_params_worker *lp, struct rte_mbuf *pkt_in);
+void app_set_worker_callback(worker_cb);
+void learner_handler(struct rte_mbuf *pkt_in, void *arg);
 
 #ifdef __cplusplus
 }  /* end extern "C" */
