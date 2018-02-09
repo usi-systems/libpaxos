@@ -35,22 +35,55 @@
 #include <rte_tcp.h>
 #include <rte_udp.h>
 #include <rte_lpm.h>
+#include <rte_hexdump.h>
 
 #include "paxos.h"
 #include "learner.h"
 #include "main.h"
 #include "dpp_paxos.h"
 
+static void
+swap_ips(struct ipv4_hdr *ip) {
+	uint32_t tmp = ip->dst_addr;
+	ip->dst_addr = ip->src_addr;
+	ip->src_addr = tmp;
+}
+
+static void
+swap_udp_ports(struct udp_hdr *udp) {
+	uint16_t tmp = udp->dst_port;
+	udp->dst_port = udp->src_port;
+	udp->src_port = tmp;
+	udp->dgram_cksum = 0;
+}
+
+
 void
 handle_paxos_message(struct app_lcore_params_worker *lp, struct rte_mbuf *pkt_in)
 {
 	// struct ether_hdr *eth = rte_pktmbuf_mtod_offset(pkt_in, struct ether_hdr *, 0);
 	size_t ip_offset = sizeof(struct ether_hdr);
-	// struct ipv4_hdr *ip = rte_pktmbuf_mtod_offset(pkt_in, struct ipv4_hdr *, ip_offset);
+	struct ipv4_hdr *ip = rte_pktmbuf_mtod_offset(pkt_in, struct ipv4_hdr *, ip_offset);
+	swap_ips(ip);
+	// rte_hexdump(stdout, "IP", ip, sizeof(struct ipv4_hdr));
 	size_t udp_offset = ip_offset + sizeof(struct ipv4_hdr);
-	// struct udp_hdr *udp = rte_pktmbuf_mtod_offset(pkt_in, struct udp_hdr *, udp_offset);
+	struct udp_hdr *udp = rte_pktmbuf_mtod_offset(pkt_in, struct udp_hdr *, udp_offset);
+	swap_udp_ports(udp);
 	size_t paxos_offset = udp_offset + sizeof(struct udp_hdr);
 	struct paxos_hdr *paxos_hdr = rte_pktmbuf_mtod_offset(pkt_in, struct paxos_hdr *, paxos_offset);
+	// rte_hexdump(stdout, "Paxos", paxos_hdr, sizeof(struct paxos_hdr));
+	size_t data_size = sizeof(struct paxos_hdr);
+	size_t l4_len = sizeof(struct udp_hdr) + data_size;
+	size_t pkt_size = paxos_offset + sizeof(struct paxos_hdr);
+	pkt_in->data_len = pkt_size;
+	pkt_in->pkt_len = pkt_size;
+	udp->dgram_len = rte_cpu_to_be_16(l4_len);
+	pkt_in->l2_len = sizeof(struct ether_hdr);
+	pkt_in->l3_len = sizeof(struct ipv4_hdr);
+	pkt_in->l4_len = l4_len;
+	pkt_in->ol_flags = PKT_TX_IPV4 | PKT_TX_IP_CKSUM | PKT_TX_UDP_CKSUM;
+	udp->dgram_cksum = rte_ipv4_phdr_cksum(ip, pkt_in->ol_flags);
+
 	uint16_t msgtype = rte_be_to_cpu_16(paxos_hdr->msgtype);
 
 	int ret;
@@ -88,6 +121,7 @@ handle_paxos_message(struct app_lcore_params_worker *lp, struct rte_mbuf *pkt_in
 				lp->deliver(out.iid, out.value.paxos_value_val,
 						out.value.paxos_value_len, lp->deliver_arg);
 			}
+			pkt_in->ol_flags = PKT_TX_IPV4 | PKT_TX_IP_CKSUM | PKT_TX_UDP_CKSUM;
 			break;
 		}
 		default:

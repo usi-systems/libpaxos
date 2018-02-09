@@ -17,7 +17,6 @@ struct paxos_hdr {
 	uint64_t egress_ts;
 } __attribute__((__packed__));
 
-void handle_paxos_message(struct app_lcore_params_worker *lp, struct rte_mbuf *pkt_in);
 
 #ifdef __cplusplus
 }  /* end extern "C" */

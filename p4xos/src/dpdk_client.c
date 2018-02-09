@@ -62,9 +62,15 @@ set_ether_hdr(struct ether_hdr *eth, uint16_t ethtype,
 
 static void
 set_ipv4_hdr(struct ipv4_hdr *ip, uint8_t proto, uint32_t src, uint32_t dst) {
+	ip->version_ihl = 0x45;
+	ip->total_length = rte_cpu_to_be_16 (sizeof(struct ipv4_hdr) + sizeof(struct udp_hdr) + sizeof(struct paxos_hdr));
+	ip->packet_id = rte_cpu_to_be_16(rte_rdtsc());
+	ip->fragment_offset = rte_cpu_to_be_16(IPV4_HDR_DF_FLAG);
+	ip->time_to_live = 64;
 	ip->next_proto_id = proto;
-	ip->src_addr = rte_cpu_to_be_32(src);
-	ip->dst_addr = rte_cpu_to_be_32(dst);
+	ip->hdr_checksum = 0;
+	ip->src_addr = src;
+	ip->dst_addr = dst;
 }
 
 static void
@@ -112,10 +118,17 @@ prepare_message(struct rte_mbuf *created_pkt, uint16_t port, uint32_t inst, char
 	size_t paxos_offset = udp_offset + sizeof(struct udp_hdr);
 	struct paxos_hdr *px = rte_pktmbuf_mtod_offset(created_pkt, struct paxos_hdr *, paxos_offset);
 	set_paxos_hdr(px, inst, value, size);
+	size_t data_size = sizeof(struct paxos_hdr);
+	size_t l4_len = sizeof(struct udp_hdr) + data_size;
 	size_t pkt_size = paxos_offset + sizeof(struct paxos_hdr);
-
+	udp->dgram_len = rte_cpu_to_be_16(l4_len);
 	created_pkt->data_len = pkt_size;
 	created_pkt->pkt_len = pkt_size;
+	created_pkt->l2_len = sizeof(struct ether_hdr);
+	created_pkt->l3_len = sizeof(struct ipv4_hdr);
+	created_pkt->l4_len = l4_len;
+	created_pkt->ol_flags = PKT_TX_IPV4 | PKT_TX_IP_CKSUM | PKT_TX_UDP_CKSUM;
+	udp->dgram_cksum = rte_ipv4_phdr_cksum(ip, created_pkt->ol_flags);
 }
 
 void submit(char* value, int size)

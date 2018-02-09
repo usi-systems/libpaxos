@@ -236,7 +236,7 @@
 #endif
 
 #ifndef MAX_APP_MESSAGE_LEN
-#define MAX_APP_MESSAGE_LEN 1024
+#define MAX_APP_MESSAGE_LEN 128
 #endif
 #if (MAX_APP_MESSAGE_LEN >= 1450)
 #error "APP_DEFAULT_NUM_ACCEPTORS is too big"
@@ -403,6 +403,8 @@ void app_print_params(void);
 void submit(char* value, int size);
 void app_set_deliver_callback(deliver_cb);
 void app_set_deliver_arg(void* arg);
+void handle_paxos_message(struct app_lcore_params_worker *lp, struct rte_mbuf *pkt_in);
+
 #ifdef __cplusplus
 }  /* end extern "C" */
 #endif

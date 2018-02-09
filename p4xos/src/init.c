@@ -413,6 +413,9 @@ app_init_nics(void)
 		local_port_conf.rx_adv_conf.rss_conf.rss_key = NULL;
 		local_port_conf.rx_adv_conf.rss_conf.rss_hf = ETH_RSS_IP;
 		local_port_conf.txmode.mq_mode = ETH_MQ_TX_NONE;
+		local_port_conf.txmode.offloads = (DEV_TX_OFFLOAD_IPV4_CKSUM |
+                             DEV_TX_OFFLOAD_UDP_CKSUM |
+                             DEV_TX_OFFLOAD_TCP_CKSUM);
 		n_rx_queues = app_get_nic_rx_queues_per_port(port);
 		n_tx_queues = app.nic_tx_port_mask[port];
 
