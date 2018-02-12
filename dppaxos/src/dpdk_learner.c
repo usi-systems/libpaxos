@@ -102,6 +102,15 @@ void deliver(unsigned int __rte_unused inst, __rte_unused char* val,
 	rocks->delivered_count++;
 }
 
+static void
+stat_cb(__rte_unused struct rte_timer *timer, __rte_unused void *arg)
+{
+	unsigned lcore_id = rte_lcore_id();
+	struct rocksdb_params *rocks = (struct rocksdb_params *)arg;
+	printf("lcore %u Throughput %u\n", lcore_id, rocks->delivered_count);
+	rocks->delivered_count = 0;
+}
+
 int
 main(int argc, char **argv)
 {
@@ -126,9 +135,9 @@ main(int argc, char **argv)
 	app_init();
 	app_print_params();
 	init_rocksdb();
-	app_set_deliver_callback(deliver);
-	app_set_deliver_arg(&rocks);
+	app_set_deliver_callback(deliver, &rocks);
 	app_set_worker_callback(learner_handler);
+	app_set_stat_callback(stat_cb, &rocks);
 	/* Launch per-lcore init on every lcore */
 	rte_eal_mp_remote_launch(app_lcore_main_loop, NULL, CALL_MASTER);
 	RTE_LCORE_FOREACH_SLAVE(lcore) {

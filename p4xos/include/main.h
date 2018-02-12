@@ -28,6 +28,7 @@
 #include <rte_ip.h>
 #include <rte_tcp.h>
 #include <rte_lpm.h>
+#include <rte_timer.h>
 
 /* Logical cores */
 #ifndef APP_MAX_SOCKETS
@@ -242,6 +243,8 @@
 #error "APP_DEFAULT_NUM_ACCEPTORS is too big"
 #endif
 
+#define TIMER_RESOLUTION_CYCLES 20000000ULL /* around 10ms at 2 Ghz */
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -335,6 +338,7 @@ struct app_lcore_params_worker {
 	worker_cb process_pkt;
 	uint64_t nb_delivery;
 	uint64_t latency;
+	struct rte_timer stat_timer;
 };
 
 struct app_lcore_params {
@@ -387,6 +391,8 @@ struct app_params {
 
 	/* Paxos configuration */
 	uint8_t num_acceptors;
+
+	uint64_t hz;
 } __rte_cache_aligned;
 
 extern struct app_params app;
@@ -405,11 +411,12 @@ uint32_t app_get_lcores_io_rx(void);
 uint32_t app_get_lcores_worker(void);
 void app_print_params(void);
 void submit(char* value, int size);
-void app_set_deliver_callback(deliver_cb);
-void app_set_deliver_arg(void* arg);
+void app_set_deliver_callback(deliver_cb, void *arg);
 void app_set_worker_callback(worker_cb);
 void learner_handler(struct rte_mbuf *pkt_in, void *arg);
 void proposer_handler(struct rte_mbuf *pkt_in, void *arg);
+void app_set_stat_callback(rte_timer_cb_t, void *arg);
+
 
 #ifdef __cplusplus
 }  /* end extern "C" */

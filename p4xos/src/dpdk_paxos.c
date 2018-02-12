@@ -90,7 +90,6 @@ proposer_handler(struct rte_mbuf *pkt_in, void *arg)
 	size_t data_size = sizeof(struct paxos_hdr);
 	prepare_hw_checksum(pkt_in, data_size);
 	uint16_t msgtype = rte_be_to_cpu_16(paxos_hdr->msgtype);
-	int ret;
 	switch(msgtype)
 	{
 		case PAXOS_ACCEPTED: {

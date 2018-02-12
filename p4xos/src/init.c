@@ -523,7 +523,7 @@ app_init(void)
 	printf("Initialization completed.\n");
 }
 
-void app_set_deliver_callback(deliver_cb deliver_callback) {
+void app_set_deliver_callback(deliver_cb deliver_callback, void* arg) {
 	uint32_t lcore;
 	for (lcore = 0; lcore < APP_MAX_LCORES; lcore ++) {
 		struct app_lcore_params_worker *lp_worker = &app.lcore_params[lcore].worker;
@@ -533,6 +533,7 @@ void app_set_deliver_callback(deliver_cb deliver_callback) {
 		}
 
 		lp_worker->deliver = deliver_callback;
+		lp_worker->deliver_arg = arg;
 	}
 }
 
@@ -549,8 +550,14 @@ void app_set_worker_callback(worker_cb worker_callback) {
 	}
 }
 
-void app_set_deliver_arg(void* arg) {
+void app_set_stat_callback(rte_timer_cb_t  stat_callback, void* arg) {
 	uint32_t lcore;
+	int ret;
+	/* Stats */
+	rte_timer_subsystem_init();
+	/* fetch default timer frequency. */
+	app.hz = rte_get_timer_hz();
+
 	for (lcore = 0; lcore < APP_MAX_LCORES; lcore ++) {
 		struct app_lcore_params_worker *lp_worker = &app.lcore_params[lcore].worker;
 
@@ -558,6 +565,11 @@ void app_set_deliver_arg(void* arg) {
 			continue;
 		}
 
-		lp_worker->deliver_arg = arg;
+		rte_timer_init(&lp_worker->stat_timer);
+		ret = rte_timer_reset(&lp_worker->stat_timer, app.hz, PERIODICAL, lcore,
+					stat_callback, arg);
+		if (ret < 0) {
+			printf("timer is in the RUNNING state\n");
+		}
 	}
 }

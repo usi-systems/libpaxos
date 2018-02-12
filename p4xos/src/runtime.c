@@ -600,6 +600,7 @@ app_lcore_worker_flush(struct app_lcore_params_worker *lp)
 
 static void
 app_lcore_main_loop_worker(void) {
+	uint64_t prev_tsc = 0, cur_tsc, diff_tsc;
 	uint32_t lcore = rte_lcore_id();
 	struct app_lcore_params_worker *lp = &app.lcore_params[lcore].worker;
 	uint64_t i = 0;
@@ -614,7 +615,12 @@ app_lcore_main_loop_worker(void) {
 		}
 
 		app_lcore_worker(lp, bsz_rd, bsz_wr);
-
+		cur_tsc = rte_get_timer_cycles();
+		diff_tsc = cur_tsc - prev_tsc;
+		if (diff_tsc > TIMER_RESOLUTION_CYCLES) {
+			rte_timer_manage();
+			prev_tsc = cur_tsc;
+		}
 		i ++;
 	}
 }
