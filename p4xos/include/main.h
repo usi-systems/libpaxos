@@ -238,6 +238,7 @@
 
 #define APP_DEFAULT_IP_SRC_ADDR 0xc0a8045f
 #define APP_DEFAULT_IP_DST_ADDR 0xc0a80462
+#define APP_DEFAULT_MESSAGE_TYPE 0x0003
 
 #ifndef MAX_APP_MESSAGE_LEN
 #define MAX_APP_MESSAGE_LEN 128
@@ -257,6 +258,7 @@ typedef void (*worker_cb)(struct rte_mbuf *pkt_in, void *arg);
 
 struct p4xos_configuration {
 	uint8_t num_acceptors;
+	uint16_t msgtype;
 	uint32_t src_addr;
 	uint32_t dst_addr;
 };

@@ -80,7 +80,7 @@ set_udp_hdr(struct udp_hdr *udp, uint16_t src_port, uint16_t dst_port, uint16_t 
 
 static void
 set_paxos_hdr(struct paxos_hdr *px, uint32_t inst, char* value, int size) {
-	px->msgtype = rte_cpu_to_be_16(PAXOS_ACCEPTED);
+	px->msgtype = rte_cpu_to_be_16(app.p4xos_conf.msgtype);
 	px->inst = rte_cpu_to_be_32(inst);
 	px->rnd = rte_cpu_to_be_16(0);
 	px->vrnd = rte_cpu_to_be_16(0);

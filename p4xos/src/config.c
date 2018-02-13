@@ -82,6 +82,7 @@ static const char usage[] =
 "    --pos-lb POS : Position of the 1-byte field within the input packet used by\n"
 "           the I/O RX lcores to identify the worker lcore for the current      \n"
 "           packet (default value is %u)                                        \n"
+"    --msgtype MSGTYPE : Generate this type of p4xos packets                    \n"
 "    --src \"IP\" : source IP address proposers uses to generate packets        \n"
 "    --dst \"IP\" : destination IP address proposers uses to generate packets   \n";
 
@@ -616,6 +617,31 @@ parse_arg_num_ac(const char *arg)
 }
 
 static int
+parse_arg_msgtype(const char *arg)
+{
+	uint32_t x;
+	char *endpt;
+
+	if (strnlen(arg, APP_ARG_NUMERICAL_SIZE_CHARS + 1) == APP_ARG_NUMERICAL_SIZE_CHARS + 1) {
+		return -1;
+	}
+
+	errno = 0;
+	x = strtoul(arg, &endpt, 10);
+	if (errno != 0 || endpt == arg || *endpt != '\0'){
+		return -2;
+	}
+
+	if (x >= 64) {
+		return -3;
+	}
+
+	app.p4xos_conf.msgtype = (uint16_t) x;
+
+	return 0;
+}
+
+static int
 parse_arg_ip_address(const char *arg, uint32_t *addr)
 {
 	if (strnlen(arg, APP_ARG_NUMERICAL_SIZE_CHARS + 1) == APP_ARG_NUMERICAL_SIZE_CHARS + 1) {
@@ -664,6 +690,7 @@ app_parse_args(int argc, char **argv)
 	uint32_t arg_num_ac = 0;
 	uint32_t src_addr = 0;
 	uint32_t dst_addr = 0;
+	uint16_t msgtype = 0;
 
 	argvopt = argv;
 
@@ -739,7 +766,17 @@ app_parse_args(int argc, char **argv)
 				}
 			}
 			break;
+			if (!strcmp(lgopts[option_index].name, "msgtype")) {
+				msgtype = 1;
+				ret = parse_arg_msgtype(optarg);
+				if (ret) {
+					printf("Incorrect value for --msgtype argument (%d)\n", ret);
+					return -1;
+				}
+			}
+			break;
 			if (!strcmp(lgopts[option_index].name, "src")) {
+				src_addr = 1;
 				ret = parse_arg_ip_address(optarg, &src_addr);
 				if (ret) {
 					printf("Incorrect value for --src argument (%d)\n", ret);
@@ -748,6 +785,7 @@ app_parse_args(int argc, char **argv)
 			}
 			break;
 			if (!strcmp(lgopts[option_index].name, "dst")) {
+				dst_addr = 1;
 				ret = parse_arg_ip_address(optarg, &dst_addr);
 				if (ret) {
 					printf("Incorrect value for --dst argument (%d)\n", ret);
@@ -798,6 +836,10 @@ app_parse_args(int argc, char **argv)
 
 	if (dst_addr == 0) {
 		app.p4xos_conf.dst_addr = APP_DEFAULT_IP_DST_ADDR;
+	}
+
+	if (msgtype == 0) {
+		app.p4xos_conf.msgtype = APP_DEFAULT_MESSAGE_TYPE;
 	}
 
 	/* Check cross-consistency of arguments */
