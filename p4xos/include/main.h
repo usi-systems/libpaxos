@@ -236,6 +236,9 @@
 #error "APP_DEFAULT_NUM_ACCEPTORS is too big"
 #endif
 
+#define APP_DEFAULT_IP_SRC_ADDR 0xc0a8045f
+#define APP_DEFAULT_IP_DST_ADDR 0xc0a80462
+
 #ifndef MAX_APP_MESSAGE_LEN
 #define MAX_APP_MESSAGE_LEN 128
 #endif
@@ -251,6 +254,12 @@ extern "C" {
 
 typedef void (*deliver_cb)(unsigned int, char* value, size_t size, void* arg);
 typedef void (*worker_cb)(struct rte_mbuf *pkt_in, void *arg);
+
+struct p4xos_configuration {
+	uint8_t num_acceptors;
+	uint32_t src_addr;
+	uint32_t dst_addr;
+};
 
 struct app_mbuf_array {
 	struct rte_mbuf *array[APP_MBUF_ARRAY_SIZE];
@@ -390,8 +399,7 @@ struct app_params {
 	uint8_t pos_lb;
 
 	/* Paxos configuration */
-	uint8_t num_acceptors;
-
+	struct p4xos_configuration p4xos_conf;
 	uint64_t hz;
 } __rte_cache_aligned;
 

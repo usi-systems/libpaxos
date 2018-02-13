@@ -12,6 +12,7 @@
 #include <stdarg.h>
 #include <errno.h>
 #include <getopt.h>
+#include <arpa/inet.h>
 
 #include <rte_common.h>
 #include <rte_byteorder.h>
@@ -80,7 +81,9 @@ static const char usage[] =
 "           F = I/O TX lcore write burst size to NIC TX (default value is %u)   \n"
 "    --pos-lb POS : Position of the 1-byte field within the input packet used by\n"
 "           the I/O RX lcores to identify the worker lcore for the current      \n"
-"           packet (default value is %u)                                        \n";
+"           packet (default value is %u)                                        \n"
+"    --src \"IP\" : source IP address proposers uses to generate packets        \n"
+"    --dst \"IP\" : destination IP address proposers uses to generate packets   \n";
 
 void
 app_print_usage(void)
@@ -607,8 +610,28 @@ parse_arg_num_ac(const char *arg)
 		return -3;
 	}
 
-	app.num_acceptors = (uint8_t) x;
+	app.p4xos_conf.num_acceptors = (uint8_t) x;
 
+	return 0;
+}
+
+static int
+parse_arg_ip_address(const char *arg, uint32_t *addr)
+{
+	if (strnlen(arg, APP_ARG_NUMERICAL_SIZE_CHARS + 1) == APP_ARG_NUMERICAL_SIZE_CHARS + 1) {
+		return -1;
+	}
+
+	int ret;
+	struct sockaddr_in sa;
+	// store this IP address in sa:
+	ret = inet_pton(AF_INET, arg, &(sa.sin_addr));
+
+	if (ret == 0 || ret < 0) {
+		return -1;
+	}
+
+	*addr = sa.sin_addr.s_addr;
 	return 0;
 }
 
@@ -639,6 +662,8 @@ app_parse_args(int argc, char **argv)
 	uint32_t arg_bsz = 0;
 	uint32_t arg_pos_lb = 0;
 	uint32_t arg_num_ac = 0;
+	uint32_t src_addr = 0;
+	uint32_t dst_addr = 0;
 
 	argvopt = argv;
 
@@ -714,6 +739,22 @@ app_parse_args(int argc, char **argv)
 				}
 			}
 			break;
+			if (!strcmp(lgopts[option_index].name, "src")) {
+				ret = parse_arg_ip_address(optarg, &src_addr);
+				if (ret) {
+					printf("Incorrect value for --src argument (%d)\n", ret);
+					return -1;
+				}
+			}
+			break;
+			if (!strcmp(lgopts[option_index].name, "dst")) {
+				ret = parse_arg_ip_address(optarg, &dst_addr);
+				if (ret) {
+					printf("Incorrect value for --dst argument (%d)\n", ret);
+					return -1;
+				}
+			}
+			break;
 
 		default:
 			return -1;
@@ -748,7 +789,15 @@ app_parse_args(int argc, char **argv)
 	}
 
 	if (arg_num_ac == 0) {
-		app.num_acceptors = APP_DEFAULT_NUM_ACCEPTORS;
+		app.p4xos_conf.num_acceptors = APP_DEFAULT_NUM_ACCEPTORS;
+	}
+
+	if (src_addr == 0) {
+		app.p4xos_conf.src_addr = APP_DEFAULT_IP_SRC_ADDR;
+	}
+
+	if (dst_addr == 0) {
+		app.p4xos_conf.dst_addr = APP_DEFAULT_IP_DST_ADDR;
 	}
 
 	/* Check cross-consistency of arguments */
@@ -1072,5 +1121,5 @@ app_print_params(void)
 	printf("Load balacing position: %u\n", app.pos_lb);
 
 	/* Paxos */
-	printf("Number of acceptors: %u\n", app.num_acceptors);
+	printf("Number of acceptors: %u\n", app.p4xos_conf.num_acceptors);
 }

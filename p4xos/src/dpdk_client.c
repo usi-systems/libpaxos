@@ -40,9 +40,6 @@
 #include "main.h"
 #include "dpp_paxos.h"
 
-static const char *dest_ips[4] = { 	"192.168.4.95", "192.168.4.96",
-									"192.168.4.97", "192.168.4.98" };
-
 static const struct ether_addr mac1_addr = {
 	.addr_bytes= { 0x08, 0x11, 0x11, 0x11, 0x11, 0x08 }
 };
@@ -101,13 +98,7 @@ prepare_message(struct rte_mbuf *created_pkt, uint16_t port, uint32_t inst, char
 	size_t ip_offset = sizeof(struct ether_hdr);
 	struct ipv4_hdr *ip = rte_pktmbuf_mtod_offset(created_pkt, struct ipv4_hdr *, ip_offset);
 
-	struct sockaddr_in sa;
-	struct sockaddr_in da;
-	// store this IP address in sa:
-	inet_pton(AF_INET, "192.168.4.4", &(sa.sin_addr));
-	// store this IP address in da:
-	inet_pton(AF_INET, dest_ips[port % sizeof(dest_ips)], &(da.sin_addr));
-	set_ipv4_hdr(ip, IPPROTO_UDP, sa.sin_addr.s_addr, da.sin_addr.s_addr);
+	set_ipv4_hdr(ip, IPPROTO_UDP, app.p4xos_conf.src_addr, app.p4xos_conf.dst_addr);
 
 	size_t udp_offset = ip_offset + sizeof(struct ipv4_hdr);
 

@@ -76,7 +76,7 @@ app_create_worker_learner(void)
 			continue;
 		}
 
-		lp_worker->learner = learner_new(app.num_acceptors);
+		lp_worker->learner = learner_new(app.p4xos_conf.num_acceptors);
 		learner_set_instance_id(lp_worker->learner, 1);
 	}
 }
