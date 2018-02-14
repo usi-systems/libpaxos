@@ -236,9 +236,12 @@
 #error "APP_DEFAULT_NUM_ACCEPTORS is too big"
 #endif
 
+#define P4XOS_PORT 0x2379
+
 #define APP_DEFAULT_IP_SRC_ADDR 0xc0a8045f
 #define APP_DEFAULT_IP_DST_ADDR 0xc0a80462
 #define APP_DEFAULT_MESSAGE_TYPE 0x0003
+#define APP_DEFAULT_OUTSTANDING	8
 
 #ifndef MAX_APP_MESSAGE_LEN
 #define MAX_APP_MESSAGE_LEN 128
@@ -261,6 +264,7 @@ struct p4xos_configuration {
 	uint16_t msgtype;
 	uint32_t src_addr;
 	uint32_t dst_addr;
+	uint32_t osd;
 };
 
 struct app_mbuf_array {

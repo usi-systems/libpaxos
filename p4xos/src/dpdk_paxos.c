@@ -66,10 +66,11 @@ static void prepare_hw_checksum(struct rte_mbuf *pkt_in, size_t data_size) {
 	// struct ether_hdr *eth = rte_pktmbuf_mtod_offset(pkt_in, struct ether_hdr *, 0);
 	size_t ip_offset = sizeof(struct ether_hdr);
 	struct ipv4_hdr *ip = rte_pktmbuf_mtod_offset(pkt_in, struct ipv4_hdr *, ip_offset);
+	// rte_hexdump(stdout, "IP", ip, sizeof(struct ipv4_hdr));
 	swap_ips(ip);
 	size_t udp_offset = ip_offset + sizeof(struct ipv4_hdr);
 	struct udp_hdr *udp = rte_pktmbuf_mtod_offset(pkt_in, struct udp_hdr *, udp_offset);
-	swap_udp_ports(udp);
+	// swap_udp_ports(udp);
 	udp->dgram_len = rte_cpu_to_be_16(sizeof(struct udp_hdr) + data_size);
 	pkt_in->l2_len = sizeof(struct ether_hdr);
 	pkt_in->l3_len = sizeof(struct ipv4_hdr);
@@ -81,20 +82,45 @@ static void prepare_hw_checksum(struct rte_mbuf *pkt_in, size_t data_size) {
 	udp->dgram_cksum = rte_ipv4_phdr_cksum(ip, pkt_in->ol_flags);
 }
 
+static int filter_packets(struct rte_mbuf *pkt_in) {
+	struct ether_hdr *eth = rte_pktmbuf_mtod_offset(pkt_in, struct ether_hdr *, 0);
+	if (rte_be_to_cpu_16(eth->ether_type) != ETHER_TYPE_IPv4)
+		return -1;
+	size_t ip_offset = sizeof(struct ether_hdr);
+	struct ipv4_hdr *ip = rte_pktmbuf_mtod_offset(pkt_in, struct ipv4_hdr *, ip_offset);
+	if (ip->next_proto_id != IPPROTO_UDP)
+		return -2;
+	size_t udp_offset = ip_offset + sizeof(struct ipv4_hdr);
+	struct udp_hdr *udp = rte_pktmbuf_mtod_offset(pkt_in, struct udp_hdr *, udp_offset);
+	if (rte_be_to_cpu_16(udp->dst_port) != P4XOS_PORT)
+		return -3;
+	// rte_hexdump(stdout, "IP", ip, sizeof(struct ipv4_hdr));
+	return 0;
+}
+
 void
 proposer_handler(struct rte_mbuf *pkt_in, void *arg)
 {
+	int ret = filter_packets(pkt_in);
+	if (ret < 0) {
+		// printf("Drop packets. Code %d\n", ret);
+		rte_pktmbuf_free(pkt_in);
+		return;
+	}
 	struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
 	size_t paxos_offset = get_paxos_offset();
 	struct paxos_hdr *paxos_hdr = rte_pktmbuf_mtod_offset(pkt_in, struct paxos_hdr *, paxos_offset);
+	// rte_hexdump(stdout, "Paxos", paxos_hdr, sizeof(struct paxos_hdr));
 	size_t data_size = sizeof(struct paxos_hdr);
 	prepare_hw_checksum(pkt_in, data_size);
 	uint16_t msgtype = rte_be_to_cpu_16(paxos_hdr->msgtype);
 	switch(msgtype)
 	{
+		case PAXOS_ACCEPT: {
+			// rte_pktmbuf_free(pkt_in);
+			break;
+		}
 		case PAXOS_ACCEPTED: {
-			uint32_t cur_inst = rte_be_to_cpu_32(paxos_hdr->inst);
-			paxos_hdr->inst = rte_cpu_to_be_32(cur_inst + APP_DEFAULT_BURST_SIZE_WORKER_WRITE);
 			uint64_t now = rte_get_timer_cycles();
 			uint64_t latency = now - rte_be_to_cpu_64(paxos_hdr->igress_ts);
 			lp->latency += latency;
@@ -107,6 +133,7 @@ proposer_handler(struct rte_mbuf *pkt_in, void *arg)
 				lp->nb_delivery = 0;
 			}
 			paxos_hdr->igress_ts = rte_cpu_to_be_64(now);
+			paxos_hdr->msgtype = rte_cpu_to_be_16(PAXOS_ACCEPT);
 			break;
 		}
 		default:
@@ -117,13 +144,20 @@ proposer_handler(struct rte_mbuf *pkt_in, void *arg)
 void
 learner_handler(struct rte_mbuf *pkt_in, void *arg)
 {
+	int ret = filter_packets(pkt_in);
+	if (ret < 0) {
+		// printf("Drop packets. Code %d\n", ret);
+		rte_pktmbuf_free(pkt_in);
+		return;
+	}
 	struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
 	size_t paxos_offset = get_paxos_offset();
 	struct paxos_hdr *paxos_hdr = rte_pktmbuf_mtod_offset(pkt_in, struct paxos_hdr *, paxos_offset);
+	// rte_hexdump(stdout, "Paxos", paxos_hdr, sizeof(struct paxos_hdr));
+
 	size_t data_size = sizeof(struct paxos_hdr);
 	prepare_hw_checksum(pkt_in, data_size);
 	uint16_t msgtype = rte_be_to_cpu_16(paxos_hdr->msgtype);
-	int ret;
 	switch(msgtype)
 	{
 		case PAXOS_PROMISE: {
@@ -142,6 +176,10 @@ learner_handler(struct rte_mbuf *pkt_in, void *arg)
 			}
 			break;
 		}
+		case PAXOS_ACCEPT: {
+			// rte_pktmbuf_free(pkt_in);
+		}
+		break;
 		case PAXOS_ACCEPTED: {
 			int vsize = rte_be_to_cpu_32(paxos_hdr->value_len);
 			struct paxos_accepted ack = {

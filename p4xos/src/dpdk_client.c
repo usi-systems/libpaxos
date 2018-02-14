@@ -35,6 +35,7 @@
 #include <rte_tcp.h>
 #include <rte_udp.h>
 #include <rte_lpm.h>
+#include <rte_hexdump.h>
 
 #include "paxos.h"
 #include "main.h"
@@ -66,8 +67,10 @@ set_ipv4_hdr(struct ipv4_hdr *ip, uint8_t proto, uint32_t src, uint32_t dst) {
 	ip->time_to_live = 64;
 	ip->next_proto_id = proto;
 	ip->hdr_checksum = 0;
-	ip->src_addr = src;
-	ip->dst_addr = dst;
+	ip->src_addr = rte_cpu_to_be_32(src);
+	ip->dst_addr = rte_cpu_to_be_32(dst);
+	// rte_hexdump(stdout, "IP", ip, sizeof(struct ipv4_hdr));
+
 }
 
 static void
@@ -76,6 +79,8 @@ set_udp_hdr(struct udp_hdr *udp, uint16_t src_port, uint16_t dst_port, uint16_t 
 	udp->dst_port = rte_cpu_to_be_16(dst_port);
 	udp->dgram_len = rte_cpu_to_be_16(dgram_len);
 	udp->dgram_cksum = 0;
+	// rte_hexdump(stdout, "UDP", udp, sizeof(struct udp_hdr));
+
 }
 
 static void
@@ -104,7 +109,7 @@ prepare_message(struct rte_mbuf *created_pkt, uint16_t port, uint32_t inst, char
 
 	struct udp_hdr *udp = rte_pktmbuf_mtod_offset(created_pkt, struct udp_hdr *, udp_offset);
 	size_t dgram_len = sizeof(struct udp_hdr) + sizeof(struct paxos_hdr);
-	set_udp_hdr(udp, 12345, 54321, dgram_len);
+	set_udp_hdr(udp, 12345, P4XOS_PORT, dgram_len);
 
 	size_t paxos_offset = udp_offset + sizeof(struct udp_hdr);
 	struct paxos_hdr *px = rte_pktmbuf_mtod_offset(created_pkt, struct paxos_hdr *, paxos_offset);

@@ -82,9 +82,13 @@ static const char usage[] =
 "    --pos-lb POS : Position of the 1-byte field within the input packet used by\n"
 "           the I/O RX lcores to identify the worker lcore for the current      \n"
 "           packet (default value is %u)                                        \n"
-"    --msgtype MSGTYPE : Generate this type of p4xos packets                    \n"
+"    --msgtype MSGTYPE : Type of p4xos packets (default value is %u)            \n"
+"    --osd NUM : The number of packets will be sent at beginning (default value \n"
+"                is %u)                                                         \n"
 "    --src \"IP\" : source IP address proposers uses to generate packets        \n"
-"    --dst \"IP\" : destination IP address proposers uses to generate packets   \n";
+"                   (default value is %u)										\n"
+"    --dst \"IP\" : destination IP address proposers uses to generate packets   \n"
+"                   (default value is %u)										\n";
 
 void
 app_print_usage(void)
@@ -100,7 +104,12 @@ app_print_usage(void)
 		APP_DEFAULT_BURST_SIZE_WORKER_WRITE,
 		APP_DEFAULT_BURST_SIZE_IO_TX_READ,
 		APP_DEFAULT_BURST_SIZE_IO_TX_WRITE,
-		APP_DEFAULT_IO_RX_LB_POS
+		APP_DEFAULT_IO_RX_LB_POS,
+		APP_DEFAULT_MESSAGE_TYPE,
+		APP_DEFAULT_OUTSTANDING,
+		APP_DEFAULT_IP_SRC_ADDR,
+		APP_DEFAULT_IP_DST_ADDR
+
 	);
 }
 
@@ -566,8 +575,9 @@ parse_arg_bsz(const char *arg)
 #define APP_ARG_NUMERICAL_SIZE_CHARS 15
 #endif
 
+
 static int
-parse_arg_pos_lb(const char *arg)
+parse_arg_uint8(const char *arg, uint8_t *out_number)
 {
 	uint32_t x;
 	char *endpt;
@@ -582,17 +592,12 @@ parse_arg_pos_lb(const char *arg)
 		return -2;
 	}
 
-	if (x >= 64) {
-		return -3;
-	}
-
-	app.pos_lb = (uint8_t) x;
-
+	*out_number = (uint8_t)x;
 	return 0;
 }
 
 static int
-parse_arg_num_ac(const char *arg)
+parse_arg_uint16(const char *arg, uint16_t *out_number)
 {
 	uint32_t x;
 	char *endpt;
@@ -607,17 +612,12 @@ parse_arg_num_ac(const char *arg)
 		return -2;
 	}
 
-	if (x >= 64) {
-		return -3;
-	}
-
-	app.p4xos_conf.num_acceptors = (uint8_t) x;
-
+	*out_number = (uint16_t)x;
 	return 0;
 }
 
 static int
-parse_arg_msgtype(const char *arg)
+parse_arg_uint32(const char *arg, uint32_t *out_number)
 {
 	uint32_t x;
 	char *endpt;
@@ -632,14 +632,10 @@ parse_arg_msgtype(const char *arg)
 		return -2;
 	}
 
-	if (x >= 64) {
-		return -3;
-	}
-
-	app.p4xos_conf.msgtype = (uint16_t) x;
-
+	*out_number = (uint32_t)x;
 	return 0;
 }
+
 
 static int
 parse_arg_ip_address(const char *arg, uint32_t *addr)
@@ -678,6 +674,10 @@ app_parse_args(int argc, char **argv)
 		{"bsz", 1, 0, 0},
 		{"pos-lb", 1, 0, 0},
 		{"num-ac", 1, 0, 0},
+		{"msgtype", 1, 0, 0},
+		{"osd", 1, 0, 0},
+		{"src", 1, 0, 0},
+		{"dst", 1, 0, 0},
 		{NULL, 0, 0, 0}
 	};
 	uint32_t arg_w = 0;
@@ -691,6 +691,7 @@ app_parse_args(int argc, char **argv)
 	uint32_t src_addr = 0;
 	uint32_t dst_addr = 0;
 	uint16_t msgtype = 0;
+	uint16_t osd = 0;
 
 	argvopt = argv;
 
@@ -750,31 +751,36 @@ app_parse_args(int argc, char **argv)
 			}
 			if (!strcmp(lgopts[option_index].name, "pos-lb")) {
 				arg_pos_lb = 1;
-				ret = parse_arg_pos_lb(optarg);
+				ret = parse_arg_uint8(optarg, &app.pos_lb);
 				if (ret) {
 					printf("Incorrect value for --pos-lb argument (%d)\n", ret);
 					return -1;
 				}
 			}
-			break;
 			if (!strcmp(lgopts[option_index].name, "num-ac")) {
 				arg_num_ac = 1;
-				ret = parse_arg_num_ac(optarg);
+				ret = parse_arg_uint8(optarg, &(app.p4xos_conf.num_acceptors));
 				if (ret) {
 					printf("Incorrect value for --num-ac argument (%d)\n", ret);
 					return -1;
 				}
 			}
-			break;
 			if (!strcmp(lgopts[option_index].name, "msgtype")) {
 				msgtype = 1;
-				ret = parse_arg_msgtype(optarg);
+				ret = parse_arg_uint16(optarg, &(app.p4xos_conf.msgtype));
 				if (ret) {
 					printf("Incorrect value for --msgtype argument (%d)\n", ret);
 					return -1;
 				}
 			}
-			break;
+			if (!strcmp(lgopts[option_index].name, "osd")) {
+				osd = 1;
+				ret = parse_arg_uint32(optarg, &(app.p4xos_conf.osd));
+				if (ret) {
+					printf("Incorrect value for --osd argument (%d)\n", ret);
+					return -1;
+				}
+			}
 			if (!strcmp(lgopts[option_index].name, "src")) {
 				src_addr = 1;
 				ret = parse_arg_ip_address(optarg, &src_addr);
@@ -783,7 +789,6 @@ app_parse_args(int argc, char **argv)
 					return -1;
 				}
 			}
-			break;
 			if (!strcmp(lgopts[option_index].name, "dst")) {
 				dst_addr = 1;
 				ret = parse_arg_ip_address(optarg, &dst_addr);
@@ -840,6 +845,10 @@ app_parse_args(int argc, char **argv)
 
 	if (msgtype == 0) {
 		app.p4xos_conf.msgtype = APP_DEFAULT_MESSAGE_TYPE;
+	}
+
+	if (osd == 0) {
+		app.p4xos_conf.osd = APP_DEFAULT_OUTSTANDING;
 	}
 
 	/* Check cross-consistency of arguments */
@@ -1163,5 +1172,12 @@ app_print_params(void)
 	printf("Load balacing position: %u\n", app.pos_lb);
 
 	/* Paxos */
-	printf("Number of acceptors: %u\n", app.p4xos_conf.num_acceptors);
+	printf(
+			"Number of acceptors: %u\n"
+			"Message type: %u\n"
+			"Outstanding packets: %u\n",
+			app.p4xos_conf.num_acceptors,
+			app.p4xos_conf.msgtype,
+			app.p4xos_conf.osd
+		);
 }
