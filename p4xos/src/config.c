@@ -83,6 +83,7 @@ static const char usage[] =
 "           the I/O RX lcores to identify the worker lcore for the current      \n"
 "           packet (default value is %u)                                        \n"
 "    --msgtype MSGTYPE : Type of p4xos packets (default value is %u)            \n"
+"    --multi-dbs : Enabling multiple instance of DBs (default value is %u)      \n"
 "    --osd NUM : The number of packets will be sent at beginning (default value \n"
 "                is %u)                                                         \n"
 "    --src \"IP\" : source IP address proposers uses to generate packets        \n"
@@ -106,6 +107,7 @@ app_print_usage(void)
 		APP_DEFAULT_BURST_SIZE_IO_TX_WRITE,
 		APP_DEFAULT_IO_RX_LB_POS,
 		APP_DEFAULT_MESSAGE_TYPE,
+		APP_DEFAULT_MULTIPLE_DBS,
 		APP_DEFAULT_OUTSTANDING,
 		APP_DEFAULT_IP_SRC_ADDR,
 		APP_DEFAULT_IP_DST_ADDR
@@ -675,6 +677,7 @@ app_parse_args(int argc, char **argv)
 		{"pos-lb", 1, 0, 0},
 		{"num-ac", 1, 0, 0},
 		{"msgtype", 1, 0, 0},
+		{"multi-dbs", 0, 0, 0},
 		{"osd", 1, 0, 0},
 		{"src", 1, 0, 0},
 		{"dst", 1, 0, 0},
@@ -772,6 +775,9 @@ app_parse_args(int argc, char **argv)
 					printf("Incorrect value for --msgtype argument (%d)\n", ret);
 					return -1;
 				}
+			}
+			if (!strcmp(lgopts[option_index].name, "multi-dbs")) {
+				app.p4xos_conf.multi_dbs = 1;
 			}
 			if (!strcmp(lgopts[option_index].name, "osd")) {
 				osd = 1;
@@ -1175,9 +1181,11 @@ app_print_params(void)
 	printf(
 			"Number of acceptors: %u\n"
 			"Message type: %u\n"
+			"Multiple DBs: %u\n"
 			"Outstanding packets: %u\n",
 			app.p4xos_conf.num_acceptors,
 			app.p4xos_conf.msgtype,
+			app.p4xos_conf.multi_dbs,
 			app.p4xos_conf.osd
 		);
 }

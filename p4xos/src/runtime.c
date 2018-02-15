@@ -49,9 +49,9 @@
 #define APP_LCORE_WORKER_FLUSH       1000000
 #endif
 
-#ifndef APP_STATS
-#define APP_STATS                    1000000
-#endif
+// #ifndef APP_STATS
+// #define APP_STATS                    1000000
+// #endif
 
 #define APP_IO_RX_DROP_ALL_PACKETS   0
 #define APP_WORKER_DROP_ALL_PACKETS  0

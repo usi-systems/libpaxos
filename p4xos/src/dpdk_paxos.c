@@ -121,6 +121,10 @@ proposer_handler(struct rte_mbuf *pkt_in, void *arg)
 			break;
 		}
 		case PAXOS_ACCEPTED: {
+			//////////////////// Uncomment to increase inst///////////////////
+			uint32_t cur_inst = rte_be_to_cpu_32(paxos_hdr->inst);
+			paxos_hdr->inst = rte_cpu_to_be_32(cur_inst + app.p4xos_conf.osd);
+			//////////////////////////////////////////////////////////////////
 			uint64_t now = rte_get_timer_cycles();
 			uint64_t latency = now - rte_be_to_cpu_64(paxos_hdr->igress_ts);
 			lp->latency += latency;
@@ -133,7 +137,8 @@ proposer_handler(struct rte_mbuf *pkt_in, void *arg)
 				lp->nb_delivery = 0;
 			}
 			paxos_hdr->igress_ts = rte_cpu_to_be_64(now);
-			paxos_hdr->msgtype = rte_cpu_to_be_16(PAXOS_ACCEPT);
+			paxos_hdr->msgtype = rte_cpu_to_be_16(PAXOS_ACCEPTED);
+			// paxos_hdr->msgtype = rte_cpu_to_be_16(PAXOS_ACCEPT);
 			break;
 		}
 		default:
@@ -154,7 +159,6 @@ learner_handler(struct rte_mbuf *pkt_in, void *arg)
 	size_t paxos_offset = get_paxos_offset();
 	struct paxos_hdr *paxos_hdr = rte_pktmbuf_mtod_offset(pkt_in, struct paxos_hdr *, paxos_offset);
 	// rte_hexdump(stdout, "Paxos", paxos_hdr, sizeof(struct paxos_hdr));
-
 	size_t data_size = sizeof(struct paxos_hdr);
 	prepare_hw_checksum(pkt_in, data_size);
 	uint16_t msgtype = rte_be_to_cpu_16(paxos_hdr->msgtype);
@@ -193,7 +197,7 @@ learner_handler(struct rte_mbuf *pkt_in, void *arg)
 			learner_receive_accepted(lp->learner, &ack);
 			paxos_accepted out;
 			if (learner_deliver_next(lp->learner, &out)) {
-				lp->deliver(out.iid, out.value.paxos_value_val,
+				lp->deliver(lp->worker_id, out.iid, out.value.paxos_value_val,
 						out.value.paxos_value_len, lp->deliver_arg);
 			}
 			break;

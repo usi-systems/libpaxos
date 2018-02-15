@@ -46,17 +46,19 @@ struct app_hdr {
 
 struct rocksdb_params {
     /* Rocksdb */
-	rocksdb_t *db;
+	rocksdb_t *db[MAX_WORKER_CORE];
     rocksdb_options_t *options;
     rocksdb_writeoptions_t *writeoptions;
     rocksdb_readoptions_t *readoptions;
-	rocksdb_writebatch_t* wrbatch;
-	rocksdb_checkpoint_t *cp;
+	rocksdb_writebatch_t* wrbatch[MAX_WORKER_CORE];
+	rocksdb_checkpoint_t *cp[MAX_WORKER_CORE];
 	rocksdb_flushoptions_t* flops;
-    uint32_t delivered_count;
-    uint32_t write_count;
-    uint32_t read_count;
-    uint64_t last_cycle;
+    uint32_t delivered_count[MAX_WORKER_CORE];
+    uint32_t write_count[MAX_WORKER_CORE];
+    uint32_t read_count[MAX_WORKER_CORE];
+    uint64_t last_cycle[MAX_WORKER_CORE];
+    uint32_t num_workers;
+    uint8_t reported;
 };
 
 #ifdef __cplusplus

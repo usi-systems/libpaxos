@@ -241,6 +241,7 @@
 #define APP_DEFAULT_IP_SRC_ADDR 0xc0a8045f
 #define APP_DEFAULT_IP_DST_ADDR 0xc0a80462
 #define APP_DEFAULT_MESSAGE_TYPE 0x0003
+#define APP_DEFAULT_MULTIPLE_DBS 0
 #define APP_DEFAULT_OUTSTANDING	8
 
 #ifndef MAX_APP_MESSAGE_LEN
@@ -256,11 +257,12 @@
 extern "C" {
 #endif
 
-typedef void (*deliver_cb)(unsigned int, char* value, size_t size, void* arg);
+typedef void (*deliver_cb)(unsigned int, unsigned int, char* value, size_t size, void* arg);
 typedef void (*worker_cb)(struct rte_mbuf *pkt_in, void *arg);
 
 struct p4xos_configuration {
 	uint8_t num_acceptors;
+	uint8_t multi_dbs;
 	uint16_t msgtype;
 	uint32_t src_addr;
 	uint32_t dst_addr;
