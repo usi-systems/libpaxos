@@ -39,6 +39,7 @@
 
 #include "paxos.h"
 #include "learner.h"
+#include "acceptor.h"
 #include "main.h"
 #include "dpp_paxos.h"
 
@@ -137,14 +138,67 @@ proposer_handler(struct rte_mbuf *pkt_in, void *arg)
 				lp->nb_delivery = 0;
 			}
 			paxos_hdr->igress_ts = rte_cpu_to_be_64(now);
-			paxos_hdr->msgtype = rte_cpu_to_be_16(PAXOS_ACCEPTED);
-			// paxos_hdr->msgtype = rte_cpu_to_be_16(PAXOS_ACCEPT);
+			// paxos_hdr->msgtype = rte_cpu_to_be_16(PAXOS_ACCEPTED);
+			paxos_hdr->msgtype = rte_cpu_to_be_16(PAXOS_ACCEPT);
 			break;
 		}
 		default:
 			printf("No handler for %u\n", msgtype);
 	}
 }
+
+void
+acceptor_handler(struct rte_mbuf *pkt_in, void *arg)
+{
+	int ret = filter_packets(pkt_in);
+	if (ret < 0) {
+		// printf("Drop packets. Code %d\n", ret);
+		rte_pktmbuf_free(pkt_in);
+		return;
+	}
+	struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
+	size_t paxos_offset = get_paxos_offset();
+	struct paxos_hdr *paxos_hdr = rte_pktmbuf_mtod_offset(pkt_in, struct paxos_hdr *, paxos_offset);
+	// rte_hexdump(stdout, "Paxos", paxos_hdr, sizeof(struct paxos_hdr));
+	size_t data_size = sizeof(struct paxos_hdr);
+	prepare_hw_checksum(pkt_in, data_size);
+	uint16_t msgtype = rte_be_to_cpu_16(paxos_hdr->msgtype);
+	switch(msgtype)
+	{
+		case PAXOS_PREPARE: {
+			struct paxos_prepare prepare = {
+				.iid = rte_be_to_cpu_32(paxos_hdr->inst),
+				.ballot = rte_be_to_cpu_16(paxos_hdr->rnd),
+			};
+			paxos_message out;
+			if (acceptor_receive_prepare(lp->acceptor, &prepare, &out) != 0) {
+				paxos_hdr->msgtype = rte_cpu_to_be_16(out.type);
+				paxos_hdr->acptid = rte_cpu_to_be_16(app.p4xos_conf.acceptor_id);
+			}
+			break;
+		}
+		case PAXOS_ACCEPT: {
+			int vsize = rte_be_to_cpu_32(paxos_hdr->value_len);
+			struct paxos_accept accept = {
+				.iid = rte_be_to_cpu_32(paxos_hdr->inst),
+				.ballot = rte_be_to_cpu_16(paxos_hdr->rnd),
+				.value_ballot = rte_be_to_cpu_16(paxos_hdr->vrnd),
+				.aid = rte_be_to_cpu_16(paxos_hdr->acptid),
+				.value = {vsize, (char*)&paxos_hdr->value}
+			};
+			paxos_message out;
+			if (acceptor_receive_accept(lp->acceptor, &accept, &out) != 0) {
+				paxos_hdr->msgtype = rte_cpu_to_be_16(out.type);
+				paxos_hdr->acptid = rte_cpu_to_be_16(app.p4xos_conf.acceptor_id);
+			}
+			break;
+		}
+		default:
+			// printf("No handler for %u\n", msgtype);
+			break;
+	}
+}
+
 
 void
 learner_handler(struct rte_mbuf *pkt_in, void *arg)

@@ -42,6 +42,7 @@
 
 #include "main.h"
 #include "learner.h"
+#include "acceptor.h"
 
 
 static void
@@ -63,8 +64,23 @@ app_assign_worker_ids(void)
 	}
 }
 
-static void
-app_create_worker_learner(void)
+void
+app_init_acceptor(void)
+{
+	uint32_t lcore;
+
+	for (lcore = 0; lcore < APP_MAX_LCORES; lcore ++) {
+		struct app_lcore_params_worker *lp_worker = &app.lcore_params[lcore].worker;
+
+		if (app.lcore_params[lcore].type != e_APP_LCORE_WORKER) {
+			continue;
+		}
+		lp_worker->acceptor = acceptor_new(app.p4xos_conf.acceptor_id);;
+	}
+}
+
+void
+app_init_learner(void)
 {
 	uint32_t lcore;
 
@@ -513,7 +529,6 @@ void
 app_init(void)
 {
 	app_assign_worker_ids();
-	app_create_worker_learner();
 	app_init_mbuf_pools();
 	app_init_lpm_tables();
 	app_init_rings_rx();

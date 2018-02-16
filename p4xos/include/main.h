@@ -242,6 +242,7 @@
 #define APP_DEFAULT_IP_DST_ADDR 0xc0a80462
 #define APP_DEFAULT_MESSAGE_TYPE 0x0003
 #define APP_DEFAULT_MULTIPLE_DBS 0
+#define APP_DEFAULT_ACCEPTOR_ID 0
 #define APP_DEFAULT_OUTSTANDING	8
 
 #ifndef MAX_APP_MESSAGE_LEN
@@ -264,6 +265,7 @@ struct p4xos_configuration {
 	uint8_t num_acceptors;
 	uint8_t multi_dbs;
 	uint16_t msgtype;
+	uint16_t acceptor_id;
 	uint32_t src_addr;
 	uint32_t dst_addr;
 	uint32_t osd;
@@ -350,6 +352,7 @@ struct app_lcore_params_worker {
 
 	/* Libpaxos */
 	struct learner *learner;
+	struct acceptor *acceptor;
 	deliver_cb deliver;
 	void*	deliver_arg;
 	worker_cb process_pkt;
@@ -431,8 +434,10 @@ void app_set_deliver_callback(deliver_cb, void *arg);
 void app_set_worker_callback(worker_cb);
 void learner_handler(struct rte_mbuf *pkt_in, void *arg);
 void proposer_handler(struct rte_mbuf *pkt_in, void *arg);
+void acceptor_handler(struct rte_mbuf *pkt_in, void *arg);
 void app_set_stat_callback(rte_timer_cb_t, void *arg);
-
+void app_init_learner(void);
+void app_init_acceptor(void);
 
 #ifdef __cplusplus
 }  /* end extern "C" */

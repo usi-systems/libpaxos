@@ -84,6 +84,7 @@ static const char usage[] =
 "           packet (default value is %u)                                        \n"
 "    --msgtype MSGTYPE : Type of p4xos packets (default value is %u)            \n"
 "    --multi-dbs : Enabling multiple instance of DBs (default value is %u)      \n"
+"    --acceptor-id : Acceptor ID (default value is %u)                          \n"
 "    --osd NUM : The number of packets will be sent at beginning (default value \n"
 "                is %u)                                                         \n"
 "    --src \"IP\" : source IP address proposers uses to generate packets        \n"
@@ -108,6 +109,7 @@ app_print_usage(void)
 		APP_DEFAULT_IO_RX_LB_POS,
 		APP_DEFAULT_MESSAGE_TYPE,
 		APP_DEFAULT_MULTIPLE_DBS,
+		APP_DEFAULT_ACCEPTOR_ID,
 		APP_DEFAULT_OUTSTANDING,
 		APP_DEFAULT_IP_SRC_ADDR,
 		APP_DEFAULT_IP_DST_ADDR
@@ -695,6 +697,7 @@ app_parse_args(int argc, char **argv)
 	uint32_t dst_addr = 0;
 	uint16_t msgtype = 0;
 	uint16_t osd = 0;
+	uint16_t acceptor_id = 0;
 
 	argvopt = argv;
 
@@ -773,6 +776,14 @@ app_parse_args(int argc, char **argv)
 				ret = parse_arg_uint16(optarg, &(app.p4xos_conf.msgtype));
 				if (ret) {
 					printf("Incorrect value for --msgtype argument (%d)\n", ret);
+					return -1;
+				}
+			}
+			if (!strcmp(lgopts[option_index].name, "acceptor-id")) {
+				acceptor_id = 1;
+				ret = parse_arg_uint16(optarg, &(app.p4xos_conf.acceptor_id));
+				if (ret) {
+					printf("Incorrect value for --acceptor-id argument (%d)\n", ret);
 					return -1;
 				}
 			}
@@ -855,6 +866,10 @@ app_parse_args(int argc, char **argv)
 
 	if (osd == 0) {
 		app.p4xos_conf.osd = APP_DEFAULT_OUTSTANDING;
+	}
+
+	if (acceptor_id == 0) {
+		app.p4xos_conf.acceptor_id = APP_DEFAULT_ACCEPTOR_ID;
 	}
 
 	/* Check cross-consistency of arguments */
@@ -1181,10 +1196,12 @@ app_print_params(void)
 	printf(
 			"Number of acceptors: %u\n"
 			"Message type: %u\n"
+			"Acceptor ID: %u\n"
 			"Multiple DBs: %u\n"
 			"Outstanding packets: %u\n",
 			app.p4xos_conf.num_acceptors,
 			app.p4xos_conf.msgtype,
+			app.p4xos_conf.acceptor_id,
 			app.p4xos_conf.multi_dbs,
 			app.p4xos_conf.osd
 		);

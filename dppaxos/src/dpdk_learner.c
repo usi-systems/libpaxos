@@ -154,6 +154,7 @@ main(int argc, char **argv)
 
 	/* Init */
 	app_init();
+	app_init_learner();
 	app_print_params();
 	init_rocksdb();
 	app_set_deliver_callback(deliver, &rocks);
