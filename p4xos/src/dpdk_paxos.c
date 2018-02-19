@@ -99,6 +99,8 @@ static int filter_packets(struct rte_mbuf *pkt_in) {
 	return 0;
 }
 
+#define PAXOS_FINISHED 0xAA
+
 void
 proposer_handler(struct rte_mbuf *pkt_in, void *arg)
 {
@@ -124,7 +126,14 @@ proposer_handler(struct rte_mbuf *pkt_in, void *arg)
 		case PAXOS_ACCEPTED: {
 			//////////////////// Uncomment to increase inst///////////////////
 			uint32_t cur_inst = rte_be_to_cpu_32(paxos_hdr->inst);
-			paxos_hdr->inst = rte_cpu_to_be_32(cur_inst + app.p4xos_conf.osd);
+			printf("PORT %u: Accepted instance %u\n", pkt_in->port, cur_inst);
+			//////////////////////////////////////////////////////////////////
+		}
+		case PAXOS_FINISHED: {
+			//////////////////// Uncomment to increase inst///////////////////
+			uint32_t cur_inst = rte_be_to_cpu_32(paxos_hdr->inst);
+			// printf("Delivered instance %u\n", cur_inst);
+			paxos_hdr->inst = rte_cpu_to_be_32(cur_inst + app.p4xos_conf.osd - 1);
 			//////////////////////////////////////////////////////////////////
 			uint64_t now = rte_get_timer_cycles();
 			uint64_t latency = now - rte_be_to_cpu_64(paxos_hdr->igress_ts);
@@ -190,7 +199,9 @@ acceptor_handler(struct rte_mbuf *pkt_in, void *arg)
 			if (acceptor_receive_accept(lp->acceptor, &accept, &out) != 0) {
 				paxos_hdr->msgtype = rte_cpu_to_be_16(out.type);
 				paxos_hdr->acptid = rte_cpu_to_be_16(app.p4xos_conf.acceptor_id);
+				// printf("Accepted instance %u\n", rte_be_to_cpu_32(paxos_hdr->inst));
 			}
+			// printf("Return type %d\n", out.type);
 			break;
 		}
 		default:
@@ -253,6 +264,8 @@ learner_handler(struct rte_mbuf *pkt_in, void *arg)
 			if (learner_deliver_next(lp->learner, &out)) {
 				lp->deliver(lp->worker_id, out.iid, out.value.paxos_value_val,
 						out.value.paxos_value_len, lp->deliver_arg);
+				//printf("Finished instance %u\n", rte_be_to_cpu_32(paxos_hdr->inst));
+				paxos_hdr->msgtype = rte_cpu_to_be_16(PAXOS_FINISHED);
 			}
 			break;
 		}

@@ -93,7 +93,7 @@ app_init_learner(void)
 		}
 
 		lp_worker->learner = learner_new(app.p4xos_conf.num_acceptors);
-		learner_set_instance_id(lp_worker->learner, 1);
+		learner_set_instance_id(lp_worker->learner, 0);
 	}
 }
 

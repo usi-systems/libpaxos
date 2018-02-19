@@ -68,7 +68,7 @@ main(int argc, char **argv)
 	app_set_worker_callback(proposer_handler);
 	struct app_hdr ap;
 	uint32_t i;
-	for (i = 0; i < app.p4xos_conf.osd; i++) {
+	for (i = 1; i <= app.p4xos_conf.osd; i++) {
 		set_app_hdr(&ap, i);
 		submit((char*)&ap, sizeof(struct app_hdr));
 	}
