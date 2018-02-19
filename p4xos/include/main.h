@@ -242,6 +242,7 @@
 #define APP_DEFAULT_IP_DST_ADDR 0xc0a80462
 #define APP_DEFAULT_MESSAGE_TYPE 0x0003
 #define APP_DEFAULT_MULTIPLE_DBS 0
+#define APP_DEFAULT_TX_PORT 0
 #define APP_DEFAULT_ACCEPTOR_ID 0
 #define APP_DEFAULT_OUTSTANDING	8
 
@@ -265,6 +266,7 @@ struct p4xos_configuration {
 	uint8_t num_acceptors;
 	uint8_t multi_dbs;
 	uint16_t msgtype;
+	uint16_t tx_port;
 	uint16_t acceptor_id;
 	uint32_t src_addr;
 	uint32_t dst_addr;

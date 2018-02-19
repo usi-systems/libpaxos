@@ -130,7 +130,7 @@ prepare_message(struct rte_mbuf *created_pkt, uint16_t port, uint32_t inst, char
 void submit(char* value, int size)
 {
     uint32_t lcore;
-    uint16_t port = 0;
+    uint16_t port = app.p4xos_conf.tx_port;
     app_get_lcore_for_nic_tx(port, &lcore);
     struct app_lcore_params_io *lp = &app.lcore_params[lcore].io;
 	uint32_t mbuf_idx = lp->tx.mbuf_out[port].n_mbufs;

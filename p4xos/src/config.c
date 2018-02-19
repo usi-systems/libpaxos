@@ -84,6 +84,7 @@ static const char usage[] =
 "           packet (default value is %u)                                        \n"
 "    --msgtype MSGTYPE : Type of p4xos packets (default value is %u)            \n"
 "    --multi-dbs : Enabling multiple instance of DBs (default value is %u)      \n"
+"    --port [PORT]: TX port Proposers use initially (default value is %u)       \n"
 "    --acceptor-id : Acceptor ID (default value is %u)                          \n"
 "    --osd NUM : The number of packets will be sent at beginning (default value \n"
 "                is %u)                                                         \n"
@@ -109,6 +110,7 @@ app_print_usage(void)
 		APP_DEFAULT_IO_RX_LB_POS,
 		APP_DEFAULT_MESSAGE_TYPE,
 		APP_DEFAULT_MULTIPLE_DBS,
+		APP_DEFAULT_TX_PORT,
 		APP_DEFAULT_ACCEPTOR_ID,
 		APP_DEFAULT_OUTSTANDING,
 		APP_DEFAULT_IP_SRC_ADDR,
@@ -679,6 +681,7 @@ app_parse_args(int argc, char **argv)
 		{"pos-lb", 1, 0, 0},
 		{"num-ac", 1, 0, 0},
 		{"msgtype", 1, 0, 0},
+		{"port", 1, 0, 0},
 		{"multi-dbs", 0, 0, 0},
 		{"osd", 1, 0, 0},
 		{"src", 1, 0, 0},
@@ -696,6 +699,7 @@ app_parse_args(int argc, char **argv)
 	uint32_t src_addr = 0;
 	uint32_t dst_addr = 0;
 	uint16_t msgtype = 0;
+	uint16_t tx_port = 0;
 	uint16_t osd = 0;
 	uint16_t acceptor_id = 0;
 
@@ -787,6 +791,14 @@ app_parse_args(int argc, char **argv)
 					return -1;
 				}
 			}
+			if (!strcmp(lgopts[option_index].name, "port")) {
+				tx_port = 1;
+				ret = parse_arg_uint16(optarg, &(app.p4xos_conf.tx_port));
+				if (ret) {
+					printf("Incorrect value for --port argument (%d)\n", ret);
+					return -1;
+				}
+			}
 			if (!strcmp(lgopts[option_index].name, "multi-dbs")) {
 				app.p4xos_conf.multi_dbs = 1;
 			}
@@ -870,6 +882,10 @@ app_parse_args(int argc, char **argv)
 
 	if (acceptor_id == 0) {
 		app.p4xos_conf.acceptor_id = APP_DEFAULT_ACCEPTOR_ID;
+	}
+
+	if (tx_port == 0) {
+		app.p4xos_conf.tx_port = APP_DEFAULT_TX_PORT;
 	}
 
 	/* Check cross-consistency of arguments */
@@ -1198,11 +1214,13 @@ app_print_params(void)
 			"Message type: %u\n"
 			"Acceptor ID: %u\n"
 			"Multiple DBs: %u\n"
+			"Proposer TX port: %u\n"
 			"Outstanding packets: %u\n",
 			app.p4xos_conf.num_acceptors,
 			app.p4xos_conf.msgtype,
 			app.p4xos_conf.acceptor_id,
 			app.p4xos_conf.multi_dbs,
+			app.p4xos_conf.tx_port,
 			app.p4xos_conf.osd
 		);
 }
