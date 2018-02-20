@@ -68,7 +68,7 @@ static void prepare_hw_checksum(struct rte_mbuf *pkt_in, size_t data_size) {
 	size_t ip_offset = sizeof(struct ether_hdr);
 	struct ipv4_hdr *ip = rte_pktmbuf_mtod_offset(pkt_in, struct ipv4_hdr *, ip_offset);
 	// rte_hexdump(stdout, "IP", ip, sizeof(struct ipv4_hdr));
-	swap_ips(ip);
+	// swap_ips(ip);
 	size_t udp_offset = ip_offset + sizeof(struct ipv4_hdr);
 	struct udp_hdr *udp = rte_pktmbuf_mtod_offset(pkt_in, struct udp_hdr *, udp_offset);
 	// swap_udp_ports(udp);
@@ -126,13 +126,13 @@ proposer_handler(struct rte_mbuf *pkt_in, void *arg)
 		case PAXOS_ACCEPTED: {
 			//////////////////// Uncomment to increase inst///////////////////
 			uint32_t cur_inst = rte_be_to_cpu_32(paxos_hdr->inst);
-			printf("PORT %u: Accepted instance %u\n", pkt_in->port, cur_inst);
+			// printf("PORT %u: Accepted instance %u\n", pkt_in->port, cur_inst);
 			//////////////////////////////////////////////////////////////////
 		}
 		case PAXOS_FINISHED: {
 			//////////////////// Uncomment to increase inst///////////////////
 			uint32_t cur_inst = rte_be_to_cpu_32(paxos_hdr->inst);
-			// printf("Delivered instance %u\n", cur_inst);
+			// printf("PORT %u: Delivered instance %u\n", pkt_in->port, cur_inst);
 			paxos_hdr->inst = rte_cpu_to_be_32(cur_inst + app.p4xos_conf.osd - 1);
 			//////////////////////////////////////////////////////////////////
 			uint64_t now = rte_get_timer_cycles();

@@ -235,7 +235,11 @@ app_lcore_io_rx(
 
 			worker_0 = data_0_0[pos_lb] & (n_workers - 1);
 			worker_1 = data_0_1[pos_lb] & (n_workers - 1);
-
+			// printf("data_0_0[pos_lb]: %u worker %u \t data_0_1[pos_lb]: %u worker %u\n",
+			// 		data_0_0[pos_lb],
+			// 		worker_0,
+			// 		data_0_1[pos_lb],
+			// 		worker_1);
 			app_lcore_io_rx_buffer_to_send(lp, worker_0, mbuf_0_0, bsz_wr);
 			app_lcore_io_rx_buffer_to_send(lp, worker_1, mbuf_0_1, bsz_wr);
 		}
@@ -512,12 +516,16 @@ app_lcore_worker(
 							   sizeof(struct ether_hdr));
 			ipv4_dst = rte_be_to_cpu_32(ipv4_hdr->dst_addr);
 
+			// char str[INET_ADDRSTRLEN];
+			// inet_ntop(AF_INET, &(ipv4_hdr->dst_addr), str, INET_ADDRSTRLEN);
+			// printf("Match destIP %s\n", str);
 			lp->process_pkt(pkt, lp);
 
 			if (unlikely(rte_lpm_lookup(lp->lpm_table, ipv4_dst, &port) != 0)) {
 				port = pkt->port;
 			}
 
+			// printf("Port %u -> %u\n", pkt->port, port);
 			pos = lp->mbuf_out[port].n_mbufs;
 
 			lp->mbuf_out[port].array[pos ++] = pkt;

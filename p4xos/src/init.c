@@ -586,5 +586,6 @@ void app_set_stat_callback(rte_timer_cb_t  stat_callback, void* arg) {
 		if (ret < 0) {
 			printf("timer is in the RUNNING state\n");
 		}
+		break;
 	}
 }

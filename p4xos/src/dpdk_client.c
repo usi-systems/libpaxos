@@ -67,8 +67,8 @@ set_ipv4_hdr(struct ipv4_hdr *ip, uint8_t proto, uint32_t src, uint32_t dst) {
 	ip->time_to_live = 64;
 	ip->next_proto_id = proto;
 	ip->hdr_checksum = 0;
-	ip->src_addr = rte_cpu_to_be_32(src);
-	ip->dst_addr = rte_cpu_to_be_32(dst);
+	ip->src_addr = src;
+	ip->dst_addr = dst;
 	// rte_hexdump(stdout, "IP", ip, sizeof(struct ipv4_hdr));
 
 }

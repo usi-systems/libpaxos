@@ -58,7 +58,6 @@ struct rocksdb_params {
     uint32_t read_count[MAX_WORKER_CORE];
     uint64_t last_cycle[MAX_WORKER_CORE];
     uint32_t num_workers;
-    uint8_t reported;
 };
 
 #ifdef __cplusplus

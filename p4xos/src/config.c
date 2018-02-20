@@ -427,7 +427,7 @@ parse_arg_lpm(const char *arg)
 		}
 
 		if ((ip_a >= 256) || (ip_b >= 256) || (ip_c >= 256) || (ip_d >= 256) ||
-		     (depth == 0) || (depth >= 32) ||
+		     (depth == 0) || (depth > 32) ||
 			 (if_out >= APP_MAX_NIC_PORTS)) {
 			return -6;
 		}
@@ -651,15 +651,12 @@ parse_arg_ip_address(const char *arg, uint32_t *addr)
 	}
 
 	int ret;
-	struct sockaddr_in sa;
-	// store this IP address in sa:
-	ret = inet_pton(AF_INET, arg, &(sa.sin_addr));
+	ret = inet_pton(AF_INET, arg, addr);
 
 	if (ret == 0 || ret < 0) {
 		return -1;
 	}
 
-	*addr = sa.sin_addr.s_addr;
 	return 0;
 }
 
@@ -812,7 +809,7 @@ app_parse_args(int argc, char **argv)
 			}
 			if (!strcmp(lgopts[option_index].name, "src")) {
 				src_addr = 1;
-				ret = parse_arg_ip_address(optarg, &src_addr);
+				ret = parse_arg_ip_address(optarg, &(app.p4xos_conf.src_addr));
 				if (ret) {
 					printf("Incorrect value for --src argument (%d)\n", ret);
 					return -1;
@@ -820,7 +817,7 @@ app_parse_args(int argc, char **argv)
 			}
 			if (!strcmp(lgopts[option_index].name, "dst")) {
 				dst_addr = 1;
-				ret = parse_arg_ip_address(optarg, &dst_addr);
+				ret = parse_arg_ip_address(optarg, &(app.p4xos_conf.dst_addr));
 				if (ret) {
 					printf("Incorrect value for --dst argument (%d)\n", ret);
 					return -1;
@@ -865,11 +862,11 @@ app_parse_args(int argc, char **argv)
 	}
 
 	if (src_addr == 0) {
-		app.p4xos_conf.src_addr = APP_DEFAULT_IP_SRC_ADDR;
+		parse_arg_ip_address(APP_DEFAULT_IP_SRC_ADDR, &(app.p4xos_conf.src_addr));
 	}
 
 	if (dst_addr == 0) {
-		app.p4xos_conf.dst_addr = APP_DEFAULT_IP_DST_ADDR;
+		parse_arg_ip_address(APP_DEFAULT_IP_DST_ADDR, &(app.p4xos_conf.dst_addr));
 	}
 
 	if (msgtype == 0) {
@@ -1222,5 +1219,10 @@ app_print_params(void)
 			app.p4xos_conf.multi_dbs,
 			app.p4xos_conf.tx_port,
 			app.p4xos_conf.osd
-		);
+	);
+	char str[INET_ADDRSTRLEN];
+	inet_ntop(AF_INET, &(app.p4xos_conf.dst_addr), str, INET_ADDRSTRLEN);
+	printf("Destination address: %s\n", str);
+	inet_ntop(AF_INET, &(app.p4xos_conf.src_addr), str, INET_ADDRSTRLEN);
+	printf("Source address: %s\n", str);
 }

@@ -21,7 +21,6 @@ const char DBPath[] = "/tmp/";
 
 struct rocksdb_params rocks;
 
-
 static void
 init_rocksdb(void)
 {
@@ -119,17 +118,15 @@ stat_cb(__rte_unused struct rte_timer *timer, __rte_unused void *arg)
 	unsigned lcore_id = rte_lcore_id();
 	uint32_t i;
 	struct rocksdb_params *rocks = (struct rocksdb_params *)arg;
-	if (rocks->reported) {
-		rocks->reported ^= 1;
-		return;
-	}
+
 	uint32_t delivered_count = 0;
 	for (i = 0; i < rocks->num_workers; i++) {
 		delivered_count += rocks->delivered_count[i];
 		rocks->delivered_count[i] = 0;
 	}
-	printf("lcore %u Throughput %u\n", lcore_id, delivered_count);
-	rocks->reported ^= 1;
+	if (delivered_count > 0) {
+		printf("lcore %u Throughput %u\n", lcore_id, delivered_count);
+	}
 }
 
 int
