@@ -199,6 +199,7 @@ acceptor_handler(struct rte_mbuf *pkt_in, void *arg)
 			if (acceptor_receive_accept(lp->acceptor, &accept, &out) != 0) {
 				paxos_hdr->msgtype = rte_cpu_to_be_16(out.type);
 				paxos_hdr->acptid = rte_cpu_to_be_16(app.p4xos_conf.acceptor_id);
+				lp->accepted_count++;
 				// printf("Accepted instance %u\n", rte_be_to_cpu_32(paxos_hdr->inst));
 			}
 			// printf("Return type %d\n", out.type);

@@ -360,6 +360,7 @@ struct app_lcore_params_worker {
 	worker_cb process_pkt;
 	uint64_t nb_delivery;
 	uint64_t latency;
+	uint64_t accepted_count;
 	struct rte_timer stat_timer;
 };
 

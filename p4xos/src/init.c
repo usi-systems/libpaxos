@@ -53,13 +53,13 @@ app_assign_worker_ids(void)
 	/* Assign ID for each worker */
 	worker_id = 0;
 	for (lcore = 0; lcore < APP_MAX_LCORES; lcore ++) {
-		struct app_lcore_params_worker *lp_worker = &app.lcore_params[lcore].worker;
+		struct app_lcore_params_worker *lp = &app.lcore_params[lcore].worker;
 
 		if (app.lcore_params[lcore].type != e_APP_LCORE_WORKER) {
 			continue;
 		}
 
-		lp_worker->worker_id = worker_id;
+		lp->worker_id = worker_id;
 		worker_id ++;
 	}
 }
@@ -70,12 +70,13 @@ app_init_acceptor(void)
 	uint32_t lcore;
 
 	for (lcore = 0; lcore < APP_MAX_LCORES; lcore ++) {
-		struct app_lcore_params_worker *lp_worker = &app.lcore_params[lcore].worker;
+		struct app_lcore_params_worker *lp = &app.lcore_params[lcore].worker;
 
 		if (app.lcore_params[lcore].type != e_APP_LCORE_WORKER) {
 			continue;
 		}
-		lp_worker->acceptor = acceptor_new(app.p4xos_conf.acceptor_id);;
+		lp->acceptor = acceptor_new(app.p4xos_conf.acceptor_id);
+		lp->accepted_count = 0;
 	}
 }
 
@@ -86,14 +87,14 @@ app_init_learner(void)
 
 	/* Create a learner for each worker */
 	for (lcore = 0; lcore < APP_MAX_LCORES; lcore ++) {
-		struct app_lcore_params_worker *lp_worker = &app.lcore_params[lcore].worker;
+		struct app_lcore_params_worker *lp = &app.lcore_params[lcore].worker;
 
 		if (app.lcore_params[lcore].type != e_APP_LCORE_WORKER) {
 			continue;
 		}
 
-		lp_worker->learner = learner_new(app.p4xos_conf.num_acceptors);
-		learner_set_instance_id(lp_worker->learner, 0);
+		lp->learner = learner_new(app.p4xos_conf.num_acceptors);
+		learner_set_instance_id(lp->learner, 0);
 	}
 }
 
@@ -209,7 +210,7 @@ app_init_rings_rx(void)
 
 		for (lcore_worker = 0; lcore_worker < APP_MAX_LCORES; lcore_worker ++) {
 			char name[32];
-			struct app_lcore_params_worker *lp_worker = &app.lcore_params[lcore_worker].worker;
+			struct app_lcore_params_worker *lp = &app.lcore_params[lcore_worker].worker;
 			struct rte_ring *ring = NULL;
 
 			if (app.lcore_params[lcore_worker].type != e_APP_LCORE_WORKER) {
@@ -238,8 +239,8 @@ app_init_rings_rx(void)
 			lp_io->rx.rings[lp_io->rx.n_rings] = ring;
 			lp_io->rx.n_rings ++;
 
-			lp_worker->rings_in[lp_worker->n_rings_in] = ring;
-			lp_worker->n_rings_in ++;
+			lp->rings_in[lp->n_rings_in] = ring;
+			lp->n_rings_in ++;
 		}
 	}
 
@@ -257,13 +258,13 @@ app_init_rings_rx(void)
 	}
 
 	for (lcore = 0; lcore < APP_MAX_LCORES; lcore ++) {
-		struct app_lcore_params_worker *lp_worker = &app.lcore_params[lcore].worker;
+		struct app_lcore_params_worker *lp = &app.lcore_params[lcore].worker;
 
 		if (app.lcore_params[lcore].type != e_APP_LCORE_WORKER) {
 			continue;
 		}
 
-		if (lp_worker->n_rings_in != app_get_lcores_io_rx()) {
+		if (lp->n_rings_in != app_get_lcores_io_rx()) {
 			rte_panic("Algorithmic error (worker input rings)\n");
 		}
 	}
@@ -276,7 +277,7 @@ app_init_rings_tx(void)
 
 	/* Initialize the rings for the TX side */
 	for (lcore = 0; lcore < APP_MAX_LCORES; lcore ++) {
-		struct app_lcore_params_worker *lp_worker = &app.lcore_params[lcore].worker;
+		struct app_lcore_params_worker *lp = &app.lcore_params[lcore].worker;
 		unsigned port;
 
 		if (app.lcore_params[lcore].type != e_APP_LCORE_WORKER) {
@@ -315,8 +316,8 @@ app_init_rings_tx(void)
 					port);
 			}
 
-			lp_worker->rings_out[port] = ring;
-			lp_io->tx.rings[port][lp_worker->worker_id] = ring;
+			lp->rings_out[port] = ring;
+			lp_io->tx.rings[port][lp->worker_id] = ring;
 		}
 	}
 
@@ -541,27 +542,27 @@ app_init(void)
 void app_set_deliver_callback(deliver_cb deliver_callback, void* arg) {
 	uint32_t lcore;
 	for (lcore = 0; lcore < APP_MAX_LCORES; lcore ++) {
-		struct app_lcore_params_worker *lp_worker = &app.lcore_params[lcore].worker;
+		struct app_lcore_params_worker *lp = &app.lcore_params[lcore].worker;
 
 		if (app.lcore_params[lcore].type != e_APP_LCORE_WORKER) {
 			continue;
 		}
 
-		lp_worker->deliver = deliver_callback;
-		lp_worker->deliver_arg = arg;
+		lp->deliver = deliver_callback;
+		lp->deliver_arg = arg;
 	}
 }
 
 void app_set_worker_callback(worker_cb worker_callback) {
 	uint32_t lcore;
 	for (lcore = 0; lcore < APP_MAX_LCORES; lcore ++) {
-		struct app_lcore_params_worker *lp_worker = &app.lcore_params[lcore].worker;
+		struct app_lcore_params_worker *lp = &app.lcore_params[lcore].worker;
 
 		if (app.lcore_params[lcore].type != e_APP_LCORE_WORKER) {
 			continue;
 		}
 
-		lp_worker->process_pkt = worker_callback;
+		lp->process_pkt = worker_callback;
 	}
 }
 
@@ -574,14 +575,14 @@ void app_set_stat_callback(rte_timer_cb_t  stat_callback, void* arg) {
 	app.hz = rte_get_timer_hz();
 
 	for (lcore = 0; lcore < APP_MAX_LCORES; lcore ++) {
-		struct app_lcore_params_worker *lp_worker = &app.lcore_params[lcore].worker;
+		struct app_lcore_params_worker *lp = &app.lcore_params[lcore].worker;
 
 		if (app.lcore_params[lcore].type != e_APP_LCORE_WORKER) {
 			continue;
 		}
 
-		rte_timer_init(&lp_worker->stat_timer);
-		ret = rte_timer_reset(&lp_worker->stat_timer, app.hz, PERIODICAL, lcore,
+		rte_timer_init(&lp->stat_timer);
+		ret = rte_timer_reset(&lp->stat_timer, app.hz, PERIODICAL, lcore,
 					stat_callback, arg);
 		if (ret < 0) {
 			printf("timer is in the RUNNING state\n");

@@ -89,9 +89,9 @@ static const char usage[] =
 "    --osd NUM : The number of packets will be sent at beginning (default value \n"
 "                is %u)                                                         \n"
 "    --src \"IP\" : source IP address proposers uses to generate packets        \n"
-"                   (default value is %u)										\n"
+"                   (default value is %s)										\n"
 "    --dst \"IP\" : destination IP address proposers uses to generate packets   \n"
-"                   (default value is %u)										\n";
+"                   (default value is %s)										\n";
 
 void
 app_print_usage(void)
