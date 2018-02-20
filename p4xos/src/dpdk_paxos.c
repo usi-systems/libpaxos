@@ -139,13 +139,6 @@ proposer_handler(struct rte_mbuf *pkt_in, void *arg)
 			uint64_t latency = now - rte_be_to_cpu_64(paxos_hdr->igress_ts);
 			lp->latency += latency;
 			lp->nb_delivery ++;
-			if (lp->nb_delivery >= 1000000) {
-				double avg_cycle_latency = (double) lp->latency / (double) lp->nb_delivery;
-				double avg_ns_latency = avg_cycle_latency * NS_PER_S / rte_get_timer_hz();
-				printf("Avg latency = %.2f cycles ~ %.1f ns\n", avg_cycle_latency, avg_ns_latency);
-				lp->latency = 0;
-				lp->nb_delivery = 0;
-			}
 			paxos_hdr->igress_ts = rte_cpu_to_be_64(now);
 			// paxos_hdr->msgtype = rte_cpu_to_be_16(PAXOS_ACCEPTED);
 			paxos_hdr->msgtype = rte_cpu_to_be_16(PAXOS_ACCEPT);
