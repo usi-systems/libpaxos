@@ -886,10 +886,10 @@ app_parse_args(int argc, char **argv)
 	}
 
 	/* Check cross-consistency of arguments */
-	if ((ret = app_check_lpm_table()) < 0) {
-		printf("At least one LPM rule is inconsistent (%d)\n", ret);
-		return -1;
-	}
+	// if ((ret = app_check_lpm_table()) < 0) {
+	// 	printf("At least one LPM rule is inconsistent (%d)\n", ret);
+	// 	return -1;
+	// }
 	if (app_check_every_rx_port_is_tx_enabled() < 0) {
 		printf("On LPM lookup miss, packet is sent back on the input port.\n");
 		printf("At least one RX port is not enabled for TX.\n");

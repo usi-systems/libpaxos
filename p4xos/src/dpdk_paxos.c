@@ -43,6 +43,8 @@
 #include "main.h"
 #include "dpp_paxos.h"
 
+
+
 static void
 swap_ips(struct ipv4_hdr *ip) {
 	uint32_t tmp = ip->dst_addr;
@@ -99,14 +101,15 @@ static int filter_packets(struct rte_mbuf *pkt_in) {
 	return 0;
 }
 
-#define PAXOS_FINISHED 0xAA
+#define PAXOS_BEGIN	0xBB
+#define PAXOS_FINISHED	0xFF
 
 void
 proposer_handler(struct rte_mbuf *pkt_in, void *arg)
 {
 	int ret = filter_packets(pkt_in);
 	if (ret < 0) {
-		// printf("Drop packets. Code %d\n", ret);
+		// RTE_LOG(DEBUG, USER1, "Drop packets. Code %d\n", ret);
 		rte_pktmbuf_free(pkt_in);
 		return;
 	}
@@ -117,44 +120,66 @@ proposer_handler(struct rte_mbuf *pkt_in, void *arg)
 	size_t data_size = sizeof(struct paxos_hdr);
 	prepare_hw_checksum(pkt_in, data_size);
 	uint16_t msgtype = rte_be_to_cpu_16(paxos_hdr->msgtype);
+	uint32_t inst = rte_be_to_cpu_32(paxos_hdr->inst);
+	RTE_LOG(DEBUG, USER1, "in PORT %u, msgtype %u, instance %u\n", pkt_in->port, msgtype, inst);
+
 	switch(msgtype)
 	{
-		case PAXOS_ACCEPT: {
-			// rte_pktmbuf_free(pkt_in);
-			break;
-		}
-		case PAXOS_ACCEPTED: {
-			//////////////////// Uncomment to increase inst///////////////////
-			uint32_t cur_inst = rte_be_to_cpu_32(paxos_hdr->inst);
-			// printf("PORT %u: Accepted instance %u\n", pkt_in->port, cur_inst);
-			//////////////////////////////////////////////////////////////////
-		}
 		case PAXOS_FINISHED: {
-			//////////////////// Uncomment to increase inst///////////////////
-			uint32_t cur_inst = rte_be_to_cpu_32(paxos_hdr->inst);
-			// printf("PORT %u: Delivered instance %u\n", pkt_in->port, cur_inst);
-			paxos_hdr->inst = rte_cpu_to_be_32(cur_inst + app.p4xos_conf.osd - 1);
-			//////////////////////////////////////////////////////////////////
 			uint64_t now = rte_get_timer_cycles();
 			uint64_t latency = now - rte_be_to_cpu_64(paxos_hdr->igress_ts);
 			lp->latency += latency;
 			lp->nb_delivery ++;
 			paxos_hdr->igress_ts = rte_cpu_to_be_64(now);
-			// paxos_hdr->msgtype = rte_cpu_to_be_16(PAXOS_ACCEPTED);
-			paxos_hdr->msgtype = rte_cpu_to_be_16(PAXOS_ACCEPT);
+			paxos_hdr->msgtype = rte_cpu_to_be_16(PAXOS_BEGIN);
 			break;
 		}
 		default:
-			printf("No handler for %u\n", msgtype);
+			RTE_LOG(DEBUG, USER1, "No handler for %u\n", msgtype);
+			rte_pktmbuf_free(pkt_in);
 	}
 }
+
+void
+leader_handler(struct rte_mbuf *pkt_in, void *arg)
+{
+	int ret = filter_packets(pkt_in);
+	if (ret < 0) {
+		// RTE_LOG(DEBUG, USER1, "Drop packets. Code %d\n", ret);
+		rte_pktmbuf_free(pkt_in);
+		return;
+	}
+	struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
+	size_t paxos_offset = get_paxos_offset();
+	struct paxos_hdr *paxos_hdr = rte_pktmbuf_mtod_offset(pkt_in, struct paxos_hdr *, paxos_offset);
+	// rte_hexdump(stdout, "Paxos", paxos_hdr, sizeof(struct paxos_hdr));
+	size_t data_size = sizeof(struct paxos_hdr);
+	prepare_hw_checksum(pkt_in, data_size);
+	uint16_t msgtype = rte_be_to_cpu_16(paxos_hdr->msgtype);
+	uint32_t inst = rte_be_to_cpu_32(paxos_hdr->inst);
+	RTE_LOG(DEBUG, USER1, "in PORT %u, msgtype %u, instance %u\n", pkt_in->port, msgtype, inst);
+
+	switch(msgtype)
+	{
+		case PAXOS_BEGIN: {
+			paxos_hdr->inst = rte_cpu_to_be_32(lp->cur_inst++);
+			paxos_hdr->msgtype = rte_cpu_to_be_16(PAXOS_ACCEPT);
+			break;
+		}
+		default: {
+			RTE_LOG(DEBUG, USER1, "No handler for %u\n", msgtype);
+			rte_pktmbuf_free(pkt_in);
+		}
+	}
+}
+
 
 void
 acceptor_handler(struct rte_mbuf *pkt_in, void *arg)
 {
 	int ret = filter_packets(pkt_in);
 	if (ret < 0) {
-		// printf("Drop packets. Code %d\n", ret);
+		// RTE_LOG(DEBUG, USER1, "Drop packets. Code %d\n", ret);
 		rte_pktmbuf_free(pkt_in);
 		return;
 	}
@@ -165,6 +190,8 @@ acceptor_handler(struct rte_mbuf *pkt_in, void *arg)
 	size_t data_size = sizeof(struct paxos_hdr);
 	prepare_hw_checksum(pkt_in, data_size);
 	uint16_t msgtype = rte_be_to_cpu_16(paxos_hdr->msgtype);
+	uint32_t inst = rte_be_to_cpu_32(paxos_hdr->inst);
+	RTE_LOG(DEBUG, USER1, "in PORT %u, msgtype %u, instance %u\n", pkt_in->port, msgtype, inst);
 	switch(msgtype)
 	{
 		case PAXOS_PREPARE: {
@@ -193,14 +220,15 @@ acceptor_handler(struct rte_mbuf *pkt_in, void *arg)
 				paxos_hdr->msgtype = rte_cpu_to_be_16(out.type);
 				paxos_hdr->acptid = rte_cpu_to_be_16(app.p4xos_conf.acceptor_id);
 				lp->accepted_count++;
-				// printf("Accepted instance %u\n", rte_be_to_cpu_32(paxos_hdr->inst));
+				// RTE_LOG(DEBUG, USER1, "Accepted instance %u\n", rte_be_to_cpu_32(paxos_hdr->inst));
 			}
-			// printf("Return type %d\n", out.type);
+			// RTE_LOG(DEBUG, USER1, "Return type %d\n", out.type);
 			break;
 		}
-		default:
-			// printf("No handler for %u\n", msgtype);
-			break;
+		default: {
+			RTE_LOG(DEBUG, USER1, "No handler for %u\n", msgtype);
+			rte_pktmbuf_free(pkt_in);
+		}
 	}
 }
 
@@ -210,7 +238,7 @@ learner_handler(struct rte_mbuf *pkt_in, void *arg)
 {
 	int ret = filter_packets(pkt_in);
 	if (ret < 0) {
-		// printf("Drop packets. Code %d\n", ret);
+		// RTE_LOG(DEBUG, USER1, "Drop packets. Code %d\n", ret);
 		rte_pktmbuf_free(pkt_in);
 		return;
 	}
@@ -221,6 +249,9 @@ learner_handler(struct rte_mbuf *pkt_in, void *arg)
 	size_t data_size = sizeof(struct paxos_hdr);
 	prepare_hw_checksum(pkt_in, data_size);
 	uint16_t msgtype = rte_be_to_cpu_16(paxos_hdr->msgtype);
+	uint32_t inst = rte_be_to_cpu_32(paxos_hdr->inst);
+	RTE_LOG(DEBUG, USER1, "in PORT %u, msgtype %u, instance %u\n", pkt_in->port, msgtype, inst);
+
 	switch(msgtype)
 	{
 		case PAXOS_PROMISE: {
@@ -239,10 +270,6 @@ learner_handler(struct rte_mbuf *pkt_in, void *arg)
 			}
 			break;
 		}
-		case PAXOS_ACCEPT: {
-			// rte_pktmbuf_free(pkt_in);
-		}
-		break;
 		case PAXOS_ACCEPTED: {
 			int vsize = rte_be_to_cpu_32(paxos_hdr->value_len);
 			struct paxos_accepted ack = {
@@ -258,13 +285,18 @@ learner_handler(struct rte_mbuf *pkt_in, void *arg)
 			if (learner_deliver_next(lp->learner, &out)) {
 				lp->deliver(lp->worker_id, out.iid, out.value.paxos_value_val,
 						out.value.paxos_value_len, lp->deliver_arg);
-				//printf("Finished instance %u\n", rte_be_to_cpu_32(paxos_hdr->inst));
+				//RTE_LOG(DEBUG, USER1, "Finished instance %u\n", rte_be_to_cpu_32(paxos_hdr->inst));
 				paxos_hdr->msgtype = rte_cpu_to_be_16(PAXOS_FINISHED);
+			}
+			else {
+				rte_pktmbuf_free(pkt_in);
 			}
 			break;
 		}
-		default:
-			printf("No handler for %u\n", msgtype);
+		default: {
+			RTE_LOG(DEBUG, USER1, "No handler for %u\n", msgtype);
+			rte_pktmbuf_free(pkt_in);
+		}
 	}
 
 }

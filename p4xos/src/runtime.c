@@ -519,52 +519,114 @@ app_lcore_worker(
 			// char str[INET_ADDRSTRLEN];
 			// inet_ntop(AF_INET, &(ipv4_hdr->dst_addr), str, INET_ADDRSTRLEN);
 			// printf("Match destIP %s\n", str);
+			// printf("[port %u] : ", pkt->port);
 			lp->process_pkt(pkt, lp);
 
 			if (unlikely(rte_lpm_lookup(lp->lpm_table, ipv4_dst, &port) != 0)) {
-				port = pkt->port;
-			}
-
-			// printf("Port %u -> %u\n", pkt->port, port);
-			pos = lp->mbuf_out[port].n_mbufs;
-
-			lp->mbuf_out[port].array[pos ++] = pkt;
-			if (likely(pos < bsz_wr)) {
-				lp->mbuf_out[port].n_mbufs = pos;
+				// port = pkt->port;
+				rte_pktmbuf_free(pkt);
 				continue;
 			}
 
-			ret = rte_ring_sp_enqueue_bulk(
-				lp->rings_out[port],
-				(void **) lp->mbuf_out[port].array,
-				bsz_wr,
-				NULL);
+			uint32_t port_mask;
+
+			if (IS_IPV4_MCAST(ipv4_dst)) {
+				// printf("Multicast packet\n");
+				port_mask = port;
+
+				/* Mark all packet's segments as referenced port_num times */
+				// rte_pktmbuf_refcnt_update(pkt, (uint16_t)port_num);
+
+				for (port = 0; port_mask > 0; port_mask >>= 1, port++) {
+
+					/* Prepare output packet and send it out. */
+					if ((port_mask & 1) != 0) {
+
+						// printf("Port %u -> %u\n", pkt->port, port);
+						pos = lp->mbuf_out[port].n_mbufs;
+
+						lp->mbuf_out[port].array[pos ++] = pkt;
+						if (likely(pos < bsz_wr)) {
+							lp->mbuf_out[port].n_mbufs = pos;
+							continue;
+						}
+
+						ret = rte_ring_sp_enqueue_bulk(
+							lp->rings_out[port],
+							(void **) lp->mbuf_out[port].array,
+							bsz_wr,
+							NULL);
 
 #if APP_STATS
-			lp->rings_out_iters[port] ++;
-			if (ret > 0) {
-				lp->rings_out_count[port] += 1;
-			}
-			if (lp->rings_out_iters[port] == APP_STATS){
-				printf("\t\tWorker %u out (NIC port %u): enq success rate = %.2f\n",
-					(unsigned) lp->worker_id,
-					port,
-					((double) lp->rings_out_count[port]) / ((double) lp->rings_out_iters[port]));
-				lp->rings_out_iters[port] = 0;
-				lp->rings_out_count[port] = 0;
-			}
+						lp->rings_out_iters[port] ++;
+						if (ret > 0) {
+							lp->rings_out_count[port] += 1;
+						}
+						if (lp->rings_out_iters[port] == APP_STATS){
+							printf("\t\tWorker %u out (NIC port %u): enq success rate = %.2f\n",
+								(unsigned) lp->worker_id,
+								port,
+								((double) lp->rings_out_count[port]) / ((double) lp->rings_out_iters[port]));
+							lp->rings_out_iters[port] = 0;
+							lp->rings_out_count[port] = 0;
+						}
+#endif
+						if (unlikely(ret == 0)) {
+							uint32_t k;
+							for (k = 0; k < bsz_wr; k ++) {
+								struct rte_mbuf *pkt_to_free = lp->mbuf_out[port].array[k];
+								rte_pktmbuf_free(pkt_to_free);
+							}
+						}
+
+						lp->mbuf_out[port].n_mbufs = 0;
+						lp->mbuf_out_flush[port] = 0;
+					}
+				}
+
+
+			} else {
+				// printf("Port %u -> %u\n", pkt->port, port);
+				pos = lp->mbuf_out[port].n_mbufs;
+
+				lp->mbuf_out[port].array[pos ++] = pkt;
+				if (likely(pos < bsz_wr)) {
+					lp->mbuf_out[port].n_mbufs = pos;
+					continue;
+				}
+
+				ret = rte_ring_sp_enqueue_bulk(
+					lp->rings_out[port],
+					(void **) lp->mbuf_out[port].array,
+					bsz_wr,
+					NULL);
+
+#if APP_STATS
+				lp->rings_out_iters[port] ++;
+				if (ret > 0) {
+					lp->rings_out_count[port] += 1;
+				}
+				if (lp->rings_out_iters[port] == APP_STATS){
+					printf("\t\tWorker %u out (NIC port %u): enq success rate = %.2f\n",
+						(unsigned) lp->worker_id,
+						port,
+						((double) lp->rings_out_count[port]) / ((double) lp->rings_out_iters[port]));
+					lp->rings_out_iters[port] = 0;
+					lp->rings_out_count[port] = 0;
+				}
 #endif
 
-			if (unlikely(ret == 0)) {
-				uint32_t k;
-				for (k = 0; k < bsz_wr; k ++) {
-					struct rte_mbuf *pkt_to_free = lp->mbuf_out[port].array[k];
-					rte_pktmbuf_free(pkt_to_free);
+				if (unlikely(ret == 0)) {
+					uint32_t k;
+					for (k = 0; k < bsz_wr; k ++) {
+						struct rte_mbuf *pkt_to_free = lp->mbuf_out[port].array[k];
+						rte_pktmbuf_free(pkt_to_free);
+					}
 				}
-			}
 
-			lp->mbuf_out[port].n_mbufs = 0;
-			lp->mbuf_out_flush[port] = 0;
+				lp->mbuf_out[port].n_mbufs = 0;
+				lp->mbuf_out_flush[port] = 0;
+			}
 		}
 	}
 }

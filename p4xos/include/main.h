@@ -361,6 +361,7 @@ struct app_lcore_params_worker {
 	uint64_t nb_delivery;
 	uint64_t latency;
 	uint64_t accepted_count;
+	uint32_t cur_inst;
 	struct rte_timer stat_timer;
 };
 
@@ -415,9 +416,12 @@ struct app_params {
 	/* Paxos configuration */
 	struct p4xos_configuration p4xos_conf;
 	uint64_t hz;
+
 } __rte_cache_aligned;
 
 extern struct app_params app;
+
+#define RTE_LOGTYPE_P4XOS	RTE_LOGTYPE_USER1
 
 int app_parse_args(int argc, char **argv);
 void app_print_usage(void);
@@ -438,9 +442,11 @@ void app_set_worker_callback(worker_cb);
 void learner_handler(struct rte_mbuf *pkt_in, void *arg);
 void proposer_handler(struct rte_mbuf *pkt_in, void *arg);
 void acceptor_handler(struct rte_mbuf *pkt_in, void *arg);
+void leader_handler(struct rte_mbuf *pkt_in, void *arg);
 void app_set_stat_callback(rte_timer_cb_t, void *arg);
 void app_init_learner(void);
 void app_init_acceptor(void);
+void app_init_leader(void);
 
 #ifdef __cplusplus
 }  /* end extern "C" */

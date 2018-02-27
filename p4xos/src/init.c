@@ -65,6 +65,21 @@ app_assign_worker_ids(void)
 }
 
 void
+app_init_leader(void)
+{
+	uint32_t lcore;
+
+	for (lcore = 0; lcore < APP_MAX_LCORES; lcore ++) {
+		struct app_lcore_params_worker *lp = &app.lcore_params[lcore].worker;
+
+		if (app.lcore_params[lcore].type != e_APP_LCORE_WORKER) {
+			continue;
+		}
+		lp->cur_inst = 1;
+	}
+}
+
+void
 app_init_acceptor(void)
 {
 	uint32_t lcore;
@@ -535,6 +550,8 @@ app_init(void)
 	app_init_rings_rx();
 	app_init_rings_tx();
 	app_init_nics();
+	uint32_t global_log_level = rte_log_get_global_level();
+	rte_log_set_level(RTE_LOGTYPE_P4XOS, global_log_level);
 
 	printf("Initialization completed.\n");
 }
