@@ -39,8 +39,9 @@ set_app_hdr(struct app_hdr *ap, uint32_t inst) {
 static void
 stat_cb(__rte_unused struct rte_timer *timer, __rte_unused void *arg)
 {
-	uint32_t lcore, nb_delivery = 0;
+	uint32_t lcore, nb_delivery = 0, nb_latency = 0;
 	uint64_t latency = 0;
+	uint64_t total_pkts = 0, total_bytes = 0;
 
 	for (lcore = 0; lcore < APP_MAX_LCORES; lcore ++) {
 		struct app_lcore_params_worker *lp = &app.lcore_params[lcore].worker;
@@ -49,16 +50,25 @@ stat_cb(__rte_unused struct rte_timer *timer, __rte_unused void *arg)
 			continue;
 		}
 
+		nb_latency += lp->nb_latency;
 		nb_delivery += lp->nb_delivery;
 		latency += lp->latency;
+		total_pkts += lp->total_pkts;
+		total_bytes += lp->total_bytes;
+		lp->nb_latency = 0;
 		lp->nb_delivery = 0;
 		lp->latency = 0;
+		lp->total_pkts = 0;
+		lp->total_bytes = 0;
 	}
 
 	if (nb_delivery && latency) {
-		double avg_cycle_latency = (double) latency / (double) nb_delivery;
+		double avg_cycle_latency = (double) latency / (double) nb_latency;
 		double avg_ns_latency = avg_cycle_latency * NS_PER_S / rte_get_timer_hz();
-		printf("Throughput = %u Avg latency = %.2f cycles ~ %.1f ns\n", nb_delivery, avg_cycle_latency, avg_ns_latency);
+		printf("Throughput = %"PRIu64" pkts, %2.1f Gbits; "
+				"Paxos TP = %u Avg latency = %.2f cycles ~ %.1f ns\n",
+				total_pkts, bytes_to_gbits(total_bytes),
+				nb_delivery, avg_cycle_latency, avg_ns_latency);
 	}
 }
 

@@ -43,7 +43,15 @@
 #include "main.h"
 #include "dpp_paxos.h"
 
-
+/* Convert bytes to Gbit */
+inline double
+bytes_to_gbits(uint64_t bytes)
+{
+        double t = bytes;
+        t *= (double)8;
+        t /= 1000*1000*1000;
+        return t;
+}
 
 static void
 swap_ips(struct ipv4_hdr *ip) {
@@ -107,13 +115,15 @@ static int filter_packets(struct rte_mbuf *pkt_in) {
 void
 proposer_handler(struct rte_mbuf *pkt_in, void *arg)
 {
+	struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
+	lp->total_pkts++;
+	lp->total_bytes += pkt_in->pkt_len;
 	int ret = filter_packets(pkt_in);
 	if (ret < 0) {
 		// RTE_LOG(DEBUG, USER1, "Drop packets. Code %d\n", ret);
 		rte_pktmbuf_free(pkt_in);
 		return;
 	}
-	struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
 	size_t paxos_offset = get_paxos_offset();
 	struct paxos_hdr *paxos_hdr = rte_pktmbuf_mtod_offset(pkt_in, struct paxos_hdr *, paxos_offset);
 	// rte_hexdump(stdout, "Paxos", paxos_hdr, sizeof(struct paxos_hdr));
@@ -126,11 +136,15 @@ proposer_handler(struct rte_mbuf *pkt_in, void *arg)
 	switch(msgtype)
 	{
 		case PAXOS_FINISHED: {
-			uint64_t now = rte_get_timer_cycles();
-			uint64_t latency = now - rte_be_to_cpu_64(paxos_hdr->igress_ts);
-			lp->latency += latency;
+			uint64_t previous = rte_be_to_cpu_64(paxos_hdr->igress_ts);
+			if (previous > 0) {
+				uint64_t now = rte_get_timer_cycles();
+				uint64_t latency = now - previous;
+				lp->latency += latency;
+				lp->nb_latency ++;
+				paxos_hdr->igress_ts = rte_cpu_to_be_64(now);
+			}
 			lp->nb_delivery ++;
-			paxos_hdr->igress_ts = rte_cpu_to_be_64(now);
 			paxos_hdr->msgtype = rte_cpu_to_be_16(PAXOS_BEGIN);
 			break;
 		}
@@ -143,13 +157,15 @@ proposer_handler(struct rte_mbuf *pkt_in, void *arg)
 void
 leader_handler(struct rte_mbuf *pkt_in, void *arg)
 {
+	struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
+	lp->total_pkts++;
+	lp->total_bytes += pkt_in->pkt_len;
 	int ret = filter_packets(pkt_in);
 	if (ret < 0) {
 		// RTE_LOG(DEBUG, USER1, "Drop packets. Code %d\n", ret);
 		rte_pktmbuf_free(pkt_in);
 		return;
 	}
-	struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
 	size_t paxos_offset = get_paxos_offset();
 	struct paxos_hdr *paxos_hdr = rte_pktmbuf_mtod_offset(pkt_in, struct paxos_hdr *, paxos_offset);
 	// rte_hexdump(stdout, "Paxos", paxos_hdr, sizeof(struct paxos_hdr));
@@ -177,13 +193,15 @@ leader_handler(struct rte_mbuf *pkt_in, void *arg)
 void
 acceptor_handler(struct rte_mbuf *pkt_in, void *arg)
 {
+	struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
+	lp->total_pkts++;
+	lp->total_bytes += pkt_in->pkt_len;
 	int ret = filter_packets(pkt_in);
 	if (ret < 0) {
 		// RTE_LOG(DEBUG, USER1, "Drop packets. Code %d\n", ret);
 		rte_pktmbuf_free(pkt_in);
 		return;
 	}
-	struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
 	size_t paxos_offset = get_paxos_offset();
 	struct paxos_hdr *paxos_hdr = rte_pktmbuf_mtod_offset(pkt_in, struct paxos_hdr *, paxos_offset);
 	// rte_hexdump(stdout, "Paxos", paxos_hdr, sizeof(struct paxos_hdr));
@@ -236,13 +254,15 @@ acceptor_handler(struct rte_mbuf *pkt_in, void *arg)
 void
 learner_handler(struct rte_mbuf *pkt_in, void *arg)
 {
+	struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
+	lp->total_pkts++;
+	lp->total_bytes += pkt_in->pkt_len;
 	int ret = filter_packets(pkt_in);
 	if (ret < 0) {
 		// RTE_LOG(DEBUG, USER1, "Drop packets. Code %d\n", ret);
 		rte_pktmbuf_free(pkt_in);
 		return;
 	}
-	struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
 	size_t paxos_offset = get_paxos_offset();
 	struct paxos_hdr *paxos_hdr = rte_pktmbuf_mtod_offset(pkt_in, struct paxos_hdr *, paxos_offset);
 	// rte_hexdump(stdout, "Paxos", paxos_hdr, sizeof(struct paxos_hdr));

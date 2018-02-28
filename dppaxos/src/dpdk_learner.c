@@ -115,18 +115,39 @@ void deliver(unsigned int worker_id, unsigned int __rte_unused inst, __rte_unuse
 static void
 stat_cb(__rte_unused struct rte_timer *timer, __rte_unused void *arg)
 {
-	unsigned lcore_id = rte_lcore_id();
+	uint32_t lcore = 0;
+	uint64_t total_pkts = 0, total_bytes = 0;
 	uint32_t i;
-	struct rocksdb_params *rocks = (struct rocksdb_params *)arg;
 
+	for (lcore = 0; lcore < APP_MAX_LCORES; lcore ++) {
+		struct app_lcore_params_worker *lp = &app.lcore_params[lcore].worker;
+
+		if (app.lcore_params[lcore].type != e_APP_LCORE_WORKER) {
+			continue;
+		}
+
+		total_pkts += lp->total_pkts;
+		total_bytes += lp->total_bytes;
+		lp->total_pkts = 0;
+		lp->total_bytes = 0;
+	}
+
+	struct rocksdb_params *rocks = (struct rocksdb_params *)arg;
 	uint32_t delivered_count = 0;
 	for (i = 0; i < rocks->num_workers; i++) {
 		delivered_count += rocks->delivered_count[i];
 		rocks->delivered_count[i] = 0;
 	}
 	if (delivered_count > 0) {
-		printf("lcore %u Throughput %u\n", lcore_id, delivered_count);
+		printf("Throughput = %"PRIu64" pkts, %2.1f Gbits; "
+				"Learner Throughput %u\n",
+				total_pkts, bytes_to_gbits(total_bytes),
+				delivered_count);
+
 	}
+
+
+
 }
 
 int

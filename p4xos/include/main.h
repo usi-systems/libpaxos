@@ -359,7 +359,10 @@ struct app_lcore_params_worker {
 	void*	deliver_arg;
 	worker_cb process_pkt;
 	uint64_t nb_delivery;
+	uint64_t nb_latency;
 	uint64_t latency;
+	uint64_t total_pkts;
+	uint64_t total_bytes;
 	uint64_t accepted_count;
 	uint32_t cur_inst;
 	struct rte_timer stat_timer;
@@ -447,6 +450,7 @@ void app_set_stat_callback(rte_timer_cb_t, void *arg);
 void app_init_learner(void);
 void app_init_acceptor(void);
 void app_init_leader(void);
+double bytes_to_gbits(uint64_t bytes);
 
 #ifdef __cplusplus
 }  /* end extern "C" */

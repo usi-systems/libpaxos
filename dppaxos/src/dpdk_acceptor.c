@@ -21,7 +21,7 @@ static void
 stat_cb(__rte_unused struct rte_timer *timer, __rte_unused void *arg)
 {
 	uint32_t lcore, accepted_count = 0;
-
+	uint64_t total_pkts = 0, total_bytes = 0;
 	for (lcore = 0; lcore < APP_MAX_LCORES; lcore ++) {
 		struct app_lcore_params_worker *lp = &app.lcore_params[lcore].worker;
 
@@ -30,11 +30,18 @@ stat_cb(__rte_unused struct rte_timer *timer, __rte_unused void *arg)
 		}
 
 		accepted_count += lp->accepted_count;
+		total_pkts += lp->total_pkts;
+		total_bytes += lp->total_bytes;
+		lp->total_pkts = 0;
+		lp->total_bytes = 0;
 		lp->accepted_count = 0;
 	}
 
 	if (accepted_count > 0) {
-		printf("Acceptor Throughput %u\n", accepted_count);
+		printf("Throughput = %"PRIu64" pkts, %2.1f Gbits; "
+			   "Acceptor Throughput %u\n",
+			   total_pkts, bytes_to_gbits(total_bytes),
+			   accepted_count);
 	}
 }
 
