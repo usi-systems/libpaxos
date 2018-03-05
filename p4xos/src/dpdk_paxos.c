@@ -318,5 +318,82 @@ learner_handler(struct rte_mbuf *pkt_in, void *arg)
 			rte_pktmbuf_free(pkt_in);
 		}
 	}
+}
 
+void
+proposer_learner_handler(struct rte_mbuf *pkt_in, void *arg)
+{
+	struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
+	lp->total_pkts++;
+	lp->total_bytes += pkt_in->pkt_len;
+	int ret = filter_packets(pkt_in);
+	if (ret < 0) {
+		// RTE_LOG(DEBUG, USER1, "Drop packets. Code %d\n", ret);
+		rte_pktmbuf_free(pkt_in);
+		return;
+	}
+	size_t paxos_offset = get_paxos_offset();
+	struct paxos_hdr *paxos_hdr = rte_pktmbuf_mtod_offset(pkt_in, struct paxos_hdr *, paxos_offset);
+	// rte_hexdump(stdout, "Paxos", paxos_hdr, sizeof(struct paxos_hdr));
+	size_t data_size = sizeof(struct paxos_hdr);
+	prepare_hw_checksum(pkt_in, data_size);
+	uint16_t msgtype = rte_be_to_cpu_16(paxos_hdr->msgtype);
+	uint32_t inst = rte_be_to_cpu_32(paxos_hdr->inst);
+	RTE_LOG(DEBUG, USER1, "in PORT %u, msgtype %u, instance %u\n", pkt_in->port, msgtype, inst);
+
+	switch(msgtype)
+	{
+		case PAXOS_PROMISE: {
+			int vsize = rte_be_to_cpu_32(paxos_hdr->value_len);
+			struct paxos_promise promise = {
+				.iid = rte_be_to_cpu_32(paxos_hdr->inst),
+				.ballot = rte_be_to_cpu_16(paxos_hdr->rnd),
+				.value_ballot = rte_be_to_cpu_16(paxos_hdr->vrnd),
+				.aid = rte_be_to_cpu_16(paxos_hdr->acptid),
+				.value = {vsize, (char*)&paxos_hdr->value},
+			};
+			paxos_message pa;
+			ret = learner_receive_promise(lp->learner, &promise, &pa.u.accept);
+			if (ret) {
+                // TODO: Send Accept messages to acceptors
+			}
+			break;
+		}
+		case PAXOS_ACCEPTED: {
+      uint64_t previous = rte_be_to_cpu_64(paxos_hdr->igress_ts);
+			if (previous > 0) {
+				uint64_t now = rte_get_timer_cycles();
+				uint64_t latency = now - previous;
+				lp->latency += latency;
+				lp->nb_latency ++;
+				paxos_hdr->igress_ts = rte_cpu_to_be_64(now);
+			}
+			int vsize = rte_be_to_cpu_32(paxos_hdr->value_len);
+			struct paxos_accepted ack = {
+				.iid = rte_be_to_cpu_32(paxos_hdr->inst),
+				.ballot = rte_be_to_cpu_16(paxos_hdr->rnd),
+				.value_ballot = rte_be_to_cpu_16(paxos_hdr->vrnd),
+				.aid = rte_be_to_cpu_16(paxos_hdr->acptid),
+				.value = {vsize, (char*)&paxos_hdr->value}
+			};
+
+			learner_receive_accepted(lp->learner, &ack);
+			paxos_accepted out;
+			if (learner_deliver_next(lp->learner, &out)) {
+				lp->deliver(lp->worker_id, out.iid, out.value.paxos_value_val,
+						out.value.paxos_value_len, lp->deliver_arg);
+				RTE_LOG(DEBUG, USER1, "Finished instance %u\n", rte_be_to_cpu_32(paxos_hdr->inst));
+        paxos_hdr->inst = rte_cpu_to_be_32(lp->cur_inst++);
+  			paxos_hdr->msgtype = rte_cpu_to_be_16(PAXOS_ACCEPT);
+			}
+			else {
+				rte_pktmbuf_free(pkt_in);
+			}
+			break;
+		}
+		default: {
+			RTE_LOG(DEBUG, USER1, "No handler for %u\n", msgtype);
+			rte_pktmbuf_free(pkt_in);
+		}
+	}
 }

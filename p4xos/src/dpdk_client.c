@@ -98,13 +98,15 @@ set_paxos_hdr(struct paxos_hdr *px, uint32_t inst, char* value, int size) {
 }
 
 static void
-prepare_message(struct rte_mbuf *created_pkt, uint16_t port, uint32_t inst, char* value, int size) {
+prepare_message(struct rte_mbuf *created_pkt, uint16_t port, uint32_t src_addr,
+		uint32_t dst_addr, uint32_t inst, char* value, int size) {
+
 	struct ether_hdr *eth = rte_pktmbuf_mtod_offset(created_pkt, struct ether_hdr *, 0);
 	set_ether_hdr(eth, ETHER_TYPE_IPv4, &mac1_addr, &mac2_addr);
 	size_t ip_offset = sizeof(struct ether_hdr);
 	struct ipv4_hdr *ip = rte_pktmbuf_mtod_offset(created_pkt, struct ipv4_hdr *, ip_offset);
 
-	set_ipv4_hdr(ip, IPPROTO_UDP, app.p4xos_conf.src_addr, app.p4xos_conf.dst_addr);
+	set_ipv4_hdr(ip, IPPROTO_UDP, src_addr, dst_addr);
 
 	size_t udp_offset = ip_offset + sizeof(struct ipv4_hdr);
 
@@ -138,8 +140,34 @@ void submit(char* value, int size)
 	lp->tx.mbuf_out[port].array[mbuf_idx] = rte_pktmbuf_alloc(app.lcore_params[lcore].pool);
 	struct rte_mbuf* pkt = lp->tx.mbuf_out[port].array[mbuf_idx];
 	if (pkt != NULL) {
-		prepare_message(pkt, port, mbuf_idx, value, size);
+		prepare_message(pkt, port, app.p4xos_conf.src_addr, app.p4xos_conf.dst_addr, mbuf_idx+1, value, size);
 	}
 	lp->tx.mbuf_out_flush[port] = 1;
 	lp->tx.mbuf_out[port].n_mbufs++;
+}
+
+void submit_all_ports(char* value, int size)
+{
+    uint32_t lcore;
+    uint16_t port;
+		struct app_lcore_params_io *lp;
+		for (port = 0; port < APP_MAX_NIC_PORTS; port ++) {
+
+			if (app.nic_tx_port_mask[port] == 0) {
+				continue;
+			}
+			app_get_lcore_for_nic_tx(port, &lcore);
+	    lp = &app.lcore_params[lcore].io;
+			uint32_t mbuf_idx = lp->tx.mbuf_out[port].n_mbufs;
+			lp->tx.mbuf_out[port].array[mbuf_idx] = rte_pktmbuf_alloc(app.lcore_params[lcore].pool);
+			struct rte_mbuf* pkt = lp->tx.mbuf_out[port].array[mbuf_idx];
+			if (pkt != NULL) {
+				if (port % 2)
+					prepare_message(pkt, port, app.p4xos_conf.src_addr, app.p4xos_conf.dst_addr, mbuf_idx+1, value, size);
+				else
+					prepare_message(pkt, port, app.p4xos_conf.dst_addr, app.p4xos_conf.src_addr, mbuf_idx+1, value, size);
+			}
+			lp->tx.mbuf_out_flush[port] = 1;
+			lp->tx.mbuf_out[port].n_mbufs++;
+		}
 }
