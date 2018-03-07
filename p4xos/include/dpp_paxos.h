@@ -5,6 +5,11 @@
 extern "C" {
 #endif
 
+#define PAXOS_RESET 0x07
+#define PAXOS_BEGIN	0xBB
+#define PAXOS_FINISHED	0xFF
+#define PAXOS_ACCEPT_FAST	0x08
+
 struct paxos_hdr {
 	uint16_t msgtype;
 	uint32_t inst;

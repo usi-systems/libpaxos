@@ -109,9 +109,6 @@ static int filter_packets(struct rte_mbuf *pkt_in) {
 	return 0;
 }
 
-#define PAXOS_BEGIN	0xBB
-#define PAXOS_FINISHED	0xFF
-
 void
 proposer_handler(struct rte_mbuf *pkt_in, void *arg)
 {
@@ -306,7 +303,7 @@ learner_handler(struct rte_mbuf *pkt_in, void *arg)
 				lp->deliver(lp->worker_id, out.iid, out.value.paxos_value_val,
 						out.value.paxos_value_len, lp->deliver_arg);
 				//RTE_LOG(DEBUG, USER1, "Finished instance %u\n", rte_be_to_cpu_32(paxos_hdr->inst));
-				paxos_hdr->msgtype = rte_cpu_to_be_16(PAXOS_FINISHED);
+				paxos_hdr->msgtype = rte_cpu_to_be_16(PAXOS_ACCEPT_FAST);
 			}
 			else {
 				rte_pktmbuf_free(pkt_in);
@@ -321,6 +318,44 @@ learner_handler(struct rte_mbuf *pkt_in, void *arg)
 }
 
 void
+learner_call_deliver(__rte_unused struct rte_timer *timer, __rte_unused void *arg)
+{
+    struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
+    paxos_accepted out;
+    while (learner_deliver_next(lp->learner, &out)) {
+        lp->deliver(lp->worker_id, out.iid, out.value.paxos_value_val,
+                out.value.paxos_value_len, lp->deliver_arg);
+        RTE_LOG(DEBUG, USER1, "Finished instance %u\n", out.iid);
+        submit(out.value.paxos_value_val, out.value.paxos_value_len);
+        paxos_accepted_destroy(&out);
+    }
+}
+
+void
+learner_check_holes(__rte_unused struct rte_timer *timer, __rte_unused void *arg)
+{
+    struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
+    if (lp->has_holes) {
+        paxos_accepted out;
+        while (learner_deliver_next(lp->learner, &out)) {
+            lp->deliver(lp->worker_id, out.iid, out.value.paxos_value_val,
+                out.value.paxos_value_len, lp->deliver_arg);
+                RTE_LOG(DEBUG, USER1, "%s Finished instance %u\n", __func__, out.iid);
+                submit(out.value.paxos_value_val, out.value.paxos_value_len);
+                paxos_accepted_destroy(&out);
+        }
+        lp->has_holes = 0;
+    }
+    uint32_t from, to;
+    if (learner_has_holes(lp->learner, &from, &to)) {
+        lp->has_holes = 1;
+        RTE_LOG(INFO, USER1, "Holes from %u to %u\n", from, to);
+        uint32_t prepare_size = to - from;
+        send_accept(lp, from, prepare_size, lp->default_value, lp->default_value_len);
+    }
+}
+
+void
 proposer_learner_handler(struct rte_mbuf *pkt_in, void *arg)
 {
 	struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
@@ -332,6 +367,8 @@ proposer_learner_handler(struct rte_mbuf *pkt_in, void *arg)
 		rte_pktmbuf_free(pkt_in);
 		return;
 	}
+    size_t ip_offset = sizeof(struct ether_hdr);
+    struct ipv4_hdr *ip = rte_pktmbuf_mtod_offset(pkt_in, struct ipv4_hdr *, ip_offset);
 	size_t paxos_offset = get_paxos_offset();
 	struct paxos_hdr *paxos_hdr = rte_pktmbuf_mtod_offset(pkt_in, struct paxos_hdr *, paxos_offset);
 	// rte_hexdump(stdout, "Paxos", paxos_hdr, sizeof(struct paxos_hdr));
@@ -360,7 +397,7 @@ proposer_learner_handler(struct rte_mbuf *pkt_in, void *arg)
 			break;
 		}
 		case PAXOS_ACCEPTED: {
-      uint64_t previous = rte_be_to_cpu_64(paxos_hdr->igress_ts);
+            uint64_t previous = rte_be_to_cpu_64(paxos_hdr->igress_ts);
 			if (previous > 0) {
 				uint64_t now = rte_get_timer_cycles();
 				uint64_t latency = now - previous;
@@ -378,22 +415,23 @@ proposer_learner_handler(struct rte_mbuf *pkt_in, void *arg)
 			};
 
 			learner_receive_accepted(lp->learner, &ack);
-			paxos_accepted out;
-			if (learner_deliver_next(lp->learner, &out)) {
-				lp->deliver(lp->worker_id, out.iid, out.value.paxos_value_val,
-						out.value.paxos_value_len, lp->deliver_arg);
-				RTE_LOG(DEBUG, USER1, "Finished instance %u\n", rte_be_to_cpu_32(paxos_hdr->inst));
-        paxos_hdr->inst = rte_cpu_to_be_32(lp->cur_inst++);
-  			paxos_hdr->msgtype = rte_cpu_to_be_16(PAXOS_ACCEPT);
-			}
-			else {
-				rte_pktmbuf_free(pkt_in);
-			}
+            paxos_accepted out;
+            if (learner_deliver_next(lp->learner, &out)) {
+                lp->deliver(lp->worker_id, out.iid, out.value.paxos_value_val,
+                        out.value.paxos_value_len, lp->deliver_arg);
+                RTE_LOG(DEBUG, USER1, "Finished instance %u\n", out.iid);
+                paxos_hdr->msgtype = rte_cpu_to_be_16(PAXOS_ACCEPT_FAST);
+                paxos_accepted_destroy(&out);
+            } else {
+                ip->dst_addr = 0;
+                // rte_pktmbuf_free(pkt_in);
+            }
 			break;
 		}
 		default: {
+            ip->dst_addr = 0;
 			RTE_LOG(DEBUG, USER1, "No handler for %u\n", msgtype);
-			rte_pktmbuf_free(pkt_in);
+			// rte_pktmbuf_free(pkt_in);
 		}
 	}
 }

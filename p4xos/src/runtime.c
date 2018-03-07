@@ -514,13 +514,15 @@ app_lcore_worker(
 			ipv4_hdr = rte_pktmbuf_mtod_offset(pkt,
 							   struct ipv4_hdr *,
 							   sizeof(struct ether_hdr));
-			ipv4_dst = rte_be_to_cpu_32(ipv4_hdr->dst_addr);
 
+
+			lp->process_pkt(pkt, lp);
+
+			ipv4_dst = rte_be_to_cpu_32(ipv4_hdr->dst_addr);
 			// char str[INET_ADDRSTRLEN];
 			// inet_ntop(AF_INET, &(ipv4_hdr->dst_addr), str, INET_ADDRSTRLEN);
 			// printf("Match destIP %s\n", str);
 			// printf("[port %u] : ", pkt->port);
-			lp->process_pkt(pkt, lp);
 
 			if (unlikely(rte_lpm_lookup(lp->lpm_table, ipv4_dst, &port) != 0)) {
 				// port = pkt->port;
@@ -542,7 +544,7 @@ app_lcore_worker(
 					/* Prepare output packet and send it out. */
 					if ((port_mask & 1) != 0) {
 
-						// printf("Port %u -> %u\n", pkt->port, port);
+						RTE_LOG(DEBUG, USER1, "Port %u -> %u\n", pkt->port, port);
 						pos = lp->mbuf_out[port].n_mbufs;
 
 						lp->mbuf_out[port].array[pos ++] = pkt;

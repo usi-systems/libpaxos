@@ -85,6 +85,7 @@ static const char usage[] =
 "    --msgtype MSGTYPE : Type of p4xos packets (default value is %u)            \n"
 "    --multi-dbs : Enabling multiple instance of DBs (default value is %u)      \n"
 "    --port [PORT]: TX port Proposers use initially (default value is %u)       \n"
+"    --num-ac NUM: Number of acceptors (default value is %u)                    \n"
 "    --acceptor-id : Acceptor ID (default value is %u)                          \n"
 "    --osd NUM : The number of packets will be sent at beginning (default value \n"
 "                is %u)                                                         \n"
@@ -111,6 +112,7 @@ app_print_usage(void)
 		APP_DEFAULT_MESSAGE_TYPE,
 		APP_DEFAULT_MULTIPLE_DBS,
 		APP_DEFAULT_TX_PORT,
+		APP_DEFAULT_NUM_ACCEPTORS,
 		APP_DEFAULT_ACCEPTOR_ID,
 		APP_DEFAULT_OUTSTANDING,
 		APP_DEFAULT_IP_SRC_ADDR,

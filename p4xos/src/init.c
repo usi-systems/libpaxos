@@ -99,7 +99,10 @@ void
 app_init_learner(void)
 {
 	uint32_t lcore;
-
+	int ret;
+	rte_timer_subsystem_init();
+	/* fetch default timer frequency. */
+	app.hz = rte_get_timer_hz();
 	/* Create a learner for each worker */
 	for (lcore = 0; lcore < APP_MAX_LCORES; lcore ++) {
 		struct app_lcore_params_worker *lp = &app.lcore_params[lcore].worker;
@@ -111,6 +114,23 @@ app_init_learner(void)
 		lp->learner = learner_new(app.p4xos_conf.num_acceptors);
 		learner_set_instance_id(lp->learner, 0);
 		lp->cur_inst = app.p4xos_conf.osd + 1;
+
+		uint64_t freq = app.hz;
+
+		// rte_timer_init(&lp->deliver_timer);
+        //
+		// ret = rte_timer_reset(&lp->deliver_timer, freq, PERIODICAL, lcore,
+		// 			learner_call_deliver, lp);
+		// if (ret < 0) {
+		// 	printf("timer is in the RUNNING state\n");
+		// }
+
+		rte_timer_init(&lp->check_hole_timer);
+		ret = rte_timer_reset(&lp->check_hole_timer, freq, PERIODICAL, lcore,
+					learner_check_holes, lp);
+		if (ret < 0) {
+			printf("timer is in the RUNNING state\n");
+		}
 	}
 }
 
@@ -606,5 +626,19 @@ void app_set_stat_callback(rte_timer_cb_t  stat_callback, void* arg) {
 			printf("timer is in the RUNNING state\n");
 		}
 		break;
+	}
+}
+
+void app_set_default_value(char *arg, uint32_t vlen) {
+	uint32_t lcore;
+
+	for (lcore = 0; lcore < APP_MAX_LCORES; lcore ++) {
+		struct app_lcore_params_worker *lp = &app.lcore_params[lcore].worker;
+
+		if (app.lcore_params[lcore].type != e_APP_LCORE_WORKER) {
+			continue;
+		}
+		lp->default_value = arg;
+		lp->default_value_len = vlen;
 	}
 }

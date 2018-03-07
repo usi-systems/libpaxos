@@ -84,14 +84,16 @@ set_udp_hdr(struct udp_hdr *udp, uint16_t src_port, uint16_t dst_port, uint16_t 
 }
 
 static void
-set_paxos_hdr(struct paxos_hdr *px, uint32_t inst, char* value, int size) {
-	px->msgtype = rte_cpu_to_be_16(app.p4xos_conf.msgtype);
+set_paxos_hdr(struct paxos_hdr *px, uint16_t msgtype, uint32_t inst, char* value, int size) {
+	px->msgtype = rte_cpu_to_be_16(msgtype);
 	px->inst = rte_cpu_to_be_32(inst);
 	px->rnd = rte_cpu_to_be_16(0);
 	px->vrnd = rte_cpu_to_be_16(0);
 	px->acptid = rte_cpu_to_be_16(0);
 	px->value_len = rte_cpu_to_be_32(size);
-    rte_memcpy(&px->value, value, size);
+	if (size > 0 && value != NULL) {
+		rte_memcpy(&px->value, value, size);
+	}
 	uint64_t igress_ts = (inst % (app.p4xos_conf.osd-1) == 0) ? rte_get_timer_cycles() : 0;
 	px->igress_ts = rte_cpu_to_be_64(igress_ts);
 	px->egress_ts = rte_cpu_to_be_64(0);
@@ -99,7 +101,7 @@ set_paxos_hdr(struct paxos_hdr *px, uint32_t inst, char* value, int size) {
 
 static void
 prepare_message(struct rte_mbuf *created_pkt, uint16_t port, uint32_t src_addr,
-		uint32_t dst_addr, uint32_t inst, char* value, int size) {
+		uint32_t dst_addr, uint16_t msgtype, uint32_t inst, char* value, int size) {
 
 	struct ether_hdr *eth = rte_pktmbuf_mtod_offset(created_pkt, struct ether_hdr *, 0);
 	set_ether_hdr(eth, ETHER_TYPE_IPv4, &mac1_addr, &mac2_addr);
@@ -116,7 +118,7 @@ prepare_message(struct rte_mbuf *created_pkt, uint16_t port, uint32_t src_addr,
 
 	size_t paxos_offset = udp_offset + sizeof(struct udp_hdr);
 	struct paxos_hdr *px = rte_pktmbuf_mtod_offset(created_pkt, struct paxos_hdr *, paxos_offset);
-	set_paxos_hdr(px, inst, value, size);
+	set_paxos_hdr(px, msgtype, inst, value, size);
 	size_t data_size = sizeof(struct paxos_hdr);
 	size_t l4_len = sizeof(struct udp_hdr) + data_size;
 	size_t pkt_size = paxos_offset + sizeof(struct paxos_hdr);
@@ -130,6 +132,80 @@ prepare_message(struct rte_mbuf *created_pkt, uint16_t port, uint32_t src_addr,
 	udp->dgram_cksum = rte_ipv4_phdr_cksum(ip, created_pkt->ol_flags);
 }
 
+void reset_leader_instance(void)
+{
+    uint32_t lcore;
+    uint16_t port = app.p4xos_conf.tx_port;
+    app_get_lcore_for_nic_tx(port, &lcore);
+    struct app_lcore_params_io *lp = &app.lcore_params[lcore].io;
+	uint32_t mbuf_idx = lp->tx.mbuf_out[port].n_mbufs;
+	if (mbuf_idx >= APP_MBUF_ARRAY_SIZE) {
+		return;
+	}
+	lp->tx.mbuf_out[port].array[mbuf_idx] = rte_pktmbuf_alloc(app.lcore_params[lcore].pool);
+	struct rte_mbuf* pkt = lp->tx.mbuf_out[port].array[mbuf_idx];
+	if (pkt != NULL) {
+		prepare_message(pkt, port, app.p4xos_conf.src_addr, app.p4xos_conf.dst_addr, PAXOS_RESET, mbuf_idx, NULL, 0);
+	}
+	lp->tx.mbuf_out_flush[port] = 1;
+	lp->tx.mbuf_out[port].n_mbufs++;
+}
+
+
+void
+send_accept(struct app_lcore_params_worker *lp, uint32_t inst, uint32_t prepare_size, char* value, int size)
+{
+	uint16_t port;
+	uint32_t lcore_io;
+	int ret;
+	uint32_t pos;
+	for (port = 1; port < APP_MAX_NIC_PORTS; port ++) {
+
+		if (app.nic_tx_port_mask[port] == 0) {
+			continue;
+		}
+
+		if (app_get_lcore_for_nic_tx(port, &lcore_io) < 0) {
+			rte_panic("Algorithmic error (no I/O core to handle TX of port %u)\n",
+				port);
+		}
+
+		struct rte_mbuf* prepare_pkts[prepare_size];
+		ret = rte_pktmbuf_alloc_bulk(app.lcore_params[lcore_io].pool, prepare_pkts, prepare_size);
+
+		if (ret < 0) {
+			RTE_LOG(INFO, USER1, "Not enough entries in the mempools for PREPARE\n");
+			return;
+		}
+
+		uint32_t i;
+		for (i = 0; i < prepare_size; i++) {
+			prepare_message(prepare_pkts[i], port, app.p4xos_conf.src_addr, app.p4xos_conf.dst_addr, PAXOS_ACCEPT, inst+i, value, size);
+
+			pos = lp->mbuf_out[port].n_mbufs;
+
+			lp->mbuf_out[port].array[pos ++] = prepare_pkts[i];
+			lp->mbuf_out[port].n_mbufs = pos;
+		}
+		ret = rte_ring_sp_enqueue_bulk(
+			lp->rings_out[port],
+			(void **) lp->mbuf_out[port].array,
+			prepare_size,
+			NULL);
+
+		if (unlikely(ret == 0)) {
+			uint32_t k;
+			for (k = 0; k < prepare_size; k ++) {
+				struct rte_mbuf *pkt_to_free = lp->mbuf_out[port].array[k];
+				rte_pktmbuf_free(pkt_to_free);
+			}
+		}
+		lp->mbuf_out[port].n_mbufs = 0;
+		lp->mbuf_out_flush[port] = 0;
+	}
+}
+
+
 void submit(char* value, int size)
 {
     uint32_t lcore;
@@ -140,7 +216,7 @@ void submit(char* value, int size)
 	lp->tx.mbuf_out[port].array[mbuf_idx] = rte_pktmbuf_alloc(app.lcore_params[lcore].pool);
 	struct rte_mbuf* pkt = lp->tx.mbuf_out[port].array[mbuf_idx];
 	if (pkt != NULL) {
-		prepare_message(pkt, port, app.p4xos_conf.src_addr, app.p4xos_conf.dst_addr, mbuf_idx+1, value, size);
+		prepare_message(pkt, port, app.p4xos_conf.src_addr, app.p4xos_conf.dst_addr, app.p4xos_conf.msgtype, mbuf_idx, value, size);
 	}
 	lp->tx.mbuf_out_flush[port] = 1;
 	lp->tx.mbuf_out[port].n_mbufs++;
@@ -157,15 +233,15 @@ void submit_all_ports(char* value, int size)
 				continue;
 			}
 			app_get_lcore_for_nic_tx(port, &lcore);
-	    lp = &app.lcore_params[lcore].io;
+		    lp = &app.lcore_params[lcore].io;
 			uint32_t mbuf_idx = lp->tx.mbuf_out[port].n_mbufs;
 			lp->tx.mbuf_out[port].array[mbuf_idx] = rte_pktmbuf_alloc(app.lcore_params[lcore].pool);
 			struct rte_mbuf* pkt = lp->tx.mbuf_out[port].array[mbuf_idx];
 			if (pkt != NULL) {
 				if (port % 2)
-					prepare_message(pkt, port, app.p4xos_conf.src_addr, app.p4xos_conf.dst_addr, mbuf_idx+1, value, size);
+					prepare_message(pkt, port, app.p4xos_conf.src_addr, app.p4xos_conf.dst_addr, app.p4xos_conf.msgtype, mbuf_idx, value, size);
 				else
-					prepare_message(pkt, port, app.p4xos_conf.dst_addr, app.p4xos_conf.src_addr, mbuf_idx+1, value, size);
+					prepare_message(pkt, port, app.p4xos_conf.dst_addr, app.p4xos_conf.src_addr, app.p4xos_conf.msgtype, mbuf_idx, value, size);
 			}
 			lp->tx.mbuf_out_flush[port] = 1;
 			lp->tx.mbuf_out[port].n_mbufs++;

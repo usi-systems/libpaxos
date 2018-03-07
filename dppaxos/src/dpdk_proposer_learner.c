@@ -130,6 +130,8 @@ static void
 stat_cb(__rte_unused struct rte_timer *timer, __rte_unused void *arg)
 {
 	uint32_t lcore = 0;
+	uint32_t nb_delivery = 0, nb_latency = 0;
+	uint64_t latency = 0;
 	uint64_t total_pkts = 0, total_bytes = 0;
 	uint32_t i;
 
@@ -144,20 +146,41 @@ stat_cb(__rte_unused struct rte_timer *timer, __rte_unused void *arg)
 		total_bytes += lp->total_bytes;
 		lp->total_pkts = 0;
 		lp->total_bytes = 0;
+		nb_latency += lp->nb_latency;
+		nb_delivery += lp->nb_delivery;
+		latency += lp->latency;
+		lp->nb_latency = 0;
+		lp->nb_delivery = 0;
+		lp->latency = 0;
 	}
 
 	struct rocksdb_params *rocks = (struct rocksdb_params *)arg;
 	uint32_t delivered_count = 0;
 	for (i = 0; i < rocks->num_workers; i++) {
 		delivered_count += rocks->delivered_count[i];
-		printf("Worker %u: delivered %u\t", i, rocks->delivered_count[i]);
+		if (rocks->delivered_count[i] > 0) {
+			printf("Worker %u: delivered %u\t", i, rocks->delivered_count[i]);
+		}
 		rocks->delivered_count[i] = 0;
 	}
 	if (delivered_count > 0) {
+		double avg_cycle_latency = (double) latency / (double) nb_latency;
+		double avg_ns_latency = avg_cycle_latency * NS_PER_S / app.hz;
 		printf("\nThroughput = %"PRIu64" pkts, %2.1f Gbits; "
-				"Learner Throughput %u\n",
+				"Learner Throughput %u\n"
+				"Avg latency = %.2f cycles ~ %.1f ns\n",
 				total_pkts, bytes_to_gbits(total_bytes),
-				delivered_count);
+				delivered_count,
+				avg_cycle_latency, avg_ns_latency);
+	}
+	 else {
+		struct app_hdr ap;
+		uint32_t i;
+		for (i = 1; i < app.p4xos_conf.osd; i++) {
+			set_app_hdr(&ap, i);
+			// submit_all_ports((char*)&ap, sizeof(struct app_hdr));
+			submit((char*)&ap, sizeof(struct app_hdr));
+		}
 	}
 }
 
@@ -189,12 +212,17 @@ main(int argc, char **argv)
 	app_set_deliver_callback(deliver, &rocks);
 	app_set_worker_callback(proposer_learner_handler);
 	app_set_stat_callback(stat_cb, &rocks);
+
 	struct app_hdr ap;
 	uint32_t i;
-	for (i = 1; i <= app.p4xos_conf.osd; i++) {
+	reset_leader_instance();
+	for (i = 1; i < app.p4xos_conf.osd; i++) {
 		set_app_hdr(&ap, i);
-		submit_all_ports((char*)&ap, sizeof(struct app_hdr));
+		// submit_all_ports((char*)&ap, sizeof(struct app_hdr));
+		submit((char*)&ap, sizeof(struct app_hdr));
 	}
+	app_set_default_value((char*)&ap, sizeof(struct app_hdr));
+
 	/* Launch per-lcore init on every lcore */
 	rte_eal_mp_remote_launch(app_lcore_main_loop, NULL, CALL_MASTER);
 	RTE_LCORE_FOREACH_SLAVE(lcore) {

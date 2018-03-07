@@ -365,7 +365,12 @@ struct app_lcore_params_worker {
 	uint64_t total_bytes;
 	uint64_t accepted_count;
 	uint32_t cur_inst;
+	uint32_t has_holes;
 	struct rte_timer stat_timer;
+	struct rte_timer deliver_timer;
+	struct rte_timer check_hole_timer;
+	char* default_value;
+	uint32_t default_value_len;
 };
 
 struct app_lcore_params {
@@ -452,7 +457,12 @@ void app_set_stat_callback(rte_timer_cb_t, void *arg);
 void app_init_learner(void);
 void app_init_acceptor(void);
 void app_init_leader(void);
+void app_set_default_value(char *arg, uint32_t vlen);
+void learner_call_deliver(struct rte_timer *timer, void *arg);
+void learner_check_holes(struct rte_timer *timer, void *arg);
+void reset_leader_instance(void);
 double bytes_to_gbits(uint64_t bytes);
+void send_accept(struct app_lcore_params_worker *lp, uint32_t inst, uint32_t prepare_size, char* value, int size);
 
 #ifdef __cplusplus
 }  /* end extern "C" */
