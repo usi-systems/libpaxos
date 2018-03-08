@@ -129,7 +129,7 @@ void deliver(unsigned int worker_id, unsigned int __rte_unused inst, __rte_unuse
 
 	if (app.p4xos_conf.checkpoint_interval > 0 && (inst % app.p4xos_conf.checkpoint_interval == 0)) {
 		char cp_path[DB_NAME_LENGTH];
-		snprintf(cp_path, DB_NAME_LENGTH, "%s/checkpoints/%u", DBPath, inst);
+		snprintf(cp_path, DB_NAME_LENGTH, "%s/checkpoints/worker-%u-inst-%u", DBPath, worker_id, inst);
 		rocksdb_checkpoint_create(rocks->cp[worker_id], cp_path, log_size_for_flush, &err);
 		if (err != NULL) {
 			printf("Checkpoint Error: %s\n", err);
@@ -218,10 +218,11 @@ main(int argc, char **argv)
 	/* Init */
 	app_init();
 	app_init_learner();
+	app_init_acceptor();
 	app_print_params();
 	init_rocksdb();
 	app_set_deliver_callback(deliver, &rocks);
-	app_set_worker_callback(proposer_learner_handler);
+	app_set_worker_callback(replica_handler);
 	app_set_stat_callback(stat_cb, &rocks);
 
 	struct app_hdr ap;
@@ -230,7 +231,11 @@ main(int argc, char **argv)
 	for (i = 0; i < app.p4xos_conf.osd; i++) {
 		set_app_hdr(&ap, i, WRITE_OP, sizeof(DEFAULT_KEY), DEFAULT_KEY, sizeof(DEFAULT_VALUE), DEFAULT_VALUE);
 		// submit_all_ports((char*)&ap, sizeof(struct app_hdr));
-		submit((char*)&ap, sizeof(struct app_hdr));
+		if (app.p4xos_conf.all_ports) {
+			submit_all_ports((char*)&ap, sizeof(struct app_hdr));
+		} else {
+			submit((char*)&ap, sizeof(struct app_hdr));
+		}
 	}
 	app_set_default_value((char*)&ap, sizeof(struct app_hdr));
 

@@ -221,8 +221,7 @@ void submit(char* value, int size)
 	lp->tx.mbuf_out[port].array[mbuf_idx] = rte_pktmbuf_alloc(app.lcore_params[lcore].pool);
 	struct rte_mbuf* pkt = lp->tx.mbuf_out[port].array[mbuf_idx];
 	if (pkt != NULL) {
-		uint32_t inst = mbuf_idx + 1;
-		prepare_message(pkt, port, app.p4xos_conf.src_addr, app.p4xos_conf.dst_addr, app.p4xos_conf.msgtype, inst, value, size);
+		prepare_message(pkt, port, app.p4xos_conf.src_addr, app.p4xos_conf.dst_addr, app.p4xos_conf.msgtype, mbuf_idx, value, size);
 	}
 	lp->tx.mbuf_out_flush[port] = 1;
 	lp->tx.mbuf_out[port].n_mbufs++;

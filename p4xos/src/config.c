@@ -86,6 +86,7 @@ static const char usage[] =
 "    --multi-dbs : Enabling multiple instance of DBs (default value is %u)      \n"
 "    --inc-inst : Proposer increases instance after receiving a response        \n"
 "					(default value is %u)                                       \n"
+"    --all-ports : Submit values using all ports (default value is %u)          \n"
 "    --port [PORT]: TX port Proposers use initially (default value is %u)       \n"
 "    --num-ac NUM: Number of acceptors (default value is %u)                    \n"
 "    --acceptor-id : Acceptor ID (default value is %u)                          \n"
@@ -115,6 +116,7 @@ app_print_usage(void)
 		APP_DEFAULT_MESSAGE_TYPE,
 		APP_DEFAULT_MULTIPLE_DBS,
 		APP_DEFAULT_INCREASE_INST,
+		APP_DEFAULT_SUBMIT_ALL_PORTS,
 		APP_DEFAULT_TX_PORT,
 		APP_DEFAULT_NUM_ACCEPTORS,
 		APP_DEFAULT_ACCEPTOR_ID,
@@ -688,6 +690,7 @@ app_parse_args(int argc, char **argv)
 		{"port", 1, 0, 0},
 		{"multi-dbs", 0, 0, 0},
 		{"inc-inst", 0, 0, 0},
+		{"all-ports", 0, 0, 0},
 		{"osd", 1, 0, 0},
 		{"src", 1, 0, 0},
 		{"dst", 1, 0, 0},
@@ -710,6 +713,7 @@ app_parse_args(int argc, char **argv)
 	uint16_t acceptor_id = 0;
 	uint8_t arg_multi_dbs = 0;
 	uint8_t arg_inc_inst = 0;
+	uint8_t arg_all_ports = 0;
 	uint8_t arg_checkpoint_interval = 0;
 	argvopt = argv;
 
@@ -815,6 +819,10 @@ app_parse_args(int argc, char **argv)
 				arg_inc_inst = 1;
 				app.p4xos_conf.inc_inst = 1;
 			}
+			if (!strcmp(lgopts[option_index].name, "all-ports")) {
+				arg_all_ports = 1;
+				app.p4xos_conf.all_ports = 1;
+			}
 			if (!strcmp(lgopts[option_index].name, "osd")) {
 				osd = 1;
 				ret = parse_arg_uint32(optarg, &(app.p4xos_conf.osd));
@@ -919,6 +927,10 @@ app_parse_args(int argc, char **argv)
 
 	if (arg_checkpoint_interval == 0) {
 		app.p4xos_conf.checkpoint_interval = APP_DEFAULT_CHECKPOINT_INTERVAL;
+	}
+
+	if (arg_all_ports == 0) {
+		app.p4xos_conf.all_ports = APP_DEFAULT_SUBMIT_ALL_PORTS;
 	}
 
 	/* Check cross-consistency of arguments */

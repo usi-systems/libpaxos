@@ -355,31 +355,44 @@ learner_check_holes(__rte_unused struct rte_timer *timer, __rte_unused void *arg
     }
 }
 
-void
-proposer_learner_handler(struct rte_mbuf *pkt_in, void *arg)
-{
-	struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
-	lp->total_pkts++;
-	lp->total_bytes += pkt_in->pkt_len;
-	int ret = filter_packets(pkt_in);
-	if (ret < 0) {
-		// RTE_LOG(DEBUG, USER1, "Drop packets. Code %d\n", ret);
-		rte_pktmbuf_free(pkt_in);
-		return;
-	}
-    size_t ip_offset = sizeof(struct ether_hdr);
-    struct ipv4_hdr *ip = rte_pktmbuf_mtod_offset(pkt_in, struct ipv4_hdr *, ip_offset);
-	size_t paxos_offset = get_paxos_offset();
-	struct paxos_hdr *paxos_hdr = rte_pktmbuf_mtod_offset(pkt_in, struct paxos_hdr *, paxos_offset);
-	// rte_hexdump(stdout, "Paxos", paxos_hdr, sizeof(struct paxos_hdr));
-	size_t data_size = sizeof(struct paxos_hdr);
-	prepare_hw_checksum(pkt_in, data_size);
-	uint16_t msgtype = rte_be_to_cpu_16(paxos_hdr->msgtype);
+static inline int
+handle_paxos_messages(struct paxos_hdr *paxos_hdr, struct app_lcore_params_worker *lp) {
+    int ret = 0;
+    uint16_t msgtype = rte_be_to_cpu_16(paxos_hdr->msgtype);
 	uint32_t inst = rte_be_to_cpu_32(paxos_hdr->inst);
-	RTE_LOG(DEBUG, USER1, "in PORT %u, msgtype %u, instance %u\n", pkt_in->port, msgtype, inst);
-
+	RTE_LOG(DEBUG, USER1, "msgtype %u, instance %u\n", msgtype, inst);
 	switch(msgtype)
 	{
+        case PAXOS_PREPARE: {
+			struct paxos_prepare prepare = {
+				.iid = rte_be_to_cpu_32(paxos_hdr->inst),
+				.ballot = rte_be_to_cpu_16(paxos_hdr->rnd),
+			};
+			paxos_message out;
+			if (acceptor_receive_prepare(lp->acceptor, &prepare, &out) != 0) {
+				paxos_hdr->msgtype = rte_cpu_to_be_16(out.type);
+				paxos_hdr->acptid = rte_cpu_to_be_16(app.p4xos_conf.acceptor_id);
+			}
+			break;
+		}
+		case PAXOS_ACCEPT: {
+			int vsize = rte_be_to_cpu_32(paxos_hdr->value_len);
+			struct paxos_accept accept = {
+				.iid = rte_be_to_cpu_32(paxos_hdr->inst),
+				.ballot = rte_be_to_cpu_16(paxos_hdr->rnd),
+				.value_ballot = rte_be_to_cpu_16(paxos_hdr->vrnd),
+				.aid = rte_be_to_cpu_16(paxos_hdr->acptid),
+				.value = {vsize, (char*)&paxos_hdr->value}
+			};
+			paxos_message out;
+			if (acceptor_receive_accept(lp->acceptor, &accept, &out) != 0) {
+				paxos_hdr->msgtype = rte_cpu_to_be_16(out.type);
+				paxos_hdr->acptid = rte_cpu_to_be_16(app.p4xos_conf.acceptor_id);
+				lp->accepted_count++;
+				RTE_LOG(DEBUG, USER1, "Accepted instance %u\n", rte_be_to_cpu_32(paxos_hdr->inst));
+			}
+			break;
+		}
 		case PAXOS_PROMISE: {
 			int vsize = rte_be_to_cpu_32(paxos_hdr->value_len);
 			struct paxos_promise promise = {
@@ -393,7 +406,10 @@ proposer_learner_handler(struct rte_mbuf *pkt_in, void *arg)
 			ret = learner_receive_promise(lp->learner, &promise, &pa.u.accept);
 			if (ret) {
                 // TODO: Send Accept messages to acceptors
-			}
+                return -1;
+			} else {
+                return -2;
+            }
 			break;
 		}
 		case PAXOS_ACCEPTED: {
@@ -426,15 +442,42 @@ proposer_learner_handler(struct rte_mbuf *pkt_in, void *arg)
                 }
                 paxos_accepted_destroy(&out);
             } else {
-                ip->dst_addr = 0;
-                // rte_pktmbuf_free(pkt_in);
+                return -3;
             }
 			break;
 		}
 		default: {
-            ip->dst_addr = 0;
 			RTE_LOG(DEBUG, USER1, "No handler for %u\n", msgtype);
-			// rte_pktmbuf_free(pkt_in);
+			return -4;
 		}
 	}
+
+    return 0;
+}
+
+void
+replica_handler(struct rte_mbuf *pkt_in, void *arg)
+{
+	struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
+	lp->total_pkts++;
+	lp->total_bytes += pkt_in->pkt_len;
+	int ret = filter_packets(pkt_in);
+	if (ret < 0) {
+		// RTE_LOG(DEBUG, USER1, "Drop packets. Code %d\n", ret);
+		rte_pktmbuf_free(pkt_in);
+		return;
+	}
+    size_t ip_offset = sizeof(struct ether_hdr);
+    struct ipv4_hdr *ip = rte_pktmbuf_mtod_offset(pkt_in, struct ipv4_hdr *, ip_offset);
+	size_t paxos_offset = get_paxos_offset();
+	struct paxos_hdr *paxos_hdr = rte_pktmbuf_mtod_offset(pkt_in, struct paxos_hdr *, paxos_offset);
+	// rte_hexdump(stdout, "Paxos", paxos_hdr, sizeof(struct paxos_hdr));
+	size_t data_size = sizeof(struct paxos_hdr);
+	prepare_hw_checksum(pkt_in, data_size);
+    RTE_LOG(DEBUG, USER1, "in PORT %u\n", pkt_in->port);
+    ret = handle_paxos_messages(paxos_hdr, lp);
+    if (ret < 0) {
+        ip->dst_addr = 0;
+        // rte_pktmbuf_free(pkt_in);
+    }
 }

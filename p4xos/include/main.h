@@ -246,6 +246,7 @@
 #define APP_DEFAULT_TX_PORT 0
 #define APP_DEFAULT_ACCEPTOR_ID 0
 #define APP_DEFAULT_CHECKPOINT_INTERVAL 0
+#define APP_DEFAULT_SUBMIT_ALL_PORTS 0
 #define APP_DEFAULT_OUTSTANDING	8
 
 #ifndef MAX_APP_MESSAGE_LEN
@@ -274,6 +275,7 @@ struct p4xos_configuration {
 	uint32_t dst_addr;
 	uint32_t osd;
 	uint8_t inc_inst;
+	uint8_t all_ports;
 	uint32_t checkpoint_interval;
 };
 
@@ -456,7 +458,7 @@ void learner_handler(struct rte_mbuf *pkt_in, void *arg);
 void proposer_handler(struct rte_mbuf *pkt_in, void *arg);
 void acceptor_handler(struct rte_mbuf *pkt_in, void *arg);
 void leader_handler(struct rte_mbuf *pkt_in, void *arg);
-void proposer_learner_handler(struct rte_mbuf *pkt_in, void *arg);
+void replica_handler(struct rte_mbuf *pkt_in, void *arg);
 void app_set_stat_callback(rte_timer_cb_t, void *arg);
 void app_init_learner(void);
 void app_init_acceptor(void);
