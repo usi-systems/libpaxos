@@ -84,9 +84,12 @@ static const char usage[] =
 "           packet (default value is %u)                                        \n"
 "    --msgtype MSGTYPE : Type of p4xos packets (default value is %u)            \n"
 "    --multi-dbs : Enabling multiple instance of DBs (default value is %u)      \n"
+"    --inc-inst : Proposer increases instance after receiving a response        \n"
+"					(default value is %u)                                       \n"
 "    --port [PORT]: TX port Proposers use initially (default value is %u)       \n"
 "    --num-ac NUM: Number of acceptors (default value is %u)                    \n"
 "    --acceptor-id : Acceptor ID (default value is %u)                          \n"
+"    --cp-interval NUM : The interval between checkpoints (default value is %u) \n"
 "    --osd NUM : The number of packets will be sent at beginning (default value \n"
 "                is %u)                                                         \n"
 "    --src \"IP\" : source IP address proposers uses to generate packets        \n"
@@ -111,9 +114,11 @@ app_print_usage(void)
 		APP_DEFAULT_IO_RX_LB_POS,
 		APP_DEFAULT_MESSAGE_TYPE,
 		APP_DEFAULT_MULTIPLE_DBS,
+		APP_DEFAULT_INCREASE_INST,
 		APP_DEFAULT_TX_PORT,
 		APP_DEFAULT_NUM_ACCEPTORS,
 		APP_DEFAULT_ACCEPTOR_ID,
+		APP_DEFAULT_CHECKPOINT_INTERVAL,
 		APP_DEFAULT_OUTSTANDING,
 		APP_DEFAULT_IP_SRC_ADDR,
 		APP_DEFAULT_IP_DST_ADDR
@@ -682,9 +687,11 @@ app_parse_args(int argc, char **argv)
 		{"msgtype", 1, 0, 0},
 		{"port", 1, 0, 0},
 		{"multi-dbs", 0, 0, 0},
+		{"inc-inst", 0, 0, 0},
 		{"osd", 1, 0, 0},
 		{"src", 1, 0, 0},
 		{"dst", 1, 0, 0},
+		{"cp-interval", 1, 0, 0},
 		{NULL, 0, 0, 0}
 	};
 	uint32_t arg_w = 0;
@@ -701,7 +708,9 @@ app_parse_args(int argc, char **argv)
 	uint16_t tx_port = 0;
 	uint16_t osd = 0;
 	uint16_t acceptor_id = 0;
-
+	uint8_t arg_multi_dbs = 0;
+	uint8_t arg_inc_inst = 0;
+	uint8_t arg_checkpoint_interval = 0;
 	argvopt = argv;
 
 	while ((opt = getopt_long(argc, argvopt, "",
@@ -799,13 +808,26 @@ app_parse_args(int argc, char **argv)
 				}
 			}
 			if (!strcmp(lgopts[option_index].name, "multi-dbs")) {
+				arg_multi_dbs = 1;
 				app.p4xos_conf.multi_dbs = 1;
+			}
+			if (!strcmp(lgopts[option_index].name, "inc-inst")) {
+				arg_inc_inst = 1;
+				app.p4xos_conf.inc_inst = 1;
 			}
 			if (!strcmp(lgopts[option_index].name, "osd")) {
 				osd = 1;
 				ret = parse_arg_uint32(optarg, &(app.p4xos_conf.osd));
 				if (ret) {
 					printf("Incorrect value for --osd argument (%d)\n", ret);
+					return -1;
+				}
+			}
+			if (!strcmp(lgopts[option_index].name, "cp-interval")) {
+				arg_checkpoint_interval = 1;
+				ret = parse_arg_uint32(optarg, &(app.p4xos_conf.checkpoint_interval));
+				if (ret) {
+					printf("Incorrect value for --cp-interval argument (%d)\n", ret);
 					return -1;
 				}
 			}
@@ -885,6 +907,18 @@ app_parse_args(int argc, char **argv)
 
 	if (tx_port == 0) {
 		app.p4xos_conf.tx_port = APP_DEFAULT_TX_PORT;
+	}
+
+	if (arg_multi_dbs == 0) {
+		app.p4xos_conf.multi_dbs = APP_DEFAULT_MULTIPLE_DBS;
+	}
+
+	if (arg_inc_inst == 0) {
+		app.p4xos_conf.inc_inst = APP_DEFAULT_INCREASE_INST;
+	}
+
+	if (arg_checkpoint_interval == 0) {
+		app.p4xos_conf.checkpoint_interval = APP_DEFAULT_CHECKPOINT_INTERVAL;
 	}
 
 	/* Check cross-consistency of arguments */

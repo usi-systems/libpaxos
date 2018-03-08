@@ -23,15 +23,17 @@ struct rocksdb_params rocks;
 
 static uint8_t DEFAULT_KEY[] = "ABCDEFGH1234567";
 static uint8_t DEFAULT_VALUE[] = "ABCDEFGH1234567";
+static uint64_t log_size_for_flush = 1048576;
 
 static void
-set_app_hdr(struct app_hdr *ap, uint32_t inst) {
-	ap->msg_type = (inst % 2);
-	ap->key_len = rte_cpu_to_be_32(sizeof(DEFAULT_KEY));
-	ap->value_len = rte_cpu_to_be_32(sizeof(DEFAULT_VALUE));
-	rte_memcpy(ap->key, DEFAULT_KEY, sizeof(DEFAULT_KEY));
+set_app_hdr(struct app_hdr *ap, uint32_t inst, uint8_t msg_type, uint32_t key_len,
+	uint8_t* key, uint32_t value_len, uint8_t* value) {
+	ap->msg_type = msg_type;
+	ap->key_len = rte_cpu_to_be_32(key_len);
+	ap->value_len = rte_cpu_to_be_32(value_len);
+	rte_memcpy(ap->key, key, key_len);
 	if (ap->msg_type == WRITE_OP) {
-		rte_memcpy(ap->value, DEFAULT_VALUE, sizeof(DEFAULT_VALUE));
+		rte_memcpy(ap->value, value, value_len);
 	}
 }
 
@@ -111,7 +113,7 @@ void deliver(unsigned int worker_id, unsigned int __rte_unused inst, __rte_unuse
 		// }
 		rocks->write_count[worker_id]++;
 	}
-	else if (ap->msg_type == READ_OP) {
+	else if (ap->msg_type == WRITE_OP) {
 		size_t len;
 		uint32_t key_len = rte_be_to_cpu_32(ap->key_len);
 		// printf("Key %s\n", ap->key);
@@ -124,6 +126,15 @@ void deliver(unsigned int worker_id, unsigned int __rte_unused inst, __rte_unuse
 	}
 
 	rocks->delivered_count[worker_id]++;
+
+	if (app.p4xos_conf.checkpoint_interval > 0 && (inst % app.p4xos_conf.checkpoint_interval == 0)) {
+		char cp_path[DB_NAME_LENGTH];
+		snprintf(cp_path, DB_NAME_LENGTH, "%s/checkpoints/%u", DBPath, inst);
+		rocksdb_checkpoint_create(rocks->cp[worker_id], cp_path, log_size_for_flush, &err);
+		if (err != NULL) {
+			printf("Checkpoint Error: %s\n", err);
+		}
+	}
 }
 
 static void
@@ -177,7 +188,7 @@ stat_cb(__rte_unused struct rte_timer *timer, __rte_unused void *arg)
 		struct app_hdr ap;
 		uint32_t i;
 		for (i = 1; i < app.p4xos_conf.osd; i++) {
-			set_app_hdr(&ap, i);
+			set_app_hdr(&ap, i, WRITE_OP, sizeof(DEFAULT_KEY), DEFAULT_KEY, sizeof(DEFAULT_VALUE), DEFAULT_VALUE);
 			// submit_all_ports((char*)&ap, sizeof(struct app_hdr));
 			submit((char*)&ap, sizeof(struct app_hdr));
 		}
@@ -216,8 +227,8 @@ main(int argc, char **argv)
 	struct app_hdr ap;
 	uint32_t i;
 	reset_leader_instance();
-	for (i = 1; i < app.p4xos_conf.osd; i++) {
-		set_app_hdr(&ap, i);
+	for (i = 0; i < app.p4xos_conf.osd; i++) {
+		set_app_hdr(&ap, i, WRITE_OP, sizeof(DEFAULT_KEY), DEFAULT_KEY, sizeof(DEFAULT_VALUE), DEFAULT_VALUE);
 		// submit_all_ports((char*)&ap, sizeof(struct app_hdr));
 		submit((char*)&ap, sizeof(struct app_hdr));
 	}

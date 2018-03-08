@@ -242,8 +242,10 @@
 #define APP_DEFAULT_IP_DST_ADDR "192.168.4.98"
 #define APP_DEFAULT_MESSAGE_TYPE 0x0003
 #define APP_DEFAULT_MULTIPLE_DBS 0
+#define APP_DEFAULT_INCREASE_INST 0
 #define APP_DEFAULT_TX_PORT 0
 #define APP_DEFAULT_ACCEPTOR_ID 0
+#define APP_DEFAULT_CHECKPOINT_INTERVAL 0
 #define APP_DEFAULT_OUTSTANDING	8
 
 #ifndef MAX_APP_MESSAGE_LEN
@@ -271,6 +273,8 @@ struct p4xos_configuration {
 	uint32_t src_addr;
 	uint32_t dst_addr;
 	uint32_t osd;
+	uint8_t inc_inst;
+	uint32_t checkpoint_interval;
 };
 
 struct app_mbuf_array {

@@ -85,6 +85,7 @@ set_udp_hdr(struct udp_hdr *udp, uint16_t src_port, uint16_t dst_port, uint16_t 
 
 static void
 set_paxos_hdr(struct paxos_hdr *px, uint16_t msgtype, uint32_t inst, char* value, int size) {
+	uint64_t igress_ts = 0;
 	px->msgtype = rte_cpu_to_be_16(msgtype);
 	px->inst = rte_cpu_to_be_32(inst);
 	px->rnd = rte_cpu_to_be_16(0);
@@ -94,7 +95,11 @@ set_paxos_hdr(struct paxos_hdr *px, uint16_t msgtype, uint32_t inst, char* value
 	if (size > 0 && value != NULL) {
 		rte_memcpy(&px->value, value, size);
 	}
-	uint64_t igress_ts = (inst % (app.p4xos_conf.osd-1) == 0) ? rte_get_timer_cycles() : 0;
+	if (app.p4xos_conf.osd > 1) {
+		igress_ts = (inst % (app.p4xos_conf.osd-1) == 0) ? rte_get_timer_cycles() : 0;
+	} else {
+		igress_ts = rte_get_timer_cycles();
+	}
 	px->igress_ts = rte_cpu_to_be_64(igress_ts);
 	px->egress_ts = rte_cpu_to_be_64(0);
 }
@@ -216,7 +221,8 @@ void submit(char* value, int size)
 	lp->tx.mbuf_out[port].array[mbuf_idx] = rte_pktmbuf_alloc(app.lcore_params[lcore].pool);
 	struct rte_mbuf* pkt = lp->tx.mbuf_out[port].array[mbuf_idx];
 	if (pkt != NULL) {
-		prepare_message(pkt, port, app.p4xos_conf.src_addr, app.p4xos_conf.dst_addr, app.p4xos_conf.msgtype, mbuf_idx, value, size);
+		uint32_t inst = mbuf_idx + 1;
+		prepare_message(pkt, port, app.p4xos_conf.src_addr, app.p4xos_conf.dst_addr, app.p4xos_conf.msgtype, inst, value, size);
 	}
 	lp->tx.mbuf_out_flush[port] = 1;
 	lp->tx.mbuf_out[port].n_mbufs++;

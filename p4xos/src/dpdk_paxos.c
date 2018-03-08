@@ -420,7 +420,10 @@ proposer_learner_handler(struct rte_mbuf *pkt_in, void *arg)
                 lp->deliver(lp->worker_id, out.iid, out.value.paxos_value_val,
                         out.value.paxos_value_len, lp->deliver_arg);
                 RTE_LOG(DEBUG, USER1, "Finished instance %u\n", out.iid);
-                paxos_hdr->msgtype = rte_cpu_to_be_16(PAXOS_ACCEPT_FAST);
+                paxos_hdr->msgtype = rte_cpu_to_be_16(app.p4xos_conf.msgtype);
+                if (app.p4xos_conf.inc_inst) {
+                    paxos_hdr->inst = rte_cpu_to_be_32(lp->cur_inst++);
+                }
                 paxos_accepted_destroy(&out);
             } else {
                 ip->dst_addr = 0;
