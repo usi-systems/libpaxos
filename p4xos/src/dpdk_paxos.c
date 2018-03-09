@@ -349,7 +349,7 @@ learner_check_holes(__rte_unused struct rte_timer *timer, __rte_unused void *arg
     uint32_t from, to;
     if (learner_has_holes(lp->learner, &from, &to)) {
         lp->has_holes = 1;
-        RTE_LOG(INFO, USER1, "Holes from %u to %u\n", from, to);
+        RTE_LOG(INFO, USER1, "Learner %u Holes from %u to %u\n", lp->worker_id, from, to);
         uint32_t prepare_size = to - from;
         send_accept(lp, from, prepare_size, lp->default_value, lp->default_value_len);
     }
@@ -471,6 +471,7 @@ replica_handler(struct rte_mbuf *pkt_in, void *arg)
     struct ipv4_hdr *ip = rte_pktmbuf_mtod_offset(pkt_in, struct ipv4_hdr *, ip_offset);
 	size_t paxos_offset = get_paxos_offset();
 	struct paxos_hdr *paxos_hdr = rte_pktmbuf_mtod_offset(pkt_in, struct paxos_hdr *, paxos_offset);
+    // printf("paxos_offset %lu\n", paxos_offset);
 	// rte_hexdump(stdout, "Paxos", paxos_hdr, sizeof(struct paxos_hdr));
 	size_t data_size = sizeof(struct paxos_hdr);
 	prepare_hw_checksum(pkt_in, data_size);

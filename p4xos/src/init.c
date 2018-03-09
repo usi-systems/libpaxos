@@ -113,7 +113,7 @@ app_init_learner(void)
 
 		lp->learner = learner_new(app.p4xos_conf.num_acceptors);
 		learner_set_instance_id(lp->learner, 0);
-		lp->cur_inst = app.p4xos_conf.osd + 1;
+		lp->cur_inst = 1;
 
 		uint64_t freq = app.hz;
 

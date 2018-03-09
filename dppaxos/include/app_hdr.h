@@ -1,8 +1,8 @@
 #ifndef _APP_HDR_H_
 #define _APP_HDR_H_
 
-#define KEY_LEN 16
-#define VALUE_LEN 64
+#define KEY_LEN 8
+#define VALUE_LEN 16
 #define READ_OP 0
 #define WRITE_OP 1
 
@@ -35,7 +35,6 @@ extern "C" {
 #endif
 
 struct app_hdr {
-    uint64_t request_id;
     uint8_t msg_type;
     uint32_t key_len;
 	uint8_t key[KEY_LEN];

@@ -246,6 +246,7 @@
 #define APP_DEFAULT_TX_PORT 0
 #define APP_DEFAULT_ACCEPTOR_ID 0
 #define APP_DEFAULT_CHECKPOINT_INTERVAL 0
+#define APP_DEFAULT_TS_INTERVAL 4
 #define APP_DEFAULT_SUBMIT_ALL_PORTS 0
 #define APP_DEFAULT_OUTSTANDING	8
 
@@ -277,6 +278,7 @@ struct p4xos_configuration {
 	uint8_t inc_inst;
 	uint8_t all_ports;
 	uint32_t checkpoint_interval;
+	uint32_t ts_interval;
 };
 
 struct app_mbuf_array {
@@ -449,6 +451,7 @@ int app_get_lcore_for_nic_tx(uint16_t port, uint32_t *lcore_out);
 int app_is_socket_used(uint32_t socket);
 uint32_t app_get_lcores_io_rx(void);
 uint32_t app_get_lcores_worker(void);
+struct app_lcore_params_worker* app_get_worker(uint32_t worker_id);
 void app_print_params(void);
 void submit(char* value, int size);
 void submit_all_ports(char* value, int size);
@@ -466,7 +469,7 @@ void app_init_leader(void);
 void app_set_default_value(char *arg, uint32_t vlen);
 void learner_call_deliver(struct rte_timer *timer, void *arg);
 void learner_check_holes(struct rte_timer *timer, void *arg);
-void reset_leader_instance(void);
+void reset_leader_instance(char* value, int size);
 double bytes_to_gbits(uint64_t bytes);
 void send_accept(struct app_lcore_params_worker *lp, uint32_t inst, uint32_t prepare_size, char* value, int size);
 

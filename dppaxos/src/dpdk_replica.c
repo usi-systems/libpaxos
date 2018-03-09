@@ -21,9 +21,10 @@ const char DBPath[] = "/tmp/";
 
 struct rocksdb_params rocks;
 
-static uint8_t DEFAULT_KEY[] = "ABCDEFGH1234567";
 static uint8_t DEFAULT_VALUE[] = "ABCDEFGH1234567";
 static uint64_t log_size_for_flush = 1048576;
+static uint8_t msg_type = READ_OP;
+static uint8_t key[KEY_LEN];
 
 static void
 set_app_hdr(struct app_hdr *ap, uint32_t inst, uint8_t msg_type, uint32_t key_len,
@@ -36,6 +37,20 @@ set_app_hdr(struct app_hdr *ap, uint32_t inst, uint8_t msg_type, uint32_t key_le
 		rte_memcpy(ap->value, value, value_len);
 	}
 }
+
+
+static inline void submit_new_commands(void) {
+	struct app_hdr ap;
+	uint32_t i;
+	uint32_t pos_lb = app.pos_lb - 42 - 16 - 5;
+	for (i = 1; i < app.p4xos_conf.osd; i++) {
+		key[pos_lb] = i;
+		set_app_hdr(&ap, i, msg_type, KEY_LEN, key, sizeof(DEFAULT_VALUE), DEFAULT_VALUE);
+		// submit_all_ports((char*)&ap, sizeof(struct app_hdr));
+		submit((char*)&ap, sizeof(struct app_hdr));
+	}
+}
+
 
 static void
 init_rocksdb(void)
@@ -113,13 +128,13 @@ void deliver(unsigned int worker_id, unsigned int __rte_unused inst, __rte_unuse
 		// }
 		rocks->write_count[worker_id]++;
 	}
-	else if (ap->msg_type == WRITE_OP) {
+	else if (ap->msg_type == READ_OP) {
 		size_t len;
 		uint32_t key_len = rte_be_to_cpu_32(ap->key_len);
 		// printf("Key %s\n", ap->key);
 	    char *returned_value =
 	        rocksdb_get(rocks->db[worker_id], rocks->readoptions, (const char*)ap->key, key_len, &len, &err);
-		// printf("return value %s\n", returned_value);
+		printf("Key %s: return value %s\n", ap->key, returned_value);
 		rte_memcpy(ap->value, returned_value, len);
 	    free(returned_value);
 		rocks->read_count[worker_id]++;
@@ -185,15 +200,10 @@ stat_cb(__rte_unused struct rte_timer *timer, __rte_unused void *arg)
 				avg_cycle_latency, avg_ns_latency);
 	}
 	 else {
-		struct app_hdr ap;
-		uint32_t i;
-		for (i = 1; i < app.p4xos_conf.osd; i++) {
-			set_app_hdr(&ap, i, WRITE_OP, sizeof(DEFAULT_KEY), DEFAULT_KEY, sizeof(DEFAULT_VALUE), DEFAULT_VALUE);
-			// submit_all_ports((char*)&ap, sizeof(struct app_hdr));
-			submit((char*)&ap, sizeof(struct app_hdr));
-		}
+		 submit_new_commands();
 	}
 }
+
 
 int
 main(int argc, char **argv)
@@ -227,10 +237,23 @@ main(int argc, char **argv)
 
 	struct app_hdr ap;
 	uint32_t i;
-	reset_leader_instance();
+	uint32_t n_workers = app_get_lcores_worker();
+	for (i = 0; i < n_workers; i++) {
+		key[KEY_LEN-1] = i;
+		set_app_hdr(&ap, i, READ_OP, KEY_LEN, key, 0, NULL);
+		reset_leader_instance((char*)&ap, sizeof(struct app_hdr));
+	}
+
+
+	uint8_t value[VALUE_LEN];
+	uint32_t pos_lb = app.pos_lb - 42 - 16 - 5;
+	printf("pos lb %d\n", pos_lb);
 	for (i = 0; i < app.p4xos_conf.osd; i++) {
-		set_app_hdr(&ap, i, WRITE_OP, sizeof(DEFAULT_KEY), DEFAULT_KEY, sizeof(DEFAULT_VALUE), DEFAULT_VALUE);
-		// submit_all_ports((char*)&ap, sizeof(struct app_hdr));
+		// snprintf((char *)key, KEY_LEN, "%06d", i);
+		key[pos_lb] = i;
+		snprintf((char *)value, VALUE_LEN, "VALUE%07d", i);
+ 		msg_type = WRITE_OP;
+		set_app_hdr(&ap, i, msg_type, KEY_LEN, key, VALUE_LEN, value);
 		if (app.p4xos_conf.all_ports) {
 			submit_all_ports((char*)&ap, sizeof(struct app_hdr));
 		} else {

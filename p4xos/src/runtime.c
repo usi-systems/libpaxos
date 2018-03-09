@@ -235,11 +235,14 @@ app_lcore_io_rx(
 
 			worker_0 = data_0_0[pos_lb] & (n_workers - 1);
 			worker_1 = data_0_1[pos_lb] & (n_workers - 1);
-			// printf("data_0_0[pos_lb]: %u worker %u \t data_0_1[pos_lb]: %u worker %u\n",
-			// 		data_0_0[pos_lb],
-			// 		worker_0,
-			// 		data_0_1[pos_lb],
-			// 		worker_1);
+			RTE_LOG(DEBUG, USER1,
+				"data_0_0[%u]: %04x worker %u \t data_0_1[%u]: %04x worker %u\n",
+				pos_lb,
+				data_0_0[pos_lb],
+				worker_0,
+				pos_lb,
+				data_0_1[pos_lb],
+				worker_1);
 			app_lcore_io_rx_buffer_to_send(lp, worker_0, mbuf_0_0, bsz_wr);
 			app_lcore_io_rx_buffer_to_send(lp, worker_1, mbuf_0_1, bsz_wr);
 		}
@@ -533,7 +536,6 @@ app_lcore_worker(
 			uint32_t port_mask;
 
 			if (IS_IPV4_MCAST(ipv4_dst)) {
-				// printf("Multicast packet\n");
 				port_mask = port;
 
 				/* Mark all packet's segments as referenced port_num times */

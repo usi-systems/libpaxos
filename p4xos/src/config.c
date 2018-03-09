@@ -91,6 +91,7 @@ static const char usage[] =
 "    --num-ac NUM: Number of acceptors (default value is %u)                    \n"
 "    --acceptor-id : Acceptor ID (default value is %u)                          \n"
 "    --cp-interval NUM : The interval between checkpoints (default value is %u) \n"
+"    --ts-interval NUM : The interval between get time (default value is %u)    \n"
 "    --osd NUM : The number of packets will be sent at beginning (default value \n"
 "                is %u)                                                         \n"
 "    --src \"IP\" : source IP address proposers uses to generate packets        \n"
@@ -121,6 +122,7 @@ app_print_usage(void)
 		APP_DEFAULT_NUM_ACCEPTORS,
 		APP_DEFAULT_ACCEPTOR_ID,
 		APP_DEFAULT_CHECKPOINT_INTERVAL,
+		APP_DEFAULT_TS_INTERVAL,
 		APP_DEFAULT_OUTSTANDING,
 		APP_DEFAULT_IP_SRC_ADDR,
 		APP_DEFAULT_IP_DST_ADDR
@@ -695,6 +697,7 @@ app_parse_args(int argc, char **argv)
 		{"src", 1, 0, 0},
 		{"dst", 1, 0, 0},
 		{"cp-interval", 1, 0, 0},
+		{"ts-interval", 1, 0, 0},
 		{NULL, 0, 0, 0}
 	};
 	uint32_t arg_w = 0;
@@ -715,6 +718,7 @@ app_parse_args(int argc, char **argv)
 	uint8_t arg_inc_inst = 0;
 	uint8_t arg_all_ports = 0;
 	uint8_t arg_checkpoint_interval = 0;
+	uint8_t arg_ts_interval = 0;
 	argvopt = argv;
 
 	while ((opt = getopt_long(argc, argvopt, "",
@@ -839,6 +843,14 @@ app_parse_args(int argc, char **argv)
 					return -1;
 				}
 			}
+			if (!strcmp(lgopts[option_index].name, "ts-interval")) {
+				arg_ts_interval = 1;
+				ret = parse_arg_uint32(optarg, &(app.p4xos_conf.ts_interval));
+				if (ret) {
+					printf("Incorrect value for --ts-interval argument (%d)\n", ret);
+					return -1;
+				}
+			}
 			if (!strcmp(lgopts[option_index].name, "src")) {
 				src_addr = 1;
 				ret = parse_arg_ip_address(optarg, &(app.p4xos_conf.src_addr));
@@ -927,6 +939,10 @@ app_parse_args(int argc, char **argv)
 
 	if (arg_checkpoint_interval == 0) {
 		app.p4xos_conf.checkpoint_interval = APP_DEFAULT_CHECKPOINT_INTERVAL;
+	}
+
+	if (arg_ts_interval == 0) {
+		app.p4xos_conf.ts_interval = APP_DEFAULT_TS_INTERVAL;
 	}
 
 	if (arg_all_ports == 0) {
@@ -1082,6 +1098,22 @@ app_get_lcores_worker(void)
 	}
 
 	return count;
+}
+
+struct app_lcore_params_worker* app_get_worker(uint32_t worker_id)
+{
+	uint32_t lcore;
+
+	for (lcore = 0; lcore < APP_MAX_LCORES; lcore ++) {
+		if (app.lcore_params[lcore].type != e_APP_LCORE_WORKER) {
+			continue;
+		}
+		struct app_lcore_params_worker *lp = &app.lcore_params[lcore].worker;
+		if (lp->worker_id == worker_id)
+			return lp;
+	}
+
+	return NULL;
 }
 
 void

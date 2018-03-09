@@ -91,7 +91,6 @@ static uint8_t DEFAULT_VALUE[] = "ABCDEFGH1234567";
 
 void send_to_addr(int fd, struct client_context *ctx) {
     struct app_hdr msg;
-    msg.request_id = 1;
     msg.msg_type = WRITE_OP;
     msg.key_len = rte_cpu_to_be_32(sizeof(DEFAULT_KEY));
     msg.value_len = rte_cpu_to_be_32(sizeof(DEFAULT_VALUE));
