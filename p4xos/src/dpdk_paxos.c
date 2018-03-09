@@ -351,6 +351,9 @@ learner_check_holes(__rte_unused struct rte_timer *timer, __rte_unused void *arg
         lp->has_holes = 1;
         RTE_LOG(INFO, USER1, "Learner %u Holes from %u to %u\n", lp->worker_id, from, to);
         uint32_t prepare_size = to - from;
+	if (prepare_size > app.p4xos_conf.osd) {
+		prepare_size = app.p4xos_conf.osd;
+	}
         send_accept(lp, from, prepare_size, lp->default_value, lp->default_value_len);
     }
 }
@@ -363,7 +366,10 @@ handle_paxos_messages(struct paxos_hdr *paxos_hdr, struct app_lcore_params_worke
 	RTE_LOG(DEBUG, USER1, "msgtype %u, instance %u\n", msgtype, inst);
 	switch(msgtype)
 	{
-        case PAXOS_PREPARE: {
+		case PAXOS_RESET: {
+			return -1;
+		}
+		case PAXOS_PREPARE: {
 			struct paxos_prepare prepare = {
 				.iid = rte_be_to_cpu_32(paxos_hdr->inst),
 				.ballot = rte_be_to_cpu_16(paxos_hdr->rnd),

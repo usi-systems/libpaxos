@@ -138,8 +138,12 @@ static inline uint32_t get_worker_id_for_command(char* command) {
 	uint8_t pos_lb = app.pos_lb - 42 - 16;
 	uint32_t n_workers = app_get_lcores_worker();
 	uint32_t worker_id = command[pos_lb] & (n_workers - 1);
-	printf("%02x worker_id %u ", command[pos_lb], worker_id);
 	return worker_id;
+}
+
+static inline void inject_worker_id_in_command(char* command, uint32_t worker_id) {
+	uint8_t pos_lb = app.pos_lb - 42 - 16;
+	command[pos_lb] = (uint8_t)worker_id;
 }
 
 
@@ -157,7 +161,7 @@ void reset_leader_instance(char* command, int size)
 	lp->tx.mbuf_out[port].array[mbuf_idx] = rte_pktmbuf_alloc(app.lcore_params[lcore].pool);
 	struct rte_mbuf* pkt = lp->tx.mbuf_out[port].array[mbuf_idx];
 	if (pkt != NULL) {
-		prepare_message(pkt, port, app.p4xos_conf.src_addr, app.p4xos_conf.dst_addr, PAXOS_RESET, 0, NULL, 0);
+		prepare_message(pkt, port, app.p4xos_conf.src_addr, app.p4xos_conf.dst_addr, PAXOS_RESET, 0, command, size);
 	}
 	lp->tx.mbuf_out_flush[port] = 1;
 	lp->tx.mbuf_out[port].n_mbufs++;
@@ -171,6 +175,7 @@ send_accept(struct app_lcore_params_worker *lp, uint32_t inst, uint32_t prepare_
 	uint32_t lcore_io;
 	int ret;
 	uint32_t pos;
+	inject_worker_id_in_command(value, lp->worker_id);
 	for (port = 1; port < APP_MAX_NIC_PORTS; port ++) {
 
 		if (app.nic_tx_port_mask[port] == 0) {
@@ -186,7 +191,7 @@ send_accept(struct app_lcore_params_worker *lp, uint32_t inst, uint32_t prepare_
 		ret = rte_pktmbuf_alloc_bulk(app.lcore_params[lcore_io].pool, prepare_pkts, prepare_size);
 
 		if (ret < 0) {
-			RTE_LOG(INFO, USER1, "Not enough entries in the mempools for PREPARE\n");
+			RTE_LOG(INFO, USER1, "Not enough entries in the mempools for ACCEPT\n");
 			return;
 		}
 
@@ -223,7 +228,6 @@ void submit(char* value, int size)
     uint16_t port = app.p4xos_conf.tx_port;
 	uint32_t worker_id = get_worker_id_for_command(value);
 	struct app_lcore_params_worker *lp_worker = app_get_worker(worker_id);
-	printf("current_inst %u\n", lp_worker->cur_inst);
 
 	app_get_lcore_for_nic_tx(port, &lcore);
     struct app_lcore_params_io *lp = &app.lcore_params[lcore].io;

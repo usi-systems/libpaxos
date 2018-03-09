@@ -200,6 +200,7 @@ stat_cb(__rte_unused struct rte_timer *timer, __rte_unused void *arg)
 				avg_cycle_latency, avg_ns_latency);
 	}
 	 else {
+		 printf("Resubmmit new commands\n");
 		 submit_new_commands();
 	}
 }
@@ -238,19 +239,19 @@ main(int argc, char **argv)
 	struct app_hdr ap;
 	uint32_t i;
 	uint32_t n_workers = app_get_lcores_worker();
+	uint32_t pos_lb = app.pos_lb - 42 - 16 - 5;
+	printf("pos lb %d\n", pos_lb);
 	for (i = 0; i < n_workers; i++) {
-		key[KEY_LEN-1] = i;
+		key[pos_lb] = i;
 		set_app_hdr(&ap, i, READ_OP, KEY_LEN, key, 0, NULL);
 		reset_leader_instance((char*)&ap, sizeof(struct app_hdr));
 	}
 
 
 	uint8_t value[VALUE_LEN];
-	uint32_t pos_lb = app.pos_lb - 42 - 16 - 5;
-	printf("pos lb %d\n", pos_lb);
 	for (i = 0; i < app.p4xos_conf.osd; i++) {
 		// snprintf((char *)key, KEY_LEN, "%06d", i);
-		key[pos_lb] = i;
+		key[pos_lb] = i%n_workers;
 		snprintf((char *)value, VALUE_LEN, "VALUE%07d", i);
  		msg_type = WRITE_OP;
 		set_app_hdr(&ap, i, msg_type, KEY_LEN, key, VALUE_LEN, value);
