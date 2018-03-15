@@ -62,10 +62,6 @@ main(int argc, char **argv)
 		return -1;
 	}
 
-	ret = rte_eal_hpet_init(1);
-    if (ret < 0)
-            rte_exit(EXIT_FAILURE, "Error with EAL HPET initialization\n");
-
 	/* Init */
 	app_init();
 	app_init_leader();

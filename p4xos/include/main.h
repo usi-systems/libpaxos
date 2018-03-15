@@ -30,6 +30,7 @@
 #include <rte_lpm.h>
 #include <rte_timer.h>
 
+#include "paxos.h"
 /* Logical cores */
 #ifndef APP_MAX_SOCKETS
 #define APP_MAX_SOCKETS 2
@@ -247,7 +248,7 @@
 #define APP_DEFAULT_ACCEPTOR_ID 0
 #define APP_DEFAULT_CHECKPOINT_INTERVAL 0
 #define APP_DEFAULT_TS_INTERVAL 4
-#define APP_DEFAULT_SUBMIT_ALL_PORTS 0
+#define APP_DEFAULT_DROP 0
 #define APP_DEFAULT_OUTSTANDING	8
 
 #ifndef MAX_APP_MESSAGE_LEN
@@ -276,7 +277,7 @@ struct p4xos_configuration {
 	uint32_t dst_addr;
 	uint32_t osd;
 	uint8_t inc_inst;
-	uint8_t all_ports;
+	uint8_t drop;
 	uint32_t checkpoint_interval;
 	uint32_t ts_interval;
 };
@@ -374,6 +375,7 @@ struct app_lcore_params_worker {
 	uint64_t accepted_count;
 	uint32_t cur_inst;
 	uint32_t has_holes;
+	uint32_t artificial_drop;
 	struct rte_timer stat_timer;
 	struct rte_timer deliver_timer;
 	struct rte_timer check_hole_timer;
@@ -453,8 +455,7 @@ uint32_t app_get_lcores_io_rx(void);
 uint32_t app_get_lcores_worker(void);
 struct app_lcore_params_worker* app_get_worker(uint32_t worker_id);
 void app_print_params(void);
-void submit(char* value, int size);
-void submit_all_ports(char* value, int size);
+void submit(uint8_t worker_id, char* value, int size);
 void app_set_deliver_callback(deliver_cb, void *arg);
 void app_set_worker_callback(worker_cb);
 void learner_handler(struct rte_mbuf *pkt_in, void *arg);
@@ -469,9 +470,10 @@ void app_init_leader(void);
 void app_set_default_value(char *arg, uint32_t vlen);
 void learner_call_deliver(struct rte_timer *timer, void *arg);
 void learner_check_holes(struct rte_timer *timer, void *arg);
-void reset_leader_instance(char* value, int size);
+void reset_leader_instance();
 double bytes_to_gbits(uint64_t bytes);
-void send_accept(struct app_lcore_params_worker *lp, uint32_t inst, uint32_t prepare_size, char* value, int size);
+void send_prepare(struct app_lcore_params_worker *lp, uint32_t inst, uint32_t prepare_size, char* value, int size);
+void send_accept(struct app_lcore_params_worker *lp, paxos_accept* accept);
 
 #ifdef __cplusplus
 }  /* end extern "C" */

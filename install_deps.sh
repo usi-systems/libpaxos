@@ -23,9 +23,29 @@ make
 make install
 ldconfig
 
+# Install LevelDB Dependency
 cd /tmp && git clone https://github.com/google/leveldb.git
 cd leveldb
 make
 cp --preserve=links out-shared/libleveldb.* /usr/local/lib
 cp -r include/leveldb /usr/local/include/
 ldconfig
+
+# Install RocksdB Dependency
+sudo apt-get install libgflags-dev libsnappy-dev zlib1g-dev libbz2-dev liblz4-dev libzstd-dev
+cd /tmp && git clone https://github.com/facebook/rocksdb.git
+cd rocksdb
+make static_lib
+sudo make install
+
+# Install DPDK Dependency
+cd $HOME
+git clone git://dpdk.org/dpdk
+cd dpdk
+export RTE_SDK=$HOME/dpdk
+export RTE_TARGET=x86_64-native-linuxapp-gcc
+git checkout 1ffee690eaa10b1b50deb230755ea4ceaa373e0f
+make config T=$RTE_TARGET
+sed -i 's/HPET=n/HPET=y/g' build/.config
+make
+mv build $RTE_TARGET

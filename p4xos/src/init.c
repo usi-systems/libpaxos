@@ -114,7 +114,7 @@ app_init_learner(void)
 		lp->learner = learner_new(app.p4xos_conf.num_acceptors);
 		learner_set_instance_id(lp->learner, 0);
 		lp->cur_inst = 1;
-
+		lp->artificial_drop = app.p4xos_conf.drop;
 		uint64_t freq = app.hz;
 
 		// rte_timer_init(&lp->deliver_timer);

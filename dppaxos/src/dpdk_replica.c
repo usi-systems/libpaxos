@@ -39,15 +39,16 @@ set_app_hdr(struct app_hdr *ap, uint32_t inst, uint8_t msg_type, uint32_t key_le
 }
 
 
-static inline void submit_new_commands(void) {
+static inline void __rte_unused submit_new_commands(void) {
 	struct app_hdr ap;
 	uint32_t i;
-	uint32_t pos_lb = app.pos_lb - 42 - 16 - 5;
-	for (i = 1; i < app.p4xos_conf.osd; i++) {
-		key[pos_lb] = i;
+	uint8_t worker_id;
+	uint32_t n_workers = app_get_lcores_worker();
+
+	for (i = 0; i < app.p4xos_conf.osd; i++) {
+		worker_id = i % n_workers;
 		set_app_hdr(&ap, i, msg_type, KEY_LEN, key, sizeof(DEFAULT_VALUE), DEFAULT_VALUE);
-		// submit_all_ports((char*)&ap, sizeof(struct app_hdr));
-		submit((char*)&ap, sizeof(struct app_hdr));
+		submit(worker_id, (char*)&ap, sizeof(struct app_hdr));
 	}
 }
 
@@ -199,10 +200,10 @@ stat_cb(__rte_unused struct rte_timer *timer, __rte_unused void *arg)
 				delivered_count,
 				avg_cycle_latency, avg_ns_latency);
 	}
-	 else {
-		 printf("Resubmmit new commands\n");
-		 submit_new_commands();
-	}
+	//  else {
+	// 	 printf("Resubmmit new commands\n");
+	// 	 submit_new_commands();
+	// }
 }
 
 
@@ -237,29 +238,21 @@ main(int argc, char **argv)
 	app_set_stat_callback(stat_cb, &rocks);
 
 	struct app_hdr ap;
+
+	reset_leader_instance((char*)&ap, sizeof(struct app_hdr));
+
 	uint32_t i;
 	uint32_t n_workers = app_get_lcores_worker();
-	uint32_t pos_lb = app.pos_lb - 42 - 16 - 5;
-	printf("pos lb %d\n", pos_lb);
-	for (i = 0; i < n_workers; i++) {
-		key[pos_lb] = i;
-		set_app_hdr(&ap, i, READ_OP, KEY_LEN, key, 0, NULL);
-		reset_leader_instance((char*)&ap, sizeof(struct app_hdr));
-	}
+
 
 
 	uint8_t value[VALUE_LEN];
+	uint8_t worker_id;
 	for (i = 0; i < app.p4xos_conf.osd; i++) {
-		// snprintf((char *)key, KEY_LEN, "%06d", i);
-		key[pos_lb] = i%n_workers;
-		snprintf((char *)value, VALUE_LEN, "VALUE%07d", i);
+		worker_id = i % n_workers;
  		msg_type = WRITE_OP;
 		set_app_hdr(&ap, i, msg_type, KEY_LEN, key, VALUE_LEN, value);
-		if (app.p4xos_conf.all_ports) {
-			submit_all_ports((char*)&ap, sizeof(struct app_hdr));
-		} else {
-			submit((char*)&ap, sizeof(struct app_hdr));
-		}
+		submit(worker_id, (char*)&ap, sizeof(struct app_hdr));
 	}
 	app_set_default_value((char*)&ap, sizeof(struct app_hdr));
 

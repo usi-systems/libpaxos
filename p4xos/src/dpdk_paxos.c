@@ -326,7 +326,7 @@ learner_call_deliver(__rte_unused struct rte_timer *timer, __rte_unused void *ar
         lp->deliver(lp->worker_id, out.iid, out.value.paxos_value_val,
                 out.value.paxos_value_len, lp->deliver_arg);
         RTE_LOG(DEBUG, USER1, "Finished instance %u\n", out.iid);
-        submit(out.value.paxos_value_val, out.value.paxos_value_len);
+        submit(lp->worker_id, out.value.paxos_value_val, out.value.paxos_value_len);
         paxos_accepted_destroy(&out);
     }
 }
@@ -341,7 +341,7 @@ learner_check_holes(__rte_unused struct rte_timer *timer, __rte_unused void *arg
             lp->deliver(lp->worker_id, out.iid, out.value.paxos_value_val,
                 out.value.paxos_value_len, lp->deliver_arg);
                 RTE_LOG(DEBUG, USER1, "%s Finished instance %u\n", __func__, out.iid);
-                submit(out.value.paxos_value_val, out.value.paxos_value_len);
+                submit(lp->worker_id, out.value.paxos_value_val, out.value.paxos_value_len);
                 paxos_accepted_destroy(&out);
         }
         lp->has_holes = 0;
@@ -354,7 +354,7 @@ learner_check_holes(__rte_unused struct rte_timer *timer, __rte_unused void *arg
 	if (prepare_size > app.p4xos_conf.osd) {
 		prepare_size = app.p4xos_conf.osd;
 	}
-        send_accept(lp, from, prepare_size, lp->default_value, lp->default_value_len);
+        send_prepare(lp, from, prepare_size, lp->default_value, lp->default_value_len);
     }
 }
 
@@ -362,7 +362,6 @@ static inline int
 handle_paxos_messages(struct paxos_hdr *paxos_hdr, struct app_lcore_params_worker *lp) {
     int ret = 0;
     uint16_t msgtype = rte_be_to_cpu_16(paxos_hdr->msgtype);
-	uint32_t inst = rte_be_to_cpu_32(paxos_hdr->inst);
     if (rte_log_get_global_level() == RTE_LOG_DEBUG) {
         rte_hexdump(stdout, "Paxos", paxos_hdr, sizeof(struct paxos_hdr));
     }
@@ -413,17 +412,28 @@ handle_paxos_messages(struct paxos_hdr *paxos_hdr, struct app_lcore_params_worke
 				.aid = rte_be_to_cpu_16(paxos_hdr->acptid),
 				.value = {vsize, (char*)&paxos_hdr->value},
 			};
+            RTE_LOG(DEBUG, USER1, "Worker %u Received Promise instance %u\n",
+                lp->worker_id, rte_be_to_cpu_32(paxos_hdr->inst));
+            RTE_LOG(DEBUG, USER1, "ballot %u, value_ballot %u, aid %u\n",
+                promise.ballot, promise.value_ballot, promise.aid);
 			paxos_message pa;
 			ret = learner_receive_promise(lp->learner, &promise, &pa.u.accept);
 			if (ret) {
-                // TODO: Send Accept messages to acceptors
-                return -1;
+                RTE_LOG(DEBUG, USER1, "Worker %u Send Accept instance %u\n",
+                    lp->worker_id, rte_be_to_cpu_32(paxos_hdr->inst));
+
+                send_accept(lp, &pa.u.accept);
 			} else {
                 return -2;
             }
 			break;
 		}
 		case PAXOS_ACCEPTED: {
+            // Artificial DROP packet
+            if (lp->artificial_drop) {
+                if (rand() % 1299827 == 0)
+                    return -4;
+            }
             uint64_t previous = rte_be_to_cpu_64(paxos_hdr->igress_ts);
 			if (previous > 0) {
 				uint64_t now = rte_get_timer_cycles();
@@ -440,7 +450,8 @@ handle_paxos_messages(struct paxos_hdr *paxos_hdr, struct app_lcore_params_worke
 				.aid = rte_be_to_cpu_16(paxos_hdr->acptid),
 				.value = {vsize, (char*)&paxos_hdr->value}
 			};
-
+            RTE_LOG(DEBUG, USER1, "Worker %u Received Accepted instance %u\n",
+                lp->worker_id, rte_be_to_cpu_32(paxos_hdr->inst));
 			learner_receive_accepted(lp->learner, &ack);
             paxos_accepted out;
             if (learner_deliver_next(lp->learner, &out)) {

@@ -109,7 +109,7 @@ main(int argc, char **argv)
 	uint32_t i;
 	for (i = 1; i <= app.p4xos_conf.osd; i++) {
 		set_app_hdr(&ap, i);
-		submit((char*)&ap, sizeof(struct app_hdr));
+		submit(0, (char*)&ap, sizeof(struct app_hdr));
 	}
 	/* Launch per-lcore init on every lcore */
 	rte_eal_mp_remote_launch(app_lcore_main_loop, NULL, CALL_MASTER);
