@@ -235,9 +235,9 @@ void submit(char* value, int size)
 	uint32_t mbuf_idx = lp->tx.mbuf_out[port].n_mbufs;
 	lp->tx.mbuf_out[port].array[mbuf_idx] = rte_pktmbuf_alloc(app.lcore_params[lcore].pool);
 	struct rte_mbuf* pkt = lp->tx.mbuf_out[port].array[mbuf_idx];
-	uint32_t dst_addr = app.p4xos_conf.dst_addr + rte_cpu_to_be_32(worker_id);
 	if (pkt != NULL) {
-		prepare_message(pkt, port, app.p4xos_conf.src_addr, dst_addr, app.p4xos_conf.msgtype, lp_worker->cur_inst++, value, size);
+		prepare_message(pkt, port, app.p4xos_conf.src_addr, app.p4xos_conf.dst_addr,
+					app.p4xos_conf.msgtype, lp_worker->cur_inst++, value, size);
 	}
 	lp->tx.mbuf_out_flush[port] = 1;
 	lp->tx.mbuf_out[port].n_mbufs++;

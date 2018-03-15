@@ -363,11 +363,15 @@ handle_paxos_messages(struct paxos_hdr *paxos_hdr, struct app_lcore_params_worke
     int ret = 0;
     uint16_t msgtype = rte_be_to_cpu_16(paxos_hdr->msgtype);
 	uint32_t inst = rte_be_to_cpu_32(paxos_hdr->inst);
-	RTE_LOG(DEBUG, USER1, "msgtype %u, instance %u\n", msgtype, inst);
+    if (rte_log_get_global_level() == RTE_LOG_DEBUG) {
+        rte_hexdump(stdout, "Paxos", paxos_hdr, sizeof(struct paxos_hdr));
+    }
 	switch(msgtype)
 	{
 		case PAXOS_RESET: {
-			return -1;
+            RTE_LOG(DEBUG, USER1, "Worker %u Reset instance %u\n",
+                lp->worker_id, rte_be_to_cpu_32(paxos_hdr->inst));
+            return -1;
 		}
 		case PAXOS_PREPARE: {
 			struct paxos_prepare prepare = {
@@ -395,7 +399,8 @@ handle_paxos_messages(struct paxos_hdr *paxos_hdr, struct app_lcore_params_worke
 				paxos_hdr->msgtype = rte_cpu_to_be_16(out.type);
 				paxos_hdr->acptid = rte_cpu_to_be_16(app.p4xos_conf.acceptor_id);
 				lp->accepted_count++;
-				RTE_LOG(DEBUG, USER1, "Accepted instance %u\n", rte_be_to_cpu_32(paxos_hdr->inst));
+				RTE_LOG(DEBUG, USER1, "Worker %u Accepted instance %u\n",
+                    lp->worker_id, rte_be_to_cpu_32(paxos_hdr->inst));
 			}
 			break;
 		}
@@ -441,7 +446,8 @@ handle_paxos_messages(struct paxos_hdr *paxos_hdr, struct app_lcore_params_worke
             if (learner_deliver_next(lp->learner, &out)) {
                 lp->deliver(lp->worker_id, out.iid, out.value.paxos_value_val,
                         out.value.paxos_value_len, lp->deliver_arg);
-                RTE_LOG(DEBUG, USER1, "Finished instance %u\n", out.iid);
+                RTE_LOG(DEBUG, USER1, "Worker %u - Finished instance %u\n",
+                        lp->worker_id, out.iid);
                 paxos_hdr->msgtype = rte_cpu_to_be_16(app.p4xos_conf.msgtype);
                 if (app.p4xos_conf.inc_inst) {
                     paxos_hdr->inst = rte_cpu_to_be_32(lp->cur_inst++);
