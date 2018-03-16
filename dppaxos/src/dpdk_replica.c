@@ -135,7 +135,7 @@ void deliver(unsigned int worker_id, unsigned int __rte_unused inst, __rte_unuse
 		// printf("Key %s\n", ap->key);
 	    char *returned_value =
 	        rocksdb_get(rocks->db[worker_id], rocks->readoptions, (const char*)ap->key, key_len, &len, &err);
-		printf("Key %s: return value %s\n", ap->key, returned_value);
+		// printf("Key %s: return value %s\n", ap->key, returned_value);
 		rte_memcpy(ap->value, returned_value, len);
 	    free(returned_value);
 		rocks->read_count[worker_id]++;
@@ -184,22 +184,24 @@ stat_cb(__rte_unused struct rte_timer *timer, __rte_unused void *arg)
 	struct rocksdb_params *rocks = (struct rocksdb_params *)arg;
 	uint32_t delivered_count = 0;
 	for (i = 0; i < rocks->num_workers; i++) {
-		delivered_count += rocks->delivered_count[i];
-		if (rocks->delivered_count[i] > 0) {
-			printf("Worker %u: delivered %u\t", i, rocks->delivered_count[i]);
+		if (i == 0) {
+			printf("%-10u",rocks->delivered_count[i]);
+		} else {
+			printf("\t%-10u",rocks->delivered_count[i]);
 		}
+		delivered_count += rocks->delivered_count[i];
 		rocks->delivered_count[i] = 0;
 	}
-	if (delivered_count > 0) {
-		double avg_cycle_latency = (double) latency / (double) nb_latency;
+		double avg_cycle_latency = 0;
+		if (nb_latency > 0.0)
+		avg_cycle_latency = (double) latency / (double) nb_latency;
 		double avg_ns_latency = avg_cycle_latency * NS_PER_S / app.hz;
-		printf("\nThroughput = %"PRIu64" pkts, %2.1f Gbits; "
-				"Learner Throughput %u\n"
-				"Avg latency = %.2f cycles ~ %.1f ns\n",
+		printf("\t%-10"PRIu64"\t%-2.7f"
+				"\t%-10u"
+				"\t%-8.1f\t%-8.1f\n",
 				total_pkts, bytes_to_gbits(total_bytes),
 				delivered_count,
 				avg_cycle_latency, avg_ns_latency);
-	}
 	//  else {
 	// 	 printf("Resubmmit new commands\n");
 	// 	 submit_new_commands();
@@ -255,6 +257,13 @@ main(int argc, char **argv)
 		submit(worker_id, (char*)&ap, sizeof(struct app_hdr));
 	}
 	app_set_default_value((char*)&ap, sizeof(struct app_hdr));
+
+	printf("core%-6d", 0);
+	for (i = 1; i < n_workers; i++) {
+		printf("\tcore%-6d", i);
+	}
+	printf("\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\n",
+	"packets", "Gbits", "throughput", "lat_cycle", "lat_ns");
 
 	/* Launch per-lcore init on every lcore */
 	rte_eal_mp_remote_launch(app_lcore_main_loop, NULL, CALL_MASTER);

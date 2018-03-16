@@ -709,14 +709,14 @@ app_lcore_main_loop(__attribute__((unused)) void *arg)
 	lp = &app.lcore_params[lcore];
 
 	if (lp->type == e_APP_LCORE_IO) {
-		printf("Logical core %u (I/O) main loop.\n", lcore);
+		// printf("Logical core %u (I/O) main loop.\n", lcore);
 		app_lcore_main_loop_io();
 	}
 
 	if (lp->type == e_APP_LCORE_WORKER) {
-		printf("Logical core %u (worker %u) main loop.\n",
-			lcore,
-			(unsigned) lp->worker.worker_id);
+		// printf("Logical core %u (worker %u) main loop.\n",
+		// 	lcore,
+		// 	(unsigned) lp->worker.worker_id);
 		app_lcore_main_loop_worker();
 	}
 
