@@ -419,10 +419,8 @@ handle_paxos_messages(struct paxos_hdr *paxos_hdr, struct app_lcore_params_worke
 			paxos_message pa;
 			ret = learner_receive_promise(lp->learner, &promise, &pa.u.accept);
 			if (ret) {
-                RTE_LOG(DEBUG, USER1, "Worker %u Send Accept instance %u\n",
-                    lp->worker_id, rte_be_to_cpu_32(paxos_hdr->inst));
-
                 send_accept(lp, &pa.u.accept);
+                return -1;
 			} else {
                 return -2;
             }
@@ -450,8 +448,8 @@ handle_paxos_messages(struct paxos_hdr *paxos_hdr, struct app_lcore_params_worke
 				.aid = rte_be_to_cpu_16(paxos_hdr->acptid),
 				.value = {vsize, (char*)&paxos_hdr->value}
 			};
-            RTE_LOG(DEBUG, USER1, "Worker %u Received Accepted instance %u\n",
-                lp->worker_id, rte_be_to_cpu_32(paxos_hdr->inst));
+            RTE_LOG(DEBUG, USER1, "Worker %u Received Accepted instance %u, aid %u, ballot %u\n",
+                lp->worker_id, ack.iid, ack.aid, ack.ballot);
 			learner_receive_accepted(lp->learner, &ack);
             paxos_accepted out;
             if (learner_deliver_next(lp->learner, &out)) {

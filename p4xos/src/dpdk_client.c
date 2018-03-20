@@ -250,7 +250,7 @@ send_accept(struct app_lcore_params_worker *lp, paxos_accept* accept)
 
 		if (prepare_pkt == NULL) {
 			RTE_LOG(INFO, USER1, "Not enough entries in the mempools for ACCEPT\n");
-			return;
+			continue;
 		}
 
 		char *value = accept->value.paxos_value_val;
@@ -270,8 +270,10 @@ send_accept(struct app_lcore_params_worker *lp, paxos_accept* accept)
 
 		if (likely(pos < bsz)) {
 			lp->mbuf_out[port].n_mbufs = pos;
-			return;
+			continue;
 		}
+		RTE_LOG(DEBUG, USER1, "Worker %u Send Accept instance %u to port %u\n",
+			lp->worker_id, accept->iid, port);
 
 		ret = rte_ring_sp_enqueue_bulk(
 			lp->rings_out[port],
