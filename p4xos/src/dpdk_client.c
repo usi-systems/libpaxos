@@ -228,6 +228,62 @@ send_prepare(struct app_lcore_params_worker *lp, uint32_t inst, uint32_t prepare
 }
 
 void
+fill_holes(struct app_lcore_params_worker *lp, uint32_t inst, uint32_t prepare_size, char* value, int size)
+{
+	uint16_t port;
+	uint32_t lcore_io;
+	int ret;
+	uint32_t pos;
+
+	for (port = 1; port < APP_MAX_NIC_PORTS; port ++) {
+
+		if (app.nic_tx_port_mask[port] == 0) {
+			continue;
+		}
+
+		if (app_get_lcore_for_nic_tx(port, &lcore_io) < 0) {
+			rte_panic("Algorithmic error (no I/O core to handle TX of port %u)\n",
+				port);
+		}
+
+		struct rte_mbuf* prepare_pkts[prepare_size];
+		ret = rte_pktmbuf_alloc_bulk(app.lcore_params[lcore_io].pool, prepare_pkts, prepare_size);
+
+		if (ret < 0) {
+			RTE_LOG(INFO, USER1, "Not enough entries in the mempools for ACCEPT\n");
+			return;
+		}
+
+		uint32_t i;
+		for (i = 0; i < prepare_size; i++) {
+			prepare_message(prepare_pkts[i], port, app.p4xos_conf.src_addr,
+				app.p4xos_conf.dst_addr, PAXOS_ACCEPT, inst+i, 0,
+				lp->worker_id, value, size);
+
+			pos = lp->mbuf_out[port].n_mbufs;
+
+			lp->mbuf_out[port].array[pos ++] = prepare_pkts[i];
+			lp->mbuf_out[port].n_mbufs = pos;
+		}
+		ret = rte_ring_sp_enqueue_bulk(
+			lp->rings_out[port],
+			(void **) lp->mbuf_out[port].array,
+			prepare_size,
+			NULL);
+
+		if (unlikely(ret == 0)) {
+			uint32_t k;
+			for (k = 0; k < prepare_size; k ++) {
+				struct rte_mbuf *pkt_to_free = lp->mbuf_out[port].array[k];
+				rte_pktmbuf_free(pkt_to_free);
+			}
+		}
+		lp->mbuf_out[port].n_mbufs = 0;
+		lp->mbuf_out_flush[port] = 0;
+	}
+}
+
+void
 send_accept(struct app_lcore_params_worker *lp, paxos_accept* accept)
 {
 	uint16_t port;

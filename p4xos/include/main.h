@@ -244,6 +244,7 @@
 #define APP_DEFAULT_MESSAGE_TYPE 0x0003
 #define APP_DEFAULT_MULTIPLE_DBS 0
 #define APP_DEFAULT_INCREASE_INST 0
+#define APP_DEFAULT_RUN_PREPARE 0
 #define APP_DEFAULT_TX_PORT 0
 #define APP_DEFAULT_ACCEPTOR_ID 0
 #define APP_DEFAULT_CHECKPOINT_INTERVAL 0
@@ -278,6 +279,7 @@ struct p4xos_configuration {
 	uint32_t osd;
 	uint8_t inc_inst;
 	uint8_t drop;
+	uint8_t run_prepare;
 	uint32_t checkpoint_interval;
 	uint32_t ts_interval;
 };
@@ -473,6 +475,7 @@ void learner_check_holes(struct rte_timer *timer, void *arg);
 void reset_leader_instance();
 double bytes_to_gbits(uint64_t bytes);
 void send_prepare(struct app_lcore_params_worker *lp, uint32_t inst, uint32_t prepare_size, char* value, int size);
+void fill_holes(struct app_lcore_params_worker *lp, uint32_t inst, uint32_t prepare_size, char* value, int size);
 void send_accept(struct app_lcore_params_worker *lp, paxos_accept* accept);
 
 #ifdef __cplusplus

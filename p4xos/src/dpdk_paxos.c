@@ -354,7 +354,11 @@ learner_check_holes(__rte_unused struct rte_timer *timer, __rte_unused void *arg
 	if (prepare_size > app.p4xos_conf.osd) {
 		prepare_size = app.p4xos_conf.osd;
 	}
-        send_prepare(lp, from, prepare_size, lp->default_value, lp->default_value_len);
+        if (app.p4xos_conf.run_prepare) {
+            send_prepare(lp, from, prepare_size, lp->default_value, lp->default_value_len);
+        } else {
+            fill_holes(lp, from, prepare_size, lp->default_value, lp->default_value_len);
+        }
     }
 }
 

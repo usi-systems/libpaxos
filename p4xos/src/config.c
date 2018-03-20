@@ -86,6 +86,8 @@ static const char usage[] =
 "    --multi-dbs : Enabling multiple instance of DBs (default value is %u)      \n"
 "    --inc-inst : Proposer increases instance after receiving a response        \n"
 "					(default value is %u)                                       \n"
+"    --run_prepare : Run prepare phase in learner recovery                      \n"
+"					(default value is %u)                                       \n"
 "    --drop : Artificial drop packets (default value is %u)                     \n"
 "    --port [PORT]: TX port Proposers use initially (default value is %u)       \n"
 "    --num-ac NUM: Number of acceptors (default value is %u)                    \n"
@@ -117,6 +119,7 @@ app_print_usage(void)
 		APP_DEFAULT_MESSAGE_TYPE,
 		APP_DEFAULT_MULTIPLE_DBS,
 		APP_DEFAULT_INCREASE_INST,
+		APP_DEFAULT_RUN_PREPARE,
 		APP_DEFAULT_DROP,
 		APP_DEFAULT_TX_PORT,
 		APP_DEFAULT_NUM_ACCEPTORS,
@@ -692,6 +695,7 @@ app_parse_args(int argc, char **argv)
 		{"port", 1, 0, 0},
 		{"multi-dbs", 0, 0, 0},
 		{"inc-inst", 0, 0, 0},
+		{"run-prepare", 0, 0, 0},
 		{"drop", 0, 0, 0},
 		{"osd", 1, 0, 0},
 		{"src", 1, 0, 0},
@@ -716,6 +720,7 @@ app_parse_args(int argc, char **argv)
 	uint16_t acceptor_id = 0;
 	uint8_t arg_multi_dbs = 0;
 	uint8_t arg_inc_inst = 0;
+	uint8_t arg_run_prepare = 0;
 	uint8_t arg_drop = 0;
 	uint8_t arg_checkpoint_interval = 0;
 	uint8_t arg_ts_interval = 0;
@@ -822,6 +827,10 @@ app_parse_args(int argc, char **argv)
 			if (!strcmp(lgopts[option_index].name, "inc-inst")) {
 				arg_inc_inst = 1;
 				app.p4xos_conf.inc_inst = 1;
+			}
+			if (!strcmp(lgopts[option_index].name, "run_prepare")) {
+				arg_run_prepare = 1;
+				app.p4xos_conf.run_prepare = 1;
 			}
 			if (!strcmp(lgopts[option_index].name, "drop")) {
 				arg_drop = 1;
@@ -947,6 +956,10 @@ app_parse_args(int argc, char **argv)
 
 	if (arg_drop == 0) {
 		app.p4xos_conf.drop = APP_DEFAULT_DROP;
+	}
+
+	if (arg_run_prepare == 0) {
+		app.p4xos_conf.run_prepare = APP_DEFAULT_RUN_PREPARE;
 	}
 
 	/* Check cross-consistency of arguments */
