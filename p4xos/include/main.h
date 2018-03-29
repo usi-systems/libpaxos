@@ -251,6 +251,7 @@
 #define APP_DEFAULT_TS_INTERVAL 4
 #define APP_DEFAULT_DROP 0
 #define APP_DEFAULT_OUTSTANDING	8
+#define APP_DEFAULT_MAX_INST	24000000
 
 #ifndef MAX_APP_MESSAGE_LEN
 #define MAX_APP_MESSAGE_LEN 128
@@ -277,6 +278,7 @@ struct p4xos_configuration {
 	uint32_t src_addr;
 	uint32_t dst_addr;
 	uint32_t osd;
+	uint32_t max_inst;
 	uint8_t inc_inst;
 	uint8_t drop;
 	uint8_t run_prepare;
@@ -378,6 +380,7 @@ struct app_lcore_params_worker {
 	uint32_t cur_inst;
 	uint32_t has_holes;
 	uint32_t artificial_drop;
+	uint32_t max_inst;
 	struct rte_timer stat_timer;
 	struct rte_timer deliver_timer;
 	struct rte_timer check_hole_timer;
@@ -436,6 +439,8 @@ struct app_params {
 	/* Paxos configuration */
 	struct p4xos_configuration p4xos_conf;
 	uint64_t hz;
+
+	uint8_t force_quit;
 
 } __rte_cache_aligned;
 

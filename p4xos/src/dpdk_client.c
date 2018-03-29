@@ -98,7 +98,7 @@ set_paxos_hdr(struct paxos_hdr *px, uint16_t msgtype, uint32_t inst, uint16_t rn
 	if (size > 0 && value != NULL) {
 		rte_memcpy(&px->value, value, size);
 	}
-	igress_ts = (inst % (app.p4xos_conf.ts_interval) == 0) ? rte_get_timer_cycles() : 0;
+	// igress_ts = (inst % (app.p4xos_conf.ts_interval) == 0) ? rte_get_timer_cycles() : 0;
 	px->igress_ts = rte_cpu_to_be_64(igress_ts);
 	px->egress_ts = rte_cpu_to_be_64(0);
 }

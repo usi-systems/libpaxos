@@ -96,6 +96,8 @@ static const char usage[] =
 "    --ts-interval NUM : The interval between get time (default value is %u)    \n"
 "    --osd NUM : The number of packets will be sent at beginning (default value \n"
 "                is %u)                                                         \n"
+"    --max NUM : Stop learner after delivered this instance (default value      \n"
+"                is %u)                                                         \n"
 "    --src \"IP\" : source IP address proposers uses to generate packets        \n"
 "                   (default value is %s)										\n"
 "    --dst \"IP\" : destination IP address proposers uses to generate packets   \n"
@@ -127,6 +129,7 @@ app_print_usage(void)
 		APP_DEFAULT_CHECKPOINT_INTERVAL,
 		APP_DEFAULT_TS_INTERVAL,
 		APP_DEFAULT_OUTSTANDING,
+		APP_DEFAULT_MAX_INST,
 		APP_DEFAULT_IP_SRC_ADDR,
 		APP_DEFAULT_IP_DST_ADDR
 
@@ -698,6 +701,7 @@ app_parse_args(int argc, char **argv)
 		{"run-prepare", 0, 0, 0},
 		{"drop", 0, 0, 0},
 		{"osd", 1, 0, 0},
+		{"max", 1, 0, 0},
 		{"src", 1, 0, 0},
 		{"dst", 1, 0, 0},
 		{"cp-interval", 1, 0, 0},
@@ -714,6 +718,7 @@ app_parse_args(int argc, char **argv)
 	uint32_t arg_num_ac = 0;
 	uint32_t src_addr = 0;
 	uint32_t dst_addr = 0;
+	uint32_t arg_max_inst = 0;
 	uint16_t msgtype = 0;
 	uint16_t tx_port = 0;
 	uint16_t osd = 0;
@@ -844,6 +849,14 @@ app_parse_args(int argc, char **argv)
 					return -1;
 				}
 			}
+			if (!strcmp(lgopts[option_index].name, "max")) {
+				arg_max_inst = 1;
+				ret = parse_arg_uint32(optarg, &(app.p4xos_conf.max_inst));
+				if (ret) {
+					printf("Incorrect value for --max argument (%d)\n", ret);
+					return -1;
+				}
+			}
 			if (!strcmp(lgopts[option_index].name, "cp-interval")) {
 				arg_checkpoint_interval = 1;
 				ret = parse_arg_uint32(optarg, &(app.p4xos_conf.checkpoint_interval));
@@ -960,6 +973,10 @@ app_parse_args(int argc, char **argv)
 
 	if (arg_run_prepare == 0) {
 		app.p4xos_conf.run_prepare = APP_DEFAULT_RUN_PREPARE;
+	}
+
+	if (arg_max_inst == 0) {
+		app.p4xos_conf.max_inst = APP_DEFAULT_MAX_INST;
 	}
 
 	/* Check cross-consistency of arguments */
@@ -1304,12 +1321,14 @@ app_print_params(void)
 			"Message type: %u\n"
 			"Acceptor ID: %u\n"
 			"Multiple DBs: %u\n"
+			"Max Instance: %u\n"
 			"Proposer TX port: %u\n"
 			"Outstanding packets: %u\n",
 			app.p4xos_conf.num_acceptors,
 			app.p4xos_conf.msgtype,
 			app.p4xos_conf.acceptor_id,
 			app.p4xos_conf.multi_dbs,
+			app.p4xos_conf.max_inst,
 			app.p4xos_conf.tx_port,
 			app.p4xos_conf.osd
 	);

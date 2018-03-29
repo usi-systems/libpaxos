@@ -180,6 +180,8 @@ stat_cb(__rte_unused struct rte_timer *timer, __rte_unused void *arg)
 		lp->nb_delivery = 0;
 		lp->latency = 0;
 	}
+	printf("%-4u\t%-4u\t%-4u\t%-10u\t", app.p4xos_conf.osd, app.burst_size_io_rx_read,
+	app.p4xos_conf.ts_interval, app.p4xos_conf.checkpoint_interval);
 
 	struct rocksdb_params *rocks = (struct rocksdb_params *)arg;
 	uint32_t delivered_count = 0;
@@ -192,20 +194,23 @@ stat_cb(__rte_unused struct rte_timer *timer, __rte_unused void *arg)
 		delivered_count += rocks->delivered_count[i];
 		rocks->delivered_count[i] = 0;
 	}
-		double avg_cycle_latency = 0;
-		if (nb_latency > 0.0)
-		avg_cycle_latency = (double) latency / (double) nb_latency;
-		double avg_ns_latency = avg_cycle_latency * NS_PER_S / app.hz;
-		printf("\t%-10"PRIu64"\t%-2.7f"
-				"\t%-10u"
-				"\t%-8.1f\t%-8.1f\n",
-				total_pkts, bytes_to_gbits(total_bytes),
-				delivered_count,
-				avg_cycle_latency, avg_ns_latency);
+	rocks->total_delivered_count += delivered_count;
+	double avg_cycle_latency = 0;
+	if (nb_latency > 0.0)
+	avg_cycle_latency = (double) latency / (double) nb_latency;
+	double avg_ns_latency = avg_cycle_latency * NS_PER_S / app.hz;
+	printf("\t%-10"PRIu64"\t%-2.7f"
+			"\t%-10u"
+			"\t%-8.1f\t%-8.1f\n",
+			total_pkts, bytes_to_gbits(total_bytes),
+			delivered_count,
+			avg_cycle_latency, avg_ns_latency);
 	//  else {
 	// 	 printf("Resubmmit new commands\n");
 	// 	 submit_new_commands();
 	// }
+	if (rocks->total_delivered_count >= app.p4xos_conf.max_inst)
+		app.force_quit = 1;
 }
 
 
@@ -258,6 +263,7 @@ main(int argc, char **argv)
 	}
 	app_set_default_value((char*)&ap, sizeof(struct app_hdr));
 
+	printf("%-4s\t%-4s\t%-4s\t%-10s\t", "osd", "bsz", "tsi", "cpi");
 	printf("core%-6d", 0);
 	for (i = 1; i < n_workers; i++) {
 		printf("\tcore%-6d", i);

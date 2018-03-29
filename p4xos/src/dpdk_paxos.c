@@ -349,7 +349,7 @@ learner_check_holes(__rte_unused struct rte_timer *timer, __rte_unused void *arg
     uint32_t from, to;
     if (learner_has_holes(lp->learner, &from, &to)) {
         lp->has_holes = 1;
-        RTE_LOG(INFO, USER1, "Learner %u Holes from %u to %u\n", lp->worker_id, from, to);
+        RTE_LOG(DEBUG, USER1, "Learner %u Holes from %u to %u\n", lp->worker_id, from, to);
         uint32_t prepare_size = to - from;
 	if (prepare_size > app.p4xos_conf.osd) {
 		prepare_size = app.p4xos_conf.osd;
@@ -437,13 +437,17 @@ handle_paxos_messages(struct paxos_hdr *paxos_hdr, struct app_lcore_params_worke
                     return -4;
             }
             uint64_t previous = rte_be_to_cpu_64(paxos_hdr->igress_ts);
-			if (previous > 0) {
+			if (unlikely(previous > 0)) {
 				uint64_t now = rte_get_timer_cycles();
 				uint64_t latency = now - previous;
 				lp->latency += latency;
 				lp->nb_latency ++;
 				paxos_hdr->igress_ts = rte_cpu_to_be_64(now);
 			}
+            else if (unlikely(rte_be_to_cpu_32(paxos_hdr->inst) % app.p4xos_conf.ts_interval == 0)) {
+                uint64_t now = rte_get_timer_cycles();
+                paxos_hdr->igress_ts = rte_cpu_to_be_64(now);
+            }
 			int vsize = rte_be_to_cpu_32(paxos_hdr->value_len);
 			struct paxos_accepted ack = {
 				.iid = rte_be_to_cpu_32(paxos_hdr->inst),

@@ -441,7 +441,7 @@ app_lcore_main_loop_io(void)
 
 	uint8_t pos_lb = app.pos_lb;
 
-	for ( ; ; ) {
+	while (!app.force_quit) {
 		if (APP_LCORE_IO_FLUSH && (unlikely(i == APP_LCORE_IO_FLUSH))) {
 			if (likely(lp->rx.n_nic_queues > 0)) {
 				app_lcore_io_rx_flush(lp, n_workers);
@@ -682,7 +682,7 @@ app_lcore_main_loop_worker(void) {
 	uint32_t bsz_rd = app.burst_size_worker_read;
 	uint32_t bsz_wr = app.burst_size_worker_write;
 
-	for ( ; ; ) {
+	while (!app.force_quit) {
 		if (APP_LCORE_WORKER_FLUSH && (unlikely(i == APP_LCORE_WORKER_FLUSH))) {
 			app_lcore_worker_flush(lp);
 			i = 0;
