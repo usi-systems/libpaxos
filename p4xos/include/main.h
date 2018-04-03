@@ -272,7 +272,7 @@ typedef void (*worker_cb)(struct rte_mbuf *pkt_in, void *arg);
 struct p4xos_configuration {
 	uint8_t num_acceptors;
 	uint8_t multi_dbs;
-	uint16_t msgtype;
+	uint8_t msgtype;
 	uint16_t tx_port;
 	uint16_t acceptor_id;
 	uint32_t src_addr;

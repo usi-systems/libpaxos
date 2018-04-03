@@ -11,12 +11,12 @@ extern "C" {
 #define PAXOS_ACCEPT_FAST	0x08
 
 struct paxos_hdr {
-	uint16_t msgtype;
-	uint32_t inst;
+	uint8_t msgtype;
+	uint8_t worker_id;
 	uint16_t rnd;
+	uint32_t inst;
 	uint16_t vrnd;
 	uint16_t acptid;
-	uint8_t worker_id;
 	uint32_t value_len;
 	uint8_t value[MAX_APP_MESSAGE_LEN];
 	uint64_t igress_ts;

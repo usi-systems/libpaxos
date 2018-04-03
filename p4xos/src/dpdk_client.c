@@ -85,10 +85,10 @@ set_udp_hdr(struct udp_hdr *udp, uint16_t src_port, uint16_t dst_port, uint16_t 
 }
 
 static void
-set_paxos_hdr(struct paxos_hdr *px, uint16_t msgtype, uint32_t inst, uint16_t rnd,
+set_paxos_hdr(struct paxos_hdr *px, uint8_t msgtype, uint32_t inst, uint16_t rnd,
 				uint8_t worker_id, char* value, int size) {
 	uint64_t igress_ts = 0;
-	px->msgtype = rte_cpu_to_be_16(msgtype);
+	px->msgtype = msgtype;
 	px->inst = rte_cpu_to_be_32(inst);
 	px->rnd = rte_cpu_to_be_16(rnd);
 	px->vrnd = rte_cpu_to_be_16(0);
@@ -105,7 +105,7 @@ set_paxos_hdr(struct paxos_hdr *px, uint16_t msgtype, uint32_t inst, uint16_t rn
 
 static void
 prepare_message(struct rte_mbuf *created_pkt, uint16_t port, uint32_t src_addr,
-		uint32_t dst_addr, uint16_t msgtype, uint32_t inst, uint16_t rnd, uint8_t worker_id, char* value, int size) {
+		uint32_t dst_addr, uint8_t msgtype, uint32_t inst, uint16_t rnd, uint8_t worker_id, char* value, int size) {
 
 	struct ether_hdr *eth = rte_pktmbuf_mtod_offset(created_pkt, struct ether_hdr *, 0);
 	set_ether_hdr(eth, ETHER_TYPE_IPv4, &mac1_addr, &mac2_addr);

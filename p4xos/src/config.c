@@ -719,7 +719,7 @@ app_parse_args(int argc, char **argv)
 	uint32_t src_addr = 0;
 	uint32_t dst_addr = 0;
 	uint32_t arg_max_inst = 0;
-	uint16_t msgtype = 0;
+	uint8_t msgtype = 0;
 	uint16_t tx_port = 0;
 	uint16_t osd = 0;
 	uint16_t acceptor_id = 0;
@@ -803,7 +803,7 @@ app_parse_args(int argc, char **argv)
 			}
 			if (!strcmp(lgopts[option_index].name, "msgtype")) {
 				msgtype = 1;
-				ret = parse_arg_uint16(optarg, &(app.p4xos_conf.msgtype));
+				ret = parse_arg_uint8(optarg, &(app.p4xos_conf.msgtype));
 				if (ret) {
 					printf("Incorrect value for --msgtype argument (%d)\n", ret);
 					return -1;
