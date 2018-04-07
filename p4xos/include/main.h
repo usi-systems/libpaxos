@@ -252,6 +252,7 @@
 #define APP_DEFAULT_DROP 0
 #define APP_DEFAULT_OUTSTANDING	8
 #define APP_DEFAULT_MAX_INST	24000000
+#define CHUNK_SIZE 4096
 
 #ifndef MAX_APP_MESSAGE_LEN
 #define MAX_APP_MESSAGE_LEN 128
@@ -386,6 +387,9 @@ struct app_lcore_params_worker {
 	struct rte_timer check_hole_timer;
 	char* default_value;
 	uint32_t default_value_len;
+	char file_buffer[CHUNK_SIZE + 64];
+	FILE* stat_fp;
+	int buffer_count;
 };
 
 struct app_lcore_params {

@@ -131,6 +131,9 @@ app_init_learner(void)
 		if (ret < 0) {
 			printf("timer is in the RUNNING state\n");
 		}
+
+		lp->stat_fp = fopen("latency.txt", "w");
+		lp->buffer_count = 0;
 	}
 }
 
