@@ -40,7 +40,6 @@ struct app_hdr {
 	uint8_t key[KEY_LEN];
     uint32_t value_len;
 	uint8_t value[VALUE_LEN];
-    struct timespec start;
 } __attribute__((__packed__));
 
 struct rocksdb_params {

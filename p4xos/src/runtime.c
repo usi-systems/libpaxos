@@ -697,11 +697,6 @@ app_lcore_main_loop_worker(void) {
 		}
 		i ++;
 	}
-	if (lp->buffer_count > 0)
-	{
-		fwrite(lp->file_buffer, 1, lp->buffer_count, lp->stat_fp);
-	}
-	fclose(lp->stat_fp);
 }
 
 int
