@@ -318,7 +318,10 @@ lcore_main(struct rte_mempool *mbuf_pool)
 			rte_lcore_id());
 
 	uint32_t n_workers = app_get_lcores_worker();
-	reset_instance(mbuf_pool, n_workers);
+
+	if (app.p4xos_conf.reset_inst)
+		reset_instance(mbuf_pool, n_workers);
+
 	submit_requests(mbuf_pool, n_workers);
 
 	/* Run until the application is quit or killed. */
