@@ -103,7 +103,7 @@ set_paxos_hdr(struct paxos_hdr *px, uint8_t msgtype, uint32_t inst, uint16_t rnd
 	px->egress_ts = rte_cpu_to_be_64(0);
 }
 
-static void
+void
 prepare_message(struct rte_mbuf *created_pkt, uint16_t port, uint32_t src_addr,
 		uint32_t dst_addr, uint8_t msgtype, uint32_t inst, uint16_t rnd, uint8_t worker_id, char* value, int size) {
 

@@ -254,12 +254,6 @@
 #define APP_DEFAULT_MAX_INST	24000000
 #define CHUNK_SIZE 4096
 
-#ifndef MAX_APP_MESSAGE_LEN
-#define MAX_APP_MESSAGE_LEN 128
-#endif
-#if (MAX_APP_MESSAGE_LEN >= 1450)
-#error "APP_DEFAULT_NUM_ACCEPTORS is too big"
-#endif
 
 #define TIMER_RESOLUTION_CYCLES 20000000ULL /* around 10ms at 2 Ghz */
 
@@ -486,7 +480,9 @@ double bytes_to_gbits(uint64_t bytes);
 void send_prepare(struct app_lcore_params_worker *lp, uint32_t inst, uint32_t prepare_size, char* value, int size);
 void fill_holes(struct app_lcore_params_worker *lp, uint32_t inst, uint32_t prepare_size, char* value, int size);
 void send_accept(struct app_lcore_params_worker *lp, paxos_accept* accept);
-
+void prepare_message(struct rte_mbuf *created_pkt, uint16_t port, uint32_t src_addr,
+						uint32_t dst_addr, uint8_t msgtype, uint32_t inst,
+						uint16_t rnd, uint8_t worker_id, char* value, int size);
 #ifdef __cplusplus
 }  /* end extern "C" */
 #endif

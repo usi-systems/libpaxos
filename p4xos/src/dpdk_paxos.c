@@ -69,11 +69,11 @@ swap_udp_ports(struct udp_hdr *udp) {
 }
 
 
-static size_t get_paxos_offset(void) {
+size_t get_paxos_offset(void) {
 	return sizeof(struct ether_hdr) + sizeof(struct ipv4_hdr) + sizeof(struct udp_hdr);
 }
 
-static void prepare_hw_checksum(struct rte_mbuf *pkt_in, size_t data_size) {
+void prepare_hw_checksum(struct rte_mbuf *pkt_in, size_t data_size) {
 	// struct ether_hdr *eth = rte_pktmbuf_mtod_offset(pkt_in, struct ether_hdr *, 0);
 	size_t ip_offset = sizeof(struct ether_hdr);
 	struct ipv4_hdr *ip = rte_pktmbuf_mtod_offset(pkt_in, struct ipv4_hdr *, ip_offset);
@@ -93,7 +93,7 @@ static void prepare_hw_checksum(struct rte_mbuf *pkt_in, size_t data_size) {
 	udp->dgram_cksum = rte_ipv4_phdr_cksum(ip, pkt_in->ol_flags);
 }
 
-static int filter_packets(struct rte_mbuf *pkt_in) {
+int filter_packets(struct rte_mbuf *pkt_in) {
 	struct ether_hdr *eth = rte_pktmbuf_mtod_offset(pkt_in, struct ether_hdr *, 0);
 	if (rte_be_to_cpu_16(eth->ether_type) != ETHER_TYPE_IPv4)
 		return -1;
@@ -132,7 +132,7 @@ proposer_handler(struct rte_mbuf *pkt_in, void *arg)
 
 	switch(msgtype)
 	{
-		case PAXOS_FINISHED: {
+		case PAXOS_CHOSEN: {
 			uint64_t previous = rte_be_to_cpu_64(paxos_hdr->igress_ts);
 			if (previous > 0) {
 				uint64_t now = rte_get_timer_cycles();
@@ -142,7 +142,7 @@ proposer_handler(struct rte_mbuf *pkt_in, void *arg)
 				paxos_hdr->igress_ts = rte_cpu_to_be_64(now);
 			}
 			lp->nb_delivery ++;
-			paxos_hdr->msgtype = PAXOS_BEGIN;
+			paxos_hdr->msgtype = NEW_COMMAND;
 			break;
 		}
 		default:
@@ -174,7 +174,7 @@ leader_handler(struct rte_mbuf *pkt_in, void *arg)
 
 	switch(msgtype)
 	{
-		case PAXOS_BEGIN: {
+		case NEW_COMMAND: {
 			paxos_hdr->inst = rte_cpu_to_be_32(lp->cur_inst++);
 			paxos_hdr->msgtype = PAXOS_ACCEPT;
 			break;
@@ -265,11 +265,11 @@ learner_handler(struct rte_mbuf *pkt_in, void *arg)
 	// rte_hexdump(stdout, "Paxos", paxos_hdr, sizeof(struct paxos_hdr));
 	size_t data_size = sizeof(struct paxos_hdr);
 	prepare_hw_checksum(pkt_in, data_size);
-	uint16_t msgtype = rte_be_to_cpu_16(paxos_hdr->msgtype);
+	uint16_t msgtype = paxos_hdr->msgtype;
 	uint32_t inst = rte_be_to_cpu_32(paxos_hdr->inst);
 	RTE_LOG(DEBUG, USER1, "in PORT %u, msgtype %u, instance %u\n", pkt_in->port, msgtype, inst);
 
-	switch(msgtype)
+    switch(msgtype)
 	{
 		case PAXOS_PROMISE: {
 			int vsize = rte_be_to_cpu_32(paxos_hdr->value_len);
@@ -283,7 +283,7 @@ learner_handler(struct rte_mbuf *pkt_in, void *arg)
 			paxos_message pa;
 			ret = learner_receive_promise(lp->learner, &promise, &pa.u.accept);
 			if (ret) {
-                // TODO: Send Accept messages to acceptors
+				// TODO: Send Accept messages to acceptors
 			}
 			break;
 		}
@@ -303,7 +303,7 @@ learner_handler(struct rte_mbuf *pkt_in, void *arg)
 				lp->deliver(lp->worker_id, out.iid, out.value.paxos_value_val,
 						out.value.paxos_value_len, lp->deliver_arg);
 				//RTE_LOG(DEBUG, USER1, "Finished instance %u\n", rte_be_to_cpu_32(paxos_hdr->inst));
-				paxos_hdr->msgtype = PAXOS_ACCEPT_FAST;
+				paxos_hdr->msgtype = FAST_ACCEPT;
 			}
 			else {
 				rte_pktmbuf_free(pkt_in);

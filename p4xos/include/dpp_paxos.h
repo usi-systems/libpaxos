@@ -5,10 +5,19 @@
 extern "C" {
 #endif
 
-#define PAXOS_RESET 0x07
-#define PAXOS_BEGIN	0xBB
-#define PAXOS_FINISHED	0xFF
-#define PAXOS_ACCEPT_FAST	0x08
+
+#ifndef MAX_APP_MESSAGE_LEN
+#define MAX_APP_MESSAGE_LEN 128
+#endif
+#if (MAX_APP_MESSAGE_LEN >= 1450)
+#error "APP_DEFAULT_NUM_ACCEPTORS is too big"
+#endif
+
+#define PAXOS_CHOSEN 4
+#define PAXOS_RESET  7
+#define NEW_COMMAND  8
+#define FAST_ACCEPT  9
+#define CHECKPOINT   10
 
 struct paxos_hdr {
 	uint8_t msgtype;
@@ -23,7 +32,9 @@ struct paxos_hdr {
 	uint64_t egress_ts;
 } __attribute__((__packed__));
 
-
+size_t get_paxos_offset(void);
+int filter_packets(struct rte_mbuf *pkt_in);
+void prepare_hw_checksum(struct rte_mbuf *pkt_in, size_t data_size);
 #ifdef __cplusplus
 }  /* end extern "C" */
 #endif
