@@ -21,37 +21,7 @@ const char DBPath[] = "/tmp/";
 
 struct rocksdb_params rocks;
 
-static uint8_t DEFAULT_VALUE[] = "ABCDEFGH1234567";
 static uint64_t log_size_for_flush = 1048576;
-static uint8_t msg_type = READ_OP;
-static uint8_t key[KEY_LEN];
-
-static void
-set_app_hdr(struct app_hdr *ap, uint32_t inst, uint8_t msg_type, uint32_t key_len,
-	uint8_t* key, uint32_t value_len, uint8_t* value) {
-	ap->msg_type = msg_type;
-	ap->key_len = rte_cpu_to_be_32(key_len);
-	ap->value_len = rte_cpu_to_be_32(value_len);
-	rte_memcpy(ap->key, key, key_len);
-	if (ap->msg_type == WRITE_OP) {
-		rte_memcpy(ap->value, value, value_len);
-	}
-}
-
-
-static inline void __rte_unused submit_new_commands(void) {
-	struct app_hdr ap;
-	uint32_t i;
-	uint8_t worker_id;
-	uint32_t n_workers = app_get_lcores_worker();
-
-	for (i = 0; i < app.p4xos_conf.osd; i++) {
-		worker_id = i % n_workers;
-		set_app_hdr(&ap, i, msg_type, KEY_LEN, key, sizeof(DEFAULT_VALUE), DEFAULT_VALUE);
-		submit(worker_id, (char*)&ap, sizeof(struct app_hdr));
-	}
-}
-
 
 static void
 init_rocksdb(void)
@@ -157,8 +127,6 @@ static void
 stat_cb(__rte_unused struct rte_timer *timer, __rte_unused void *arg)
 {
 	uint32_t lcore = 0;
-	uint32_t nb_delivery = 0, nb_latency = 0;
-	uint64_t latency = 0;
 	uint64_t total_pkts = 0, total_bytes = 0;
 	uint32_t i;
 
@@ -173,15 +141,8 @@ stat_cb(__rte_unused struct rte_timer *timer, __rte_unused void *arg)
 		total_bytes += lp->total_bytes;
 		lp->total_pkts = 0;
 		lp->total_bytes = 0;
-		nb_latency += lp->nb_latency;
-		nb_delivery += lp->nb_delivery;
-		latency += lp->latency;
-		lp->nb_latency = 0;
-		lp->nb_delivery = 0;
-		lp->latency = 0;
 	}
-	printf("%-4u\t%-4u\t%-4u\t%-10u\t", app.p4xos_conf.osd, app.burst_size_io_rx_read,
-	app.p4xos_conf.ts_interval, app.p4xos_conf.checkpoint_interval);
+	printf("%-4u\t%-10u\t", app.burst_size_io_rx_read, app.p4xos_conf.checkpoint_interval);
 
 	struct rocksdb_params *rocks = (struct rocksdb_params *)arg;
 	uint32_t delivered_count = 0;
@@ -195,20 +156,11 @@ stat_cb(__rte_unused struct rte_timer *timer, __rte_unused void *arg)
 		rocks->delivered_count[i] = 0;
 	}
 	rocks->total_delivered_count += delivered_count;
-	double avg_cycle_latency = 0;
-	if (nb_latency > 0.0)
-	avg_cycle_latency = (double) latency / (double) nb_latency;
-	double avg_ns_latency = avg_cycle_latency * NS_PER_S / app.hz;
 	printf("\t%-10"PRIu64"\t%-2.7f"
-			"\t%-10u"
-			"\t%-8.1f\t%-8.1f\n",
+			"\t%-10u\n",
 			total_pkts, bytes_to_gbits(total_bytes),
-			delivered_count,
-			avg_cycle_latency, avg_ns_latency);
-	//  else {
-	// 	 printf("Resubmmit new commands\n");
-	// 	 submit_new_commands();
-	// }
+			delivered_count);
+
 	if (rocks->total_delivered_count >= app.p4xos_conf.max_inst)
 		app.force_quit = 1;
 }
@@ -244,32 +196,17 @@ main(int argc, char **argv)
 	app_set_worker_callback(replica_handler);
 	app_set_stat_callback(stat_cb, &rocks);
 
-	struct app_hdr ap;
-
-	reset_leader_instance((char*)&ap, sizeof(struct app_hdr));
 
 	uint32_t i;
 	uint32_t n_workers = app_get_lcores_worker();
 
-
-
-	uint8_t value[VALUE_LEN];
-	uint8_t worker_id;
-	for (i = 0; i < app.p4xos_conf.osd; i++) {
-		worker_id = i % n_workers;
- 		msg_type = WRITE_OP;
-		set_app_hdr(&ap, i, msg_type, KEY_LEN, key, VALUE_LEN, value);
-		submit(worker_id, (char*)&ap, sizeof(struct app_hdr));
-	}
-	app_set_default_value((char*)&ap, sizeof(struct app_hdr));
-
-	printf("%-4s\t%-4s\t%-4s\t%-10s\t", "osd", "bsz", "tsi", "cpi");
+	printf("%-4s\t%-10s\t","bsz", "cpi");
 	printf("core%-6d", 0);
 	for (i = 1; i < n_workers; i++) {
 		printf("\tcore%-6d", i);
 	}
-	printf("\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\n",
-	"packets", "Gbits", "throughput", "lat_cycle", "lat_ns");
+	printf("\t%-10s\t%-10s\t%-10s\n",
+	"packets", "Gbits", "throughput");
 
 	/* Launch per-lcore init on every lcore */
 	rte_eal_mp_remote_launch(app_lcore_main_loop, NULL, CALL_MASTER);

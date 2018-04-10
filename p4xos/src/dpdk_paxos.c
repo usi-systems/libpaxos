@@ -452,26 +452,9 @@ handle_paxos_messages(struct paxos_hdr *paxos_hdr, struct app_lcore_params_worke
             if (learner_deliver_next(lp->learner, &out)) {
                 lp->deliver(lp->worker_id, out.iid, out.value.paxos_value_val,
                         out.value.paxos_value_len, lp->deliver_arg);
-                uint64_t previous = rte_be_to_cpu_64(paxos_hdr->igress_ts);
-                if (unlikely(previous > 0)) {
-                    uint64_t now = rte_get_timer_cycles();
-                    uint64_t latency = now - previous;
-                    lp->buffer_count += sprintf(&lp->file_buffer[lp->buffer_count], "%u\n", latency);
-                    if (lp->buffer_count >= CHUNK_SIZE) {
-                        fwrite(lp->file_buffer, lp->buffer_count, 1, lp->stat_fp);
-                        lp->buffer_count = 0;
-                    }
-                    lp->latency += latency;
-                    lp->nb_latency ++;
-                    paxos_hdr->igress_ts = rte_cpu_to_be_64(now);
-                }
-                else if (unlikely(rte_be_to_cpu_32(paxos_hdr->inst) % app.p4xos_conf.ts_interval == 0)) {
-                    uint64_t now = rte_get_timer_cycles();
-                    paxos_hdr->igress_ts = rte_cpu_to_be_64(now);
-                }
                 RTE_LOG(DEBUG, USER1, "Worker %u - Finished instance %u\n",
                         lp->worker_id, out.iid);
-                paxos_hdr->msgtype = app.p4xos_conf.msgtype;
+                paxos_hdr->msgtype = PAXOS_CHOSEN;
                 if (app.p4xos_conf.inc_inst) {
                     paxos_hdr->inst = rte_cpu_to_be_32(lp->cur_inst++);
                 }
@@ -515,5 +498,7 @@ replica_handler(struct rte_mbuf *pkt_in, void *arg)
     if (ret < 0) {
         ip->dst_addr = 0;
         // rte_pktmbuf_free(pkt_in);
+    } else {
+        swap_ips(ip);
     }
 }
