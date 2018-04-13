@@ -64,6 +64,16 @@ init_rocksdb(void)
 }
 
 static
+void baseline_deliver(unsigned int worker_id, unsigned int __rte_unused inst, __rte_unused char* val,
+			__rte_unused size_t size, __rte_unused void* arg) {
+	if (rocks.num_workers == 1) {
+		worker_id = 0;
+	}
+	struct rocksdb_params *rocks = (struct rocksdb_params *)arg;
+	rocks->delivered_count[worker_id]++;
+}
+
+static
 void deliver(unsigned int worker_id, unsigned int __rte_unused inst, __rte_unused char* val,
 			__rte_unused size_t size, __rte_unused void* arg) {
 	char *err = NULL;
@@ -192,7 +202,12 @@ main(int argc, char **argv)
 	app_init_acceptor();
 	app_print_params();
 	init_rocksdb();
-	app_set_deliver_callback(deliver, &rocks);
+
+	if (app.p4xos_conf.baseline)
+		app_set_deliver_callback(baseline_deliver, &rocks);
+	else
+		app_set_deliver_callback(deliver, &rocks);
+
 	app_set_worker_callback(replica_handler);
 	app_set_stat_callback(stat_cb, &rocks);
 

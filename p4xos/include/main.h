@@ -242,6 +242,7 @@
 #define APP_DEFAULT_IP_SRC_ADDR "192.168.4.95"
 #define APP_DEFAULT_IP_DST_ADDR "192.168.4.98"
 #define APP_DEFAULT_MESSAGE_TYPE 0x0003
+#define APP_DEFAULT_BASELINE 0
 #define APP_DEFAULT_MULTIPLE_DBS 0
 #define APP_DEFAULT_RESET_INST 0
 #define APP_DEFAULT_INCREASE_INST 0
@@ -277,6 +278,7 @@ struct p4xos_configuration {
 	uint32_t max_inst;
 	uint8_t inc_inst;
 	uint8_t reset_inst;
+	uint8_t baseline;
 	uint8_t drop;
 	uint8_t run_prepare;
 	uint32_t checkpoint_interval;

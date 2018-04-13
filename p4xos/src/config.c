@@ -83,6 +83,7 @@ static const char usage[] =
 "           the I/O RX lcores to identify the worker lcore for the current      \n"
 "           packet (default value is %u)                                        \n"
 "    --msgtype MSGTYPE : Type of p4xos packets (default value is %u)            \n"
+"    --baseline : Enable baseline mode (Do nothing) (default value is %u)       \n"
 "    --multi-dbs : Enabling multiple instance of DBs (default value is %u)      \n"
 "    --reset-inst: Reset leader instance (default value is %u)                  \n"
 "    --inc-inst : Proposer increases instance after receiving a response        \n"
@@ -120,6 +121,7 @@ app_print_usage(void)
 		APP_DEFAULT_BURST_SIZE_IO_TX_WRITE,
 		APP_DEFAULT_IO_RX_LB_POS,
 		APP_DEFAULT_MESSAGE_TYPE,
+		APP_DEFAULT_BASELINE,
 		APP_DEFAULT_MULTIPLE_DBS,
 		APP_DEFAULT_RESET_INST,
 		APP_DEFAULT_INCREASE_INST,
@@ -698,6 +700,7 @@ app_parse_args(int argc, char **argv)
 		{"num-ac", 1, 0, 0},
 		{"msgtype", 1, 0, 0},
 		{"port", 1, 0, 0},
+		{"baseline", 0, 0, 0},
 		{"multi-dbs", 0, 0, 0},
 		{"reset-inst", 0, 0, 0},
 		{"inc-inst", 0, 0, 0},
@@ -726,6 +729,7 @@ app_parse_args(int argc, char **argv)
 	uint16_t tx_port = 0;
 	uint16_t osd = 0;
 	uint16_t acceptor_id = 0;
+	uint8_t arg_baseline = 0;
 	uint8_t arg_multi_dbs = 0;
 	uint8_t arg_reset_inst = 0;
 	uint8_t arg_inc_inst = 0;
@@ -828,6 +832,10 @@ app_parse_args(int argc, char **argv)
 					printf("Incorrect value for --port argument (%d)\n", ret);
 					return -1;
 				}
+			}
+			if (!strcmp(lgopts[option_index].name, "baseline")) {
+				arg_baseline = 1;
+				app.p4xos_conf.baseline = 1;
 			}
 			if (!strcmp(lgopts[option_index].name, "multi-dbs")) {
 				arg_multi_dbs = 1;
@@ -957,6 +965,10 @@ app_parse_args(int argc, char **argv)
 
 	if (tx_port == 0) {
 		app.p4xos_conf.tx_port = APP_DEFAULT_TX_PORT;
+	}
+
+	if (arg_baseline == 0) {
+		app.p4xos_conf.baseline = APP_DEFAULT_BASELINE;
 	}
 
 	if (arg_multi_dbs == 0) {
