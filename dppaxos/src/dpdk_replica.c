@@ -130,6 +130,7 @@ void deliver(unsigned int worker_id, unsigned int __rte_unused inst, __rte_unuse
 		if (err != NULL) {
 			printf("Checkpoint Error: %s\n", err);
 		}
+		send_checkpoint_message(worker_id, inst);
 	}
 }
 

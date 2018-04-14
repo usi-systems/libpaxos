@@ -484,6 +484,8 @@ void send_accept(struct app_lcore_params_worker *lp, paxos_accept* accept);
 void prepare_message(struct rte_mbuf *created_pkt, uint16_t port, uint32_t src_addr,
 						uint32_t dst_addr, uint8_t msgtype, uint32_t inst,
 						uint16_t rnd, uint8_t worker_id, char* value, int size);
+void send_checkpoint_message(uint8_t worker_id, uint32_t inst);
+
 #ifdef __cplusplus
 }  /* end extern "C" */
 #endif
