@@ -264,7 +264,7 @@ extern "C" {
 #endif
 
 typedef void (*deliver_cb)(unsigned int, unsigned int, char* value, size_t size, void* arg);
-typedef void (*worker_cb)(struct rte_mbuf *pkt_in, void *arg);
+typedef int (*worker_cb)(struct rte_mbuf *pkt_in, void *arg);
 
 struct p4xos_configuration {
 	uint8_t num_acceptors;
@@ -464,11 +464,11 @@ void app_print_params(void);
 void submit(uint8_t worker_id, char* value, int size);
 void app_set_deliver_callback(deliver_cb, void *arg);
 void app_set_worker_callback(worker_cb);
-void learner_handler(struct rte_mbuf *pkt_in, void *arg);
-void proposer_handler(struct rte_mbuf *pkt_in, void *arg);
-void acceptor_handler(struct rte_mbuf *pkt_in, void *arg);
-void leader_handler(struct rte_mbuf *pkt_in, void *arg);
-void replica_handler(struct rte_mbuf *pkt_in, void *arg);
+int learner_handler(struct rte_mbuf *pkt_in, void *arg);
+int proposer_handler(struct rte_mbuf *pkt_in, void *arg);
+int acceptor_handler(struct rte_mbuf *pkt_in, void *arg);
+int leader_handler(struct rte_mbuf *pkt_in, void *arg);
+int replica_handler(struct rte_mbuf *pkt_in, void *arg);
 void app_set_stat_callback(rte_timer_cb_t, void *arg);
 void app_init_learner(void);
 void app_init_acceptor(void);

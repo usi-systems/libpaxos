@@ -37,12 +37,10 @@ stat_cb(__rte_unused struct rte_timer *timer, __rte_unused void *arg)
 		lp->accepted_count = 0;
 	}
 
-	if (accepted_count > 0) {
-		printf("Throughput = %"PRIu64" pkts, %2.1f Gbits; "
-			   "Acceptor Throughput %u\n",
-			   total_pkts, bytes_to_gbits(total_bytes),
-			   accepted_count);
-	}
+	printf("Throughput = %"PRIu64" pkts, %2.1f Gbits; "
+		   "Acceptor Throughput %u\n",
+		   total_pkts, bytes_to_gbits(total_bytes),
+		   accepted_count);
 }
 
 

@@ -19,6 +19,18 @@ extern "C" {
 #define FAST_ACCEPT  9
 #define CHECKPOINT   10
 
+
+enum PAXOS_RETURN_CODE {
+        SUCCESS = 0,
+        TO_DROP = -1,
+        NO_MAJORITY = -2,
+        DROP_ORIGINAL_PACKET = -3,
+        NO_HANDLER = -4,
+		NON_ETHERNET_PACKET = -5,
+		NON_UDP_PACKET = -6,
+		NON_PAXOS_PACKET = -7
+};
+
 struct paxos_hdr {
 	uint8_t msgtype;
 	uint8_t worker_id;

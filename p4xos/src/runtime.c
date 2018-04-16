@@ -519,7 +519,12 @@ app_lcore_worker(
 							   sizeof(struct ether_hdr));
 
 
-			lp->process_pkt(pkt, lp);
+			int ret = lp->process_pkt(pkt, lp);
+
+			if (ret < 0) {
+				rte_pktmbuf_free(pkt);
+				continue;
+			}
 
 			ipv4_dst = rte_be_to_cpu_32(ipv4_hdr->dst_addr);
 			// char str[INET_ADDRSTRLEN];
