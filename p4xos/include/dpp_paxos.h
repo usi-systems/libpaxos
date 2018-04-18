@@ -7,7 +7,7 @@ extern "C" {
 
 
 #ifndef MAX_APP_MESSAGE_LEN
-#define MAX_APP_MESSAGE_LEN 128
+#define MAX_APP_MESSAGE_LEN 16
 #endif
 #if (MAX_APP_MESSAGE_LEN >= 1450)
 #error "APP_DEFAULT_NUM_ACCEPTORS is too big"

@@ -1,8 +1,8 @@
 #ifndef _APP_HDR_H_
 #define _APP_HDR_H_
 
-#define KEY_LEN 8
-#define VALUE_LEN 16
+#define KEY_LEN 3
+#define VALUE_LEN 3
 #define READ_OP 0
 #define WRITE_OP 1
 
