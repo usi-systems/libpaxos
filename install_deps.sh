@@ -35,6 +35,7 @@ ldconfig
 sudo apt-get install libgflags-dev libsnappy-dev zlib1g-dev libbz2-dev liblz4-dev libzstd-dev
 cd /tmp && git clone https://github.com/facebook/rocksdb.git
 cd rocksdb
+git checkout v5.12.2 -b stable
 make static_lib
 sudo make install
 

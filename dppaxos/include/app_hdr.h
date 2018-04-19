@@ -3,8 +3,8 @@
 
 #define KEY_LEN 3
 #define VALUE_LEN 3
-#define READ_OP 0
-#define WRITE_OP 1
+#define READ_OP 1
+#define WRITE_OP 2
 
 /* Paxos logic */
 #ifndef DB_NAME_LENGTH

@@ -281,9 +281,12 @@ learner_handler(struct rte_mbuf *pkt_in, void *arg)
 			};
 			paxos_message pa;
 			ret = learner_receive_promise(lp->learner, &promise, &pa.u.accept);
-			if (ret) {
-				// TODO: Send Accept messages to acceptors
-			}
+      if (ret) {
+                send_accept(lp, &pa.u.accept);
+                return DROP_ORIGINAL_PACKET;
+			} else {
+                return NO_MAJORITY;
+            }
 			break;
 		}
 		case PAXOS_ACCEPTED: {
@@ -341,7 +344,6 @@ learner_check_holes(__rte_unused struct rte_timer *timer, __rte_unused void *arg
             lp->deliver(lp->worker_id, out.iid, out.value.paxos_value_val,
                 out.value.paxos_value_len, lp->deliver_arg);
                 RTE_LOG(DEBUG, USER1, "%s Finished instance %u\n", __func__, out.iid);
-                submit(lp->worker_id, out.value.paxos_value_val, out.value.paxos_value_len);
                 paxos_accepted_destroy(&out);
         }
         lp->has_holes = 0;
@@ -351,9 +353,9 @@ learner_check_holes(__rte_unused struct rte_timer *timer, __rte_unused void *arg
         lp->has_holes = 1;
         RTE_LOG(DEBUG, USER1, "Learner %u Holes from %u to %u\n", lp->worker_id, from, to);
         uint32_t prepare_size = to - from;
-	if (prepare_size > app.p4xos_conf.osd) {
-		prepare_size = app.p4xos_conf.osd;
-	}
+        if (prepare_size > APP_DEFAULT_NIC_TX_PTHRESH) {
+            prepare_size = APP_DEFAULT_NIC_TX_PTHRESH;
+        }
         if (app.p4xos_conf.run_prepare) {
             send_prepare(lp, from, prepare_size, lp->default_value, lp->default_value_len);
         } else {
@@ -366,9 +368,9 @@ static inline int
 handle_paxos_messages(struct paxos_hdr *paxos_hdr, struct app_lcore_params_worker *lp) {
     int ret = 0;
     uint8_t msgtype = paxos_hdr->msgtype;
-    if (rte_log_get_global_level() == RTE_LOG_DEBUG) {
-        rte_hexdump(stdout, "Paxos", paxos_hdr, sizeof(struct paxos_hdr));
-    }
+    // if (rte_log_get_global_level() == RTE_LOG_DEBUG) {
+    //     rte_hexdump(stdout, "Paxos", paxos_hdr, sizeof(struct paxos_hdr));
+    // }
 	switch(msgtype)
 	{
 		case PAXOS_RESET: {
