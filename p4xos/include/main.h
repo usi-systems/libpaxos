@@ -248,7 +248,7 @@
 #define APP_DEFAULT_INCREASE_INST 0
 #define APP_DEFAULT_RUN_PREPARE 0
 #define APP_DEFAULT_TX_PORT 0
-#define APP_DEFAULT_ACCEPTOR_ID 0
+#define APP_DEFAULT_NODE_ID 0
 #define APP_DEFAULT_CHECKPOINT_INTERVAL 0
 #define APP_DEFAULT_TS_INTERVAL 4
 #define APP_DEFAULT_DROP 0
@@ -271,7 +271,7 @@ struct p4xos_configuration {
 	uint8_t multi_dbs;
 	uint8_t msgtype;
 	uint16_t tx_port;
-	uint16_t acceptor_id;
+	uint16_t node_id;
 	uint32_t src_addr;
 	uint32_t dst_addr;
 	uint32_t osd;
@@ -483,7 +483,7 @@ void fill_holes(struct app_lcore_params_worker *lp, uint32_t inst, uint32_t prep
 void send_accept(struct app_lcore_params_worker *lp, paxos_accept* accept);
 void prepare_message(struct rte_mbuf *created_pkt, uint16_t port, uint32_t src_addr,
 						uint32_t dst_addr, uint8_t msgtype, uint32_t inst,
-						uint16_t rnd, uint8_t worker_id, char* value, int size);
+						uint16_t rnd, uint8_t worker_id, uint16_t node_id, char* value, int size);
 void send_checkpoint_message(uint8_t worker_id, uint32_t inst);
 
 #ifdef __cplusplus

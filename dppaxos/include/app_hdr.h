@@ -1,8 +1,6 @@
 #ifndef _APP_HDR_H_
 #define _APP_HDR_H_
 
-#define KEY_LEN 3
-#define VALUE_LEN 3
 #define READ_OP 1
 #define WRITE_OP 2
 
@@ -36,10 +34,8 @@ extern "C" {
 
 struct app_hdr {
     uint8_t msg_type;
-    uint32_t key_len;
-	uint8_t key[KEY_LEN];
-    uint32_t value_len;
-	uint8_t value[VALUE_LEN];
+    uint8_t key;
+    uint16_t value;
 } __attribute__((__packed__));
 
 struct rocksdb_params {
