@@ -13,12 +13,14 @@ extern "C" {
 #error "APP_DEFAULT_NUM_ACCEPTORS is too big"
 #endif
 
-#define PAXOS_CHOSEN 4
-#define PAXOS_RESET  7
-#define NEW_COMMAND  8
-#define FAST_ACCEPT  9
-#define CHECKPOINT   10
-
+#define PAXOS_CHOSEN       0x04
+#define PAXOS_RESET        0x07
+#define NEW_COMMAND        0x08
+#define FAST_ACCEPT        0x09
+#define CHECKPOINT         0x0A
+#define LEARNER_PREPARE    0x20
+#define LEARNER_ACCEPT     0x21
+#define LEARNER_CHECKPOINT 0x22
 
 enum PAXOS_RETURN_CODE {
   SUCCESS = 0,

@@ -201,8 +201,9 @@ void send_prepare(struct app_lcore_params_worker *lp, uint32_t inst,
     paxos_prepare out;
     learner_prepare(lp->learner, &out, inst + i);
     prepare_message(prepare_pkts[i], port, app.p4xos_conf.src_addr,
-                    app.p4xos_conf.dst_addr, PAXOS_PREPARE, out.iid, out.ballot,
-                    lp->worker_id, app.p4xos_conf.node_id, value, size);
+                    app.p4xos_conf.dst_addr, LEARNER_PREPARE, out.iid,
+                    out.ballot, lp->worker_id, app.p4xos_conf.node_id, value,
+                    size);
 
     pos = lp->mbuf_out[port].n_mbufs;
 
@@ -252,7 +253,7 @@ void fill_holes(struct app_lcore_params_worker *lp, uint32_t inst,
   uint32_t i;
   for (i = 0; i < prepare_size; i++) {
     prepare_message(prepare_pkts[i], port, app.p4xos_conf.src_addr,
-                    app.p4xos_conf.dst_addr, PAXOS_ACCEPT, inst + i, 0,
+                    app.p4xos_conf.dst_addr, LEARNER_ACCEPT, inst + i, 0,
                     lp->worker_id, app.p4xos_conf.node_id, value, size);
 
     pos = lp->mbuf_out[port].n_mbufs;
@@ -307,7 +308,7 @@ void send_accept(struct app_lcore_params_worker *lp, paxos_accept *accept) {
   }
 
   prepare_message(prepare_pkt, port, app.p4xos_conf.src_addr,
-                  app.p4xos_conf.dst_addr, PAXOS_ACCEPT, accept->iid,
+                  app.p4xos_conf.dst_addr, LEARNER_ACCEPT, accept->iid,
                   accept->ballot, lp->worker_id, app.p4xos_conf.node_id, value,
                   size);
 
@@ -370,8 +371,8 @@ void send_checkpoint_message(uint8_t worker_id, uint32_t inst) {
   struct rte_mbuf *pkt = lp->tx.mbuf_out[port].array[mbuf_idx];
   if (pkt != NULL) {
     prepare_message(pkt, port, app.p4xos_conf.src_addr, app.p4xos_conf.dst_addr,
-                    CHECKPOINT, inst, 0, worker_id, app.p4xos_conf.node_id,
-                    NULL, 0);
+                    LEARNER_CHECKPOINT, inst, 0, worker_id,
+                    app.p4xos_conf.node_id, NULL, 0);
   }
   lp->tx.mbuf_out_flush[port] = 1;
   lp->tx.mbuf_out[port].n_mbufs++;

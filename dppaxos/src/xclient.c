@@ -41,6 +41,8 @@ struct client_param {
   int buffer_count;
   uint64_t delivered_count;
   struct rte_timer stat_timer;
+  struct rte_timer recv_timer;
+  struct rte_mempool *mbuf_pool;
   uint64_t latency_pkts;
   uint64_t latencies;
   uint32_t learner_ip;
@@ -287,6 +289,20 @@ static void stat_cb(__rte_unused struct rte_timer *timer,
   }
 }
 
+static void submit_new_requests(__rte_unused struct rte_timer *timer,
+                                __rte_unused void *arg) {
+
+  struct rte_mempool *mbuf_pool = (struct rte_mempool *)arg;
+  uint32_t n_workers = app_get_lcores_worker();
+  RTE_LOG(INFO, XCLIENT, "Submit %u new packets\n", n_workers);
+  submit_requests(mbuf_pool, n_workers);
+  int ret = rte_timer_reset(&client.recv_timer, app.hz, SINGLE, rte_lcore_id(),
+                            submit_new_requests, client.mbuf_pool);
+  if (ret < 0) {
+    printf("receiver timer is in the RUNNING state\n");
+  }
+}
+
 static uint16_t packet_handler(uint16_t in_port, struct rte_mbuf **pkts,
                                uint16_t n_pkts) {
   RTE_LOG(DEBUG, XCLIENT, "Proccessed %u packets\n", n_pkts);
@@ -303,6 +319,12 @@ static uint16_t packet_handler(uint16_t in_port, struct rte_mbuf **pkts,
     tx_pkts++;
   }
   RTE_LOG(DEBUG, XCLIENT, "Accepted %u packets\n", tx_pkts);
+
+  ret = rte_timer_reset(&client.recv_timer, app.hz, SINGLE, rte_lcore_id(),
+                        submit_new_requests, client.mbuf_pool);
+  if (ret < 0) {
+    printf("receiver timer is in the RUNNING state\n");
+  }
 
   return tx_pkts;
 }
@@ -433,7 +455,6 @@ static void lcore_main(struct rte_mempool *mbuf_pool) {
  * functions.
  */
 int main(int argc, char *argv[]) {
-  struct rte_mempool *mbuf_pool;
 
   /* Initialize the Environment Abstraction Layer (EAL). */
   int ret = rte_eal_init(argc, argv);
@@ -465,22 +486,27 @@ int main(int argc, char *argv[]) {
   }
   uint16_t portid = app.p4xos_conf.tx_port;
   /* Creates a new mempool in memory to hold the mbufs. */
-  mbuf_pool =
+  client.mbuf_pool =
       rte_pktmbuf_pool_create("MBUF_POOL", NUM_MBUFS, MBUF_CACHE_SIZE, 0,
                               RTE_MBUF_DEFAULT_BUF_SIZE, rte_socket_id());
 
-  if (mbuf_pool == NULL)
+  if (client.mbuf_pool == NULL)
     rte_exit(EXIT_FAILURE, "Cannot create mbuf pool\n");
 
   /* Initialize port. */
-  if (port_init(portid, mbuf_pool) != 0)
+  if (port_init(portid, client.mbuf_pool) != 0)
     rte_exit(EXIT_FAILURE, "Cannot init port %" PRIu16 "\n", portid);
 
-  if (rte_lcore_count() > 1)
-    printf("\nWARNING: Too many lcores enabled. Only 1 used.\n");
+  rte_timer_init(&client.recv_timer);
+
+  ret = rte_timer_reset(&client.recv_timer, app.hz, SINGLE, rte_lcore_id(),
+                        submit_new_requests, client.mbuf_pool);
+  if (ret < 0) {
+    printf("receiver timer is in the RUNNING state\n");
+  }
 
   /* Call lcore_main on the master core only. */
-  lcore_main(mbuf_pool);
+  lcore_main(client.mbuf_pool);
 
   destroy_client();
 

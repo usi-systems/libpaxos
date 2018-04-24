@@ -349,7 +349,7 @@ void learner_check_holes(__rte_unused struct rte_timer *timer,
   uint32_t from, to;
   if (learner_has_holes(lp->learner, &from, &to)) {
     lp->has_holes = 1;
-    RTE_LOG(WARNING, P4XOS, "Learner %u Holes from %u to %u\n", lp->worker_id,
+    RTE_LOG(DEBUG, P4XOS, "Learner %u Holes from %u to %u\n", lp->worker_id,
             from, to);
     uint32_t prepare_size = to - from;
     if (prepare_size > APP_DEFAULT_NIC_TX_PTHRESH) {
@@ -449,17 +449,16 @@ static inline int handle_paxos_messages(struct paxos_hdr *paxos_hdr,
                                      rte_be_to_cpu_16(paxos_hdr->vrnd),
                                  .aid = rte_be_to_cpu_16(paxos_hdr->acptid),
                                  .value = {vsize, (char *)&paxos_hdr->value}};
-    RTE_LOG(DEBUG, P4XOS,
-            "Worker %u Received Accepted instance %u, aid %u, ballot %u\n",
-            lp->worker_id, ack.iid, ack.aid, ack.ballot);
+    RTE_LOG(DEBUG, P4XOS, "Worker %u, log_index %u, Received Accepted instance "
+                          "%u, aid %u, ballot %u\n",
+            lp->worker_id, rte_be_to_cpu_16(paxos_hdr->log_index), ack.iid,
+            ack.aid, ack.ballot);
     learner_receive_accepted(lp->learner, &ack);
     paxos_accepted out;
     ret = learner_deliver_next(lp->learner, &out);
     if (ret) {
       lp->deliver(lp->worker_id, out.iid, out.value.paxos_value_val,
                   out.value.paxos_value_len, lp->deliver_arg);
-      RTE_LOG(DEBUG, P4XOS, "Worker %u - Delivered instance %u\n",
-              lp->worker_id, out.iid);
       paxos_hdr->msgtype = PAXOS_CHOSEN;
       paxos_hdr->inst = rte_cpu_to_be_32(out.iid);
       if (app.p4xos_conf.inc_inst) {
@@ -467,14 +466,14 @@ static inline int handle_paxos_messages(struct paxos_hdr *paxos_hdr,
       }
       paxos_accepted_destroy(&out);
     } else {
-      RTE_LOG(DEBUG, P4XOS, "Worker %u - Refused instance %u, ret %d\n",
-              lp->worker_id, rte_cpu_to_be_32(paxos_hdr->inst), ret);
       return NO_MAJORITY;
     }
     break;
   }
   default: {
-    RTE_LOG(WARNING, P4XOS, "No handler for %u\n", msgtype);
+    RTE_LOG(DEBUG, P4XOS, "No handler for %u. Worker %u Tail pointer %u\n",
+            msgtype, paxos_hdr->worker_id,
+            rte_be_to_cpu_16(paxos_hdr->log_index));
     return NO_HANDLER;
   }
   }
