@@ -92,7 +92,7 @@ static void deliver(unsigned int worker_id, unsigned int __rte_unused inst,
     // printf("Key %s, Value %s\n", ap->key, ap->value);
     // // Single PUT
     rocksdb_put(rocks->db[worker_id], rocks->writeoptions,
-                (const char *)ap->key, key_len, (const char *)ap->value,
+                (const char *)&ap->key, key_len, (const char *)&ap->value,
                 value_len, &err);
     if (err != NULL) {
       printf("Write Error: %s\n", err);
@@ -119,9 +119,9 @@ static void deliver(unsigned int worker_id, unsigned int __rte_unused inst,
     // printf("Key %s\n", ap->key);
     char *returned_value =
         rocksdb_get(rocks->db[worker_id], rocks->readoptions,
-                    (const char *)ap->key, key_len, &len, &err);
+                    (const char *)&ap->key, key_len, &len, &err);
     // printf("Key %s: return value %s\n", ap->key, returned_value);
-    rte_memcpy(ap->value, returned_value, len);
+    rte_memcpy((char *)&ap->value, returned_value, len);
     free(returned_value);
     rocks->read_count[worker_id]++;
   }
@@ -160,7 +160,7 @@ static void stat_cb(__rte_unused struct rte_timer *timer,
     lp->total_pkts = 0;
     lp->total_bytes = 0;
   }
-  printf("%-4u\t%-10u\t", app.burst_size_io_rx_read,
+  printf("%-8s\t%-4u\t%-10u\t", "Stat", app.burst_size_io_rx_read,
          app.p4xos_conf.checkpoint_interval);
 
   struct rocksdb_params *rocks = (struct rocksdb_params *)arg;
@@ -219,7 +219,7 @@ int main(int argc, char **argv) {
   uint32_t i;
   uint32_t n_workers = app_get_lcores_worker();
 
-  printf("%-4s\t%-10s\t", "bsz", "cpi");
+  printf("%-8s\t%-4s\t%-10s\t", "Stats", "bsz", "cpi");
   printf("core%-6d", 0);
   for (i = 1; i < n_workers; i++) {
     printf("\tcore%-6d", i);

@@ -156,6 +156,7 @@ static const char usage[] =
     "(default value      \n"
     "                is %u)                                          "
     "               \n"
+    "    --rate Mbps : Set client sending rate (default valueis %u)\n"
     "    --src \"IP\" : source IP address proposers uses to generate "
     "packets        \n"
     "                   (default value is %s)			"
@@ -166,21 +167,21 @@ static const char usage[] =
     "							\n";
 
 void app_print_usage(void) {
-  printf(usage, APP_DEFAULT_NIC_RX_RING_SIZE, APP_DEFAULT_RING_RX_SIZE,
-         APP_DEFAULT_RING_TX_SIZE, APP_DEFAULT_NIC_TX_RING_SIZE,
-         APP_DEFAULT_BURST_SIZE_IO_RX_READ, APP_DEFAULT_BURST_SIZE_IO_RX_WRITE,
-         APP_DEFAULT_BURST_SIZE_WORKER_READ,
-         APP_DEFAULT_BURST_SIZE_WORKER_WRITE, APP_DEFAULT_BURST_SIZE_IO_TX_READ,
-         APP_DEFAULT_BURST_SIZE_IO_TX_WRITE, APP_DEFAULT_IO_RX_LB_POS,
-         APP_DEFAULT_MESSAGE_TYPE, APP_DEFAULT_BASELINE,
-         APP_DEFAULT_MULTIPLE_DBS, APP_DEFAULT_RESET_INST,
-         APP_DEFAULT_INCREASE_INST, APP_DEFAULT_RUN_PREPARE, APP_DEFAULT_DROP,
-         APP_DEFAULT_TX_PORT, APP_DEFAULT_NUM_ACCEPTORS, APP_DEFAULT_NODE_ID,
-         APP_DEFAULT_CHECKPOINT_INTERVAL, APP_DEFAULT_TS_INTERVAL,
-         APP_DEFAULT_OUTSTANDING, APP_DEFAULT_MAX_INST, APP_DEFAULT_IP_SRC_ADDR,
-         APP_DEFAULT_IP_DST_ADDR
+  printf(
+      usage, APP_DEFAULT_NIC_RX_RING_SIZE, APP_DEFAULT_RING_RX_SIZE,
+      APP_DEFAULT_RING_TX_SIZE, APP_DEFAULT_NIC_TX_RING_SIZE,
+      APP_DEFAULT_BURST_SIZE_IO_RX_READ, APP_DEFAULT_BURST_SIZE_IO_RX_WRITE,
+      APP_DEFAULT_BURST_SIZE_WORKER_READ, APP_DEFAULT_BURST_SIZE_WORKER_WRITE,
+      APP_DEFAULT_BURST_SIZE_IO_TX_READ, APP_DEFAULT_BURST_SIZE_IO_TX_WRITE,
+      APP_DEFAULT_IO_RX_LB_POS, APP_DEFAULT_MESSAGE_TYPE, APP_DEFAULT_BASELINE,
+      APP_DEFAULT_MULTIPLE_DBS, APP_DEFAULT_RESET_INST,
+      APP_DEFAULT_INCREASE_INST, APP_DEFAULT_RUN_PREPARE, APP_DEFAULT_DROP,
+      APP_DEFAULT_TX_PORT, APP_DEFAULT_NUM_ACCEPTORS, APP_DEFAULT_NODE_ID,
+      APP_DEFAULT_CHECKPOINT_INTERVAL, APP_DEFAULT_TS_INTERVAL,
+      APP_DEFAULT_OUTSTANDING, APP_DEFAULT_MAX_INST, APP_DEFAULT_SENDING_RATE,
+      APP_DEFAULT_IP_SRC_ADDR, APP_DEFAULT_IP_DST_ADDR
 
-         );
+      );
 }
 
 #ifndef APP_ARG_RX_MAX_CHARS
@@ -694,14 +695,19 @@ int app_parse_args(int argc, char **argv) {
   int option_index;
   char *prgname = argv[0];
   static struct option lgopts[] = {
-      {"rx", 1, 0, 0},          {"tx", 1, 0, 0},          {"w", 1, 0, 0},
-      {"lpm", 1, 0, 0},         {"rsz", 1, 0, 0},         {"bsz", 1, 0, 0},
-      {"pos-lb", 1, 0, 0},      {"num-ac", 1, 0, 0},      {"msgtype", 1, 0, 0},
-      {"node-id", 1, 0, 0},     {"port", 1, 0, 0},        {"baseline", 0, 0, 0},
-      {"multi-dbs", 0, 0, 0},   {"reset-inst", 0, 0, 0},  {"inc-inst", 0, 0, 0},
-      {"run-prepare", 0, 0, 0}, {"drop", 0, 0, 0},        {"osd", 1, 0, 0},
-      {"max", 1, 0, 0},         {"src", 1, 0, 0},         {"dst", 1, 0, 0},
-      {"cp-interval", 1, 0, 0}, {"ts-interval", 1, 0, 0}, {NULL, 0, 0, 0}};
+      {"rx", 1, 0, 0},          {"tx", 1, 0, 0},
+      {"w", 1, 0, 0},           {"lpm", 1, 0, 0},
+      {"rsz", 1, 0, 0},         {"bsz", 1, 0, 0},
+      {"pos-lb", 1, 0, 0},      {"num-ac", 1, 0, 0},
+      {"msgtype", 1, 0, 0},     {"node-id", 1, 0, 0},
+      {"port", 1, 0, 0},        {"baseline", 0, 0, 0},
+      {"multi-dbs", 0, 0, 0},   {"reset-inst", 0, 0, 0},
+      {"inc-inst", 0, 0, 0},    {"run-prepare", 0, 0, 0},
+      {"drop", 0, 0, 0},        {"osd", 1, 0, 0},
+      {"max", 1, 0, 0},         {"rate", 1, 0, 0},
+      {"src", 1, 0, 0},         {"dst", 1, 0, 0},
+      {"cp-interval", 1, 0, 0}, {"ts-interval", 1, 0, 0},
+      {NULL, 0, 0, 0}};
   uint32_t arg_w = 0;
   uint32_t arg_rx = 0;
   uint32_t arg_tx = 0;
@@ -713,10 +719,11 @@ int app_parse_args(int argc, char **argv) {
   uint32_t src_addr = 0;
   uint32_t dst_addr = 0;
   uint32_t arg_max_inst = 0;
-  uint8_t msgtype = 0;
+  uint32_t arg_rate = 0;
   uint16_t tx_port = 0;
   uint16_t osd = 0;
   uint16_t node_id = 0;
+  uint8_t msgtype = 0;
   uint8_t arg_baseline = 0;
   uint8_t arg_multi_dbs = 0;
   uint8_t arg_reset_inst = 0;
@@ -860,6 +867,14 @@ int app_parse_args(int argc, char **argv) {
           return -1;
         }
       }
+      if (!strcmp(lgopts[option_index].name, "rate")) {
+        arg_rate = 1;
+        ret = parse_arg_uint32(optarg, &(app.p4xos_conf.rate));
+        if (ret) {
+          printf("Incorrect value for --rate argument (%d)\n", ret);
+          return -1;
+        }
+      }
       if (!strcmp(lgopts[option_index].name, "cp-interval")) {
         arg_checkpoint_interval = 1;
         ret = parse_arg_uint32(optarg, &(app.p4xos_conf.checkpoint_interval));
@@ -988,6 +1003,10 @@ int app_parse_args(int argc, char **argv) {
 
   if (arg_max_inst == 0) {
     app.p4xos_conf.max_inst = APP_DEFAULT_MAX_INST;
+  }
+
+  if (arg_rate == 0) {
+    app.p4xos_conf.rate = APP_DEFAULT_SENDING_RATE;
   }
 
   /* Check cross-consistency of arguments */

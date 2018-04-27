@@ -349,7 +349,7 @@ void learner_check_holes(__rte_unused struct rte_timer *timer,
   uint32_t from, to;
   if (learner_has_holes(lp->learner, &from, &to)) {
     lp->has_holes = 1;
-    RTE_LOG(DEBUG, P4XOS, "Learner %u Holes from %u to %u\n", lp->worker_id,
+    RTE_LOG(WARNING, P4XOS, "Learner %u Holes from %u to %u\n", lp->worker_id,
             from, to);
     uint32_t prepare_size = to - from;
     if (prepare_size > APP_DEFAULT_NIC_TX_PTHRESH) {

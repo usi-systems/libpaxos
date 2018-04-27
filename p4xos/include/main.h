@@ -124,7 +124,7 @@
 #endif
 
 #ifndef APP_DEFAULT_NIC_RX_WTHRESH
-#define APP_DEFAULT_NIC_RX_WTHRESH  4
+#define APP_DEFAULT_NIC_RX_WTHRESH  0
 #endif
 
 #ifndef APP_DEFAULT_NIC_RX_FREE_THRESH
@@ -137,7 +137,7 @@
 
 /* NIC TX */
 #ifndef APP_DEFAULT_NIC_TX_RING_SIZE
-#define APP_DEFAULT_NIC_TX_RING_SIZE 1024
+#define APP_DEFAULT_NIC_TX_RING_SIZE 4096
 #endif
 
 /*
@@ -146,7 +146,7 @@
  * network controllers and/or network drivers.
  */
 #ifndef APP_DEFAULT_NIC_TX_PTHRESH
-#define APP_DEFAULT_NIC_TX_PTHRESH  36
+#define APP_DEFAULT_NIC_TX_PTHRESH  32
 #endif
 
 #ifndef APP_DEFAULT_NIC_TX_HTHRESH
@@ -171,7 +171,7 @@
 #endif
 
 #ifndef APP_DEFAULT_RING_TX_SIZE
-#define APP_DEFAULT_RING_TX_SIZE 1024
+#define APP_DEFAULT_RING_TX_SIZE 4096
 #endif
 
 /* Bursts */
@@ -254,6 +254,7 @@
 #define APP_DEFAULT_DROP 0
 #define APP_DEFAULT_OUTSTANDING	8
 #define APP_DEFAULT_MAX_INST	24000000
+#define APP_DEFAULT_SENDING_RATE 10000
 #define CHUNK_SIZE 4096
 
 
@@ -283,6 +284,7 @@ struct p4xos_configuration {
 	uint8_t run_prepare;
 	uint32_t checkpoint_interval;
 	uint32_t ts_interval;
+	uint32_t rate;
 };
 
 struct app_mbuf_array {
