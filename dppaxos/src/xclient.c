@@ -206,7 +206,7 @@ static void set_app_hdr(struct app_hdr *ap, uint32_t inst, uint8_t msg_type,
   }
 }
 
-static void submit_requests(struct rte_mempool *mbuf_pool, uint32_t n_workers) {
+static void submit_requests(struct rte_mempool *mbuf_pool, uint8_t worker_id) {
   int ret;
   uint16_t port = app.p4xos_conf.tx_port;
   uint32_t n_reqs = app.p4xos_conf.osd;
@@ -223,10 +223,8 @@ static void submit_requests(struct rte_mempool *mbuf_pool, uint32_t n_workers) {
   uint32_t i;
   uint16_t value;
 
-  uint8_t worker_id;
   struct app_hdr ap;
   for (i = 0; i < n_reqs; i++) {
-    worker_id = i % n_workers;
     uint8_t msg_type = WRITE_OP;
     value = i * i;
     set_app_hdr(&ap, i, msg_type, i, value);
@@ -427,9 +425,8 @@ static void submit_new_requests(__rte_unused struct rte_timer *timer,
                                 __rte_unused void *arg) {
 
   struct rte_mempool *mbuf_pool = (struct rte_mempool *)arg;
-  uint32_t n_workers = app_get_lcores_worker();
   RTE_LOG(WARNING, XCLIENT, "Resubmit new packets\n");
-  submit_requests(mbuf_pool, n_workers);
+  submit_requests(mbuf_pool, app.p4xos_conf.node_id);
   int ret =
       rte_timer_reset(&client.recv_timer, app.hz * 3, SINGLE, rte_lcore_id(),
                       submit_new_requests, client.mbuf_pool);
@@ -549,12 +546,10 @@ static void lcore_main(struct rte_mempool *mbuf_pool) {
 
   printf("\nCore %u forwarding packets. [Ctrl+C to quit]\n", rte_lcore_id());
 
-  uint32_t n_workers = app_get_lcores_worker();
-
   if (app.p4xos_conf.reset_inst)
-    reset_instance(mbuf_pool, n_workers);
+    reset_instance(mbuf_pool, app.p4xos_conf.node_id);
 
-  submit_requests(mbuf_pool, n_workers);
+  submit_requests(mbuf_pool, app.p4xos_conf.node_id);
 
   /* Run until the application is quit or killed. */
   while (client.delivered_count < app.p4xos_conf.max_inst) {
