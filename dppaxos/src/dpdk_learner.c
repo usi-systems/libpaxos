@@ -75,7 +75,7 @@ static void deliver(unsigned int worker_id, unsigned int __rte_unused inst,
     // printf("Key %s, Value %s\n", ap->key, ap->value);
     // // Single PUT
     rocksdb_put(rocks->db[worker_id], rocks->writeoptions,
-                (const char *)ap->key, key_len, (const char *)ap->value,
+                (const char *)&ap->key, key_len, (const char *)&ap->value,
                 value_len, &err);
     if (err != NULL) {
       printf("Write Error: %s\n", err);
@@ -102,9 +102,9 @@ static void deliver(unsigned int worker_id, unsigned int __rte_unused inst,
     // printf("Key %s\n", ap->key);
     char *returned_value =
         rocksdb_get(rocks->db[worker_id], rocks->readoptions,
-                    (const char *)ap->key, key_len, &len, &err);
+                    (const char *)&ap->key, key_len, &len, &err);
     // printf("return value %s\n", returned_value);
-    rte_memcpy(ap->value, returned_value, len);
+    rte_memcpy(&ap->value, returned_value, len);
     free(returned_value);
     rocks->read_count[worker_id]++;
   }

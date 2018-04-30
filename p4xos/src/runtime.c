@@ -50,7 +50,7 @@
 #endif
 
 #ifndef APP_STATS
-#define APP_STATS 1000000
+#define APP_STATS 5000
 #endif
 
 #define APP_IO_RX_DROP_ALL_PACKETS 0
@@ -98,7 +98,7 @@ app_lcore_io_rx_buffer_to_send(struct app_lcore_params_io *lp, uint32_t worker,
                                struct rte_mbuf *mbuf, uint32_t bsz) {
   uint32_t pos;
   int ret;
-
+  uint32_t freespace;
   pos = lp->rx.mbuf_out[worker].n_mbufs;
   lp->rx.mbuf_out[worker].array[pos++] = mbuf;
   if (likely(pos < bsz)) {
@@ -106,14 +106,19 @@ app_lcore_io_rx_buffer_to_send(struct app_lcore_params_io *lp, uint32_t worker,
     return;
   }
 
-  ret = rte_ring_sp_enqueue_bulk(
-      lp->rx.rings[worker], (void **)lp->rx.mbuf_out[worker].array, bsz, NULL);
+  ret = rte_ring_sp_enqueue_bulk(lp->rx.rings[worker],
+                                 (void **)lp->rx.mbuf_out[worker].array, bsz,
+                                 &freespace);
+
+  // printf("I/O RX %d out (worker %u): Enqueue %d, freespace %u\n",
+  //        rte_lcore_id(), worker, ret, freespace);
 
   if (unlikely(ret == 0)) {
     uint32_t k;
     for (k = 0; k < bsz; k++) {
       struct rte_mbuf *m = lp->rx.mbuf_out[worker].array[k];
       rte_pktmbuf_free(m);
+      lp->rx.rings_drop[worker]++;
     }
   }
 
@@ -128,11 +133,13 @@ app_lcore_io_rx_buffer_to_send(struct app_lcore_params_io *lp, uint32_t worker,
   if (unlikely(lp->rx.rings_iters[worker] == APP_STATS)) {
     unsigned lcore = rte_lcore_id();
 
-    printf("\tI/O RX %u out (worker %u): enq success rate = %.2f\n", lcore,
-           (unsigned)worker, ((double)lp->rx.rings_count[worker]) /
-                                 ((double)lp->rx.rings_iters[worker]));
+    printf("I/O RX %u out (worker %u): dropped %u, enq success rate = %.2f\n",
+           lcore, (unsigned)worker, lp->rx.rings_drop[worker],
+           ((double)lp->rx.rings_count[worker]) /
+               ((double)lp->rx.rings_iters[worker]));
     lp->rx.rings_iters[worker] = 0;
     lp->rx.rings_count[worker] = 0;
+    lp->rx.rings_drop[worker] = 0;
   }
 #endif
 }
@@ -164,10 +171,12 @@ static inline void app_lcore_io_rx(struct app_lcore_params_io *lp,
 
       rte_eth_stats_get(port, &stats);
 
-      printf("I/O RX %u in (NIC port %u): NIC drop ratio = %.2f avg burst size "
+      printf("I/O RX %u in (NIC port %u): NIC rx %" PRIu64 ", tx %" PRIu64
+             ", missed %" PRIu64 ", rx err: %" PRIu64 ", tx err %" PRIu64
+             ", mbuf err: %" PRIu64 ", avg burst size "
              "= %.2f\n",
-             lcore, port,
-             (double)stats.imissed / (double)(stats.imissed + stats.ipackets),
+             lcore, port, stats.ipackets, stats.opackets, stats.imissed,
+             stats.ierrors, stats.oerrors, stats.rx_nombuf,
              ((double)lp->rx.nic_queues_count[i]) /
                  ((double)lp->rx.nic_queues_iters[i]));
       lp->rx.nic_queues_iters[i] = 0;
@@ -270,6 +279,7 @@ static inline void app_lcore_io_rx_flush(struct app_lcore_params_io *lp,
       for (k = 0; k < lp->rx.mbuf_out[worker].n_mbufs; k++) {
         struct rte_mbuf *pkt_to_free = lp->rx.mbuf_out[worker].array[k];
         rte_pktmbuf_free(pkt_to_free);
+        lp->rx.rings_drop[worker]++;
       }
     }
 
@@ -427,17 +437,21 @@ static void app_lcore_main_loop_io(void) {
 static inline void app_lcore_worker(struct app_lcore_params_worker *lp,
                                     uint32_t bsz_rd, uint32_t bsz_wr) {
   uint32_t i;
+  uint32_t remaining_entries;
+  uint32_t freespace;
 
   for (i = 0; i < lp->n_rings_in; i++) {
     struct rte_ring *ring_in = lp->rings_in[i];
     uint32_t j;
     int ret;
-
     ret = rte_ring_sc_dequeue_bulk(ring_in, (void **)lp->mbuf_in.array, bsz_rd,
-                                   NULL);
+                                   &remaining_entries);
 
     if (unlikely(ret == 0))
       continue;
+
+// printf("(worker %u): Dequeue %d, remaining_entries %u\n", lp->worker_id,
+//        ret, remaining_entries);
 
 #if APP_WORKER_DROP_ALL_PACKETS
     for (j = 0; j < bsz_rd; j++) {
@@ -512,21 +526,25 @@ static inline void app_lcore_worker(struct app_lcore_params_worker *lp,
 
             ret = rte_ring_sp_enqueue_bulk(lp->rings_out[port],
                                            (void **)lp->mbuf_out[port].array,
-                                           bsz_wr, NULL);
+                                           bsz_wr, &freespace);
 
+// printf("(worker %u) -> TX %u: Enqueue %d, freespace %u\n",
+//        lp->worker_id, port, ret, freespace);
 #if APP_STATS
             lp->rings_out_iters[port]++;
             if (ret > 0) {
               lp->rings_out_count[port] += 1;
             }
             if (lp->rings_out_iters[port] == APP_STATS) {
-              printf(
-                  "\t\tWorker %u out (NIC port %u): enq success rate = %.2f\n",
-                  (unsigned)lp->worker_id, port,
-                  ((double)lp->rings_out_count[port]) /
-                      ((double)lp->rings_out_iters[port]));
+              printf("\t\tWorker %u out (NIC port %u): dropped %u, enq success "
+                     "rate = %.2f\n",
+                     (unsigned)lp->worker_id, port,
+                     lp->rings_out_count_drop[port],
+                     ((double)lp->rings_out_count[port]) /
+                         ((double)lp->rings_out_iters[port]));
               lp->rings_out_iters[port] = 0;
               lp->rings_out_count[port] = 0;
+              lp->rings_out_count_drop[port] = 0;
             }
 #endif
             if (unlikely(ret == 0)) {
@@ -534,6 +552,7 @@ static inline void app_lcore_worker(struct app_lcore_params_worker *lp,
               for (k = 0; k < bsz_wr; k++) {
                 struct rte_mbuf *pkt_to_free = lp->mbuf_out[port].array[k];
                 rte_pktmbuf_free(pkt_to_free);
+                lp->rings_out_count_drop[port]++;
               }
             }
 
@@ -556,26 +575,15 @@ static inline void app_lcore_worker(struct app_lcore_params_worker *lp,
                                        (void **)lp->mbuf_out[port].array,
                                        bsz_wr, NULL);
 
-#if APP_STATS
-        lp->rings_out_iters[port]++;
-        if (ret > 0) {
-          lp->rings_out_count[port] += 1;
-        }
-        if (lp->rings_out_iters[port] == APP_STATS) {
-          printf("\t\tWorker %u out (NIC port %u): enq success rate = %.2f\n",
-                 (unsigned)lp->worker_id, port,
-                 ((double)lp->rings_out_count[port]) /
-                     ((double)lp->rings_out_iters[port]));
-          lp->rings_out_iters[port] = 0;
-          lp->rings_out_count[port] = 0;
-        }
-#endif
+        // printf("(worker %u) -> TX %u: Enqueue %d, freespace %u\n",
+        //        lp->worker_id, port, ret, freespace);
 
         if (unlikely(ret == 0)) {
           uint32_t k;
           for (k = 0; k < bsz_wr; k++) {
             struct rte_mbuf *pkt_to_free = lp->mbuf_out[port].array[k];
             rte_pktmbuf_free(pkt_to_free);
+            lp->rings_out_count_drop[port]++;
           }
         }
 
@@ -611,6 +619,7 @@ static inline void app_lcore_worker_flush(struct app_lcore_params_worker *lp) {
       for (k = 0; k < lp->mbuf_out[port].n_mbufs; k++) {
         struct rte_mbuf *pkt_to_free = lp->mbuf_out[port].array[k];
         rte_pktmbuf_free(pkt_to_free);
+        lp->rings_out_count_drop[port]++;
       }
     }
 

@@ -27,6 +27,7 @@
 
 #define CLIENT_TIMEOUT
 #define RATE_LIMITER
+
 #define RX_RING_SIZE 1024
 #define TX_RING_SIZE 4096
 
@@ -248,6 +249,12 @@ static void submit_requests(struct rte_mempool *mbuf_pool, uint8_t worker_id) {
       rte_sched_port_dequeue(client.sched_port, pkts_tx, nb_eq);
   /* Send burst of TX packets, to port X. */
   uint32_t nb_tx = rte_eth_tx_burst(port, 0, pkts_tx, n_pkts_tx);
+
+  if (unlikely(n_pkts_tx < nb_eq) | (unlikely(nb_tx < n_pkts_tx))) {
+    RTE_LOG(WARNING, XCLIENT, "Reqs %u, Enq %u Deq %u Tx %u\n", n_reqs, nb_eq,
+            n_pkts_tx, nb_tx);
+  }
+  RTE_LOG(WARNING, XCLIENT, "Submit %u requests\n", nb_tx);
   /* Free any unsent packets. */
   if (unlikely(nb_tx < n_pkts_tx)) {
     uint32_t idx;
@@ -261,6 +268,8 @@ static void submit_requests(struct rte_mempool *mbuf_pool, uint8_t worker_id) {
     for (; idx < n_reqs; idx++)
       rte_pktmbuf_free(prepare_pkts[idx]);
   }
+  RTE_LOG(WARNING, XCLIENT, "Submit %u requests\n", idx);
+
 #endif
 }
 
@@ -335,30 +344,30 @@ static int paxos_handler(uint16_t in_port, struct rte_mbuf *pkt_in) {
     struct res_key key = {.inst = inst, .worker_id = paxos_hdr->worker_id};
     ret = rte_hash_lookup(client.res_map, (void *)&key);
     if (ret == -EINVAL) {
-      RTE_LOG(DEBUG, XCLIENT,
+      RTE_LOG(WARNING, XCLIENT,
               "LOOKUP Invalid key (worker %u, inst %u), ret %d\n",
               paxos_hdr->worker_id, inst, ret);
       return -1;
     } else if (ret != -ENOENT) {
       RTE_LOG(DEBUG, XCLIENT, "Key existed (worker %u, inst %u), ret %d\n",
               paxos_hdr->worker_id, inst, ret);
+      ret = rte_hash_del_key(client.res_map, (void *)&key);
+      if (ret < 0) {
+        RTE_LOG(DEBUG, XCLIENT, "DEL KEY ERROR: (worker %u, inst %u), ret %d\n",
+                paxos_hdr->worker_id, inst, ret);
+      }
       return -1;
-    }
-    ret = rte_hash_add_key(client.res_map, (void *)&key);
-    if (ret == -EINVAL) {
-      RTE_LOG(DEBUG, XCLIENT,
-              "ADD KEY ERROR: Invalid key (worker %u, inst %u), ret %d\n",
+    } else {
+      ret = rte_hash_add_key(client.res_map, (void *)&key);
+      if (ret == -ENOSPC) {
+        RTE_LOG(WARNING, XCLIENT, "No Space Left (worker "
+                                  "%u, inst %u), ret %d\n",
+                paxos_hdr->worker_id, inst, ret);
+        return -1;
+      }
+      RTE_LOG(DEBUG, XCLIENT, "Add Key (worker %u, inst %u), ret %d\n",
               paxos_hdr->worker_id, inst, ret);
-      return -1;
-    } else if (ret < 0) {
-      RTE_LOG(DEBUG, XCLIENT, "Failed to add mapping for (worker "
-                              "%u, inst %u), ret %d\n",
-              paxos_hdr->worker_id, inst, ret);
-      return -1;
     }
-
-    RTE_LOG(DEBUG, XCLIENT, "Add Key (worker %u, inst %u), ret %d\n",
-            paxos_hdr->worker_id, inst, ret);
 #endif
 
     uint64_t previous = rte_be_to_cpu_64(paxos_hdr->igress_ts);
@@ -419,6 +428,16 @@ static void stat_cb(__rte_unused struct rte_timer *timer,
     client.pps = 0;
     client.Bps = 0;
   }
+  struct rte_eth_stats stats;
+  unsigned lcore = rte_lcore_id();
+  uint16_t port = app.p4xos_conf.tx_port;
+  rte_eth_stats_get(port, &stats);
+
+  printf("I/O RX %u in (NIC port %u): NIC rx %" PRIu64 ", tx %" PRIu64
+         ", missed %" PRIu64 ", rx err: %" PRIu64 ", tx err %" PRIu64
+         ", mbuf err: %" PRIu64 "\n",
+         lcore, port, stats.ipackets, stats.opackets, stats.imissed,
+         stats.ierrors, stats.oerrors, stats.rx_nombuf);
 }
 
 static void submit_new_requests(__rte_unused struct rte_timer *timer,

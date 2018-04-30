@@ -106,7 +106,7 @@
 
 /* NIC RX */
 #ifndef APP_DEFAULT_NIC_RX_RING_SIZE
-#define APP_DEFAULT_NIC_RX_RING_SIZE 1024
+#define APP_DEFAULT_NIC_RX_RING_SIZE 2048
 #endif
 
 /*
@@ -137,7 +137,7 @@
 
 /* NIC TX */
 #ifndef APP_DEFAULT_NIC_TX_RING_SIZE
-#define APP_DEFAULT_NIC_TX_RING_SIZE 4096
+#define APP_DEFAULT_NIC_TX_RING_SIZE 2048
 #endif
 
 /*
@@ -167,11 +167,11 @@
 
 /* Software Rings */
 #ifndef APP_DEFAULT_RING_RX_SIZE
-#define APP_DEFAULT_RING_RX_SIZE 1024
+#define APP_DEFAULT_RING_RX_SIZE 8192 * 4
 #endif
 
 #ifndef APP_DEFAULT_RING_TX_SIZE
-#define APP_DEFAULT_RING_TX_SIZE 4096
+#define APP_DEFAULT_RING_TX_SIZE 8192 * 4
 #endif
 
 /* Bursts */
@@ -321,6 +321,7 @@ struct app_lcore_params_io {
 		uint32_t nic_queues_count[APP_MAX_NIC_RX_QUEUES_PER_IO_LCORE];
 		uint32_t nic_queues_iters[APP_MAX_NIC_RX_QUEUES_PER_IO_LCORE];
 		uint32_t rings_count[APP_MAX_WORKER_LCORES];
+		uint32_t rings_drop[APP_MAX_WORKER_LCORES];
 		uint32_t rings_iters[APP_MAX_WORKER_LCORES];
 	} rx;
 
@@ -364,6 +365,7 @@ struct app_lcore_params_worker {
 	uint32_t rings_in_count[APP_MAX_IO_LCORES];
 	uint32_t rings_in_iters[APP_MAX_IO_LCORES];
 	uint32_t rings_out_count[APP_MAX_NIC_PORTS];
+	uint32_t rings_out_count_drop[APP_MAX_NIC_PORTS];
 	uint32_t rings_out_iters[APP_MAX_NIC_PORTS];
 
 	/* Libpaxos */
