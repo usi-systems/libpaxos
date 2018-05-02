@@ -28,9 +28,9 @@ static uint8_t DEFAULT_VALUE[] = "BC";
 static void
 set_app_hdr(struct app_hdr *ap, uint32_t inst) {
 	ap->msg_type = (inst % 2);
-	rte_memcpy(ap->key, DEFAULT_KEY, sizeof(DEFAULT_KEY));
+	rte_memcpy((char *)&ap->key, DEFAULT_KEY, sizeof(DEFAULT_KEY));
 	if (ap->msg_type == WRITE_OP) {
-		rte_memcpy(ap->value, DEFAULT_VALUE, sizeof(DEFAULT_VALUE));
+		rte_memcpy((char *)&ap->value, DEFAULT_VALUE, sizeof(DEFAULT_VALUE));
 	}
 }
 

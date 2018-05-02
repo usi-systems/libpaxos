@@ -25,7 +25,6 @@
 
 #define RTE_LOGTYPE_XCLIENT RTE_LOGTYPE_USER1
 
-#define CLIENT_TIMEOUT
 #define RATE_LIMITER
 
 #define RX_RING_SIZE 1024
@@ -216,8 +215,8 @@ static void submit_requests(struct rte_mempool *mbuf_pool, uint8_t worker_id) {
   ret = rte_pktmbuf_alloc_bulk(mbuf_pool, prepare_pkts, n_reqs);
 
   if (ret < 0) {
-    RTE_LOG(DEBUG, XCLIENT,
-            "Not enough entries in the mempools for NEW_COMMAND\n");
+    RTE_LOG(WARNING, XCLIENT,
+            "Not enough entries in the mempools for new command\n");
     return;
   }
 
@@ -236,6 +235,12 @@ static void submit_requests(struct rte_mempool *mbuf_pool, uint8_t worker_id) {
                     sizeof(struct app_hdr));
   }
 
+  size_t paxos_offset = get_paxos_offset();
+  struct paxos_hdr *paxos_hdr = rte_pktmbuf_mtod_offset(
+      prepare_pkts[n_reqs - 1], struct paxos_hdr *, paxos_offset);
+  uint64_t now = rte_get_timer_cycles();
+  paxos_hdr->igress_ts = rte_cpu_to_be_64(now);
+
 #ifdef RATE_LIMITER
   struct rte_mbuf *pkts_tx[n_reqs];
 
@@ -250,17 +255,15 @@ static void submit_requests(struct rte_mempool *mbuf_pool, uint8_t worker_id) {
   /* Send burst of TX packets, to port X. */
   uint32_t nb_tx = rte_eth_tx_burst(port, 0, pkts_tx, n_pkts_tx);
 
-  if (unlikely(n_pkts_tx < nb_eq) | (unlikely(nb_tx < n_pkts_tx))) {
-    RTE_LOG(WARNING, XCLIENT, "Reqs %u, Enq %u Deq %u Tx %u\n", n_reqs, nb_eq,
-            n_pkts_tx, nb_tx);
-  }
-  RTE_LOG(WARNING, XCLIENT, "Submit %u requests\n", nb_tx);
   /* Free any unsent packets. */
   if (unlikely(nb_tx < n_pkts_tx)) {
     uint32_t idx;
     for (idx = nb_tx; idx < n_pkts_tx; idx++)
       rte_pktmbuf_free(pkts_tx[idx]);
   }
+  RTE_LOG(INFO, XCLIENT, "Reqs %u, Enq %u Deq %u Tx %u\n", n_reqs, nb_eq,
+          n_pkts_tx, nb_tx);
+
 #else
   uint32_t idx;
   idx = rte_eth_tx_burst(port, 0, prepare_pkts, n_reqs);
@@ -268,7 +271,6 @@ static void submit_requests(struct rte_mempool *mbuf_pool, uint8_t worker_id) {
     for (; idx < n_reqs; idx++)
       rte_pktmbuf_free(prepare_pkts[idx]);
   }
-  RTE_LOG(WARNING, XCLIENT, "Submit %u requests\n", idx);
 
 #endif
 }
@@ -382,20 +384,11 @@ static int paxos_handler(uint16_t in_port, struct rte_mbuf *pkt_in) {
         fwrite(client.file_buffer, client.buffer_count, 1, client.stat_fp);
         client.buffer_count = 0;
       }
-      paxos_hdr->igress_ts = rte_cpu_to_be_64(now);
-    } else if (unlikely(rte_be_to_cpu_32(paxos_hdr->inst) %
-                            app.p4xos_conf.ts_interval ==
-                        0)) {
-      uint64_t now = rte_get_timer_cycles();
-      paxos_hdr->igress_ts = rte_cpu_to_be_64(now);
     }
-
-    set_ips(ip_hdr);
-    paxos_hdr->msgtype = app.p4xos_conf.msgtype;
     client.delivered_count++;
     client.pps++;
     client.Bps += pkt_in->pkt_len;
-    break;
+    return -5;
   }
   default: {
     struct in_addr src_addr;
@@ -578,49 +571,16 @@ static void lcore_main(struct rte_mempool *mbuf_pool) {
       rte_timer_manage();
       prev_tsc = cur_tsc;
     }
+
     /* Get burst of RX packets, from first port. */
     uint32_t RX_BURST = app.burst_size_io_rx_read;
-    uint32_t TX_BURST = app.burst_size_io_tx_write;
-    struct rte_mbuf *pkts_rx[RX_BURST], *pkts_tx[TX_BURST];
+    struct rte_mbuf *pkts_rx[RX_BURST];
     const uint32_t nb_rx = rte_eth_rx_burst(port, 0, pkts_rx, RX_BURST);
 
-    if (unlikely(nb_rx == 0))
-      continue;
-    uint32_t nb_to_tx = packet_handler(port, pkts_rx, nb_rx);
-    if (unlikely(nb_to_tx == 0))
-      continue;
+    if (likely(nb_rx > 0))
+      packet_handler(port, pkts_rx, nb_rx);
 
-#ifdef RATE_LIMITER
-    uint32_t nb_eq =
-        rte_sched_port_enqueue(client.sched_port, pkts_rx, nb_to_tx);
-
-    if (unlikely(nb_to_tx == 0))
-      continue;
-    uint32_t n_pkts_tx =
-        rte_sched_port_dequeue(client.sched_port, pkts_tx, nb_eq);
-    /* Send burst of TX packets, to port X. */
-    uint32_t nb_tx = rte_eth_tx_burst(port, 0, pkts_tx, n_pkts_tx);
-    if (unlikely(n_pkts_tx < nb_eq) | (unlikely(nb_tx < n_pkts_tx))) {
-      RTE_LOG(WARNING, XCLIENT, "Rx %u, Accepted %u, Enq %u Deq %u Tx %u\n",
-              nb_rx, nb_to_tx, nb_eq, n_pkts_tx, nb_tx);
-    }
-    /* Free any unsent packets. */
-    if (unlikely(nb_tx < n_pkts_tx)) {
-      uint32_t idx;
-      for (idx = nb_tx; idx < n_pkts_tx; idx++)
-        rte_pktmbuf_free(pkts_tx[idx]);
-    }
-#else
-    uint32_t n_pkts_tx = nb_to_tx;
-    /* Send burst of TX packets, to port X. */
-    uint32_t nb_tx = rte_eth_tx_burst(port, 0, pkts_rx, n_pkts_tx);
-    /* Free any unsent packets. */
-    if (unlikely(nb_tx < n_pkts_tx)) {
-      uint32_t idx;
-      for (idx = nb_tx; idx < n_pkts_tx; idx++)
-        rte_pktmbuf_free(pkts_rx[idx]);
-    }
-#endif
+    submit_requests(mbuf_pool, app.p4xos_conf.node_id);
   }
 }
 
