@@ -25,20 +25,18 @@
 
 #define RTE_LOGTYPE_XCLIENT RTE_LOGTYPE_USER1
 
-#define RATE_LIMITER
+#define RX_RING_SIZE 4096
+#define TX_RING_SIZE 1024
 
-#define RX_RING_SIZE 1024
-#define TX_RING_SIZE 4096
-
-#define NUM_MBUFS 8191
-#define MBUF_CACHE_SIZE 250
+#define NUM_MBUFS 8192 * 4
+#define MBUF_CACHE_SIZE 256
 
 #define CHUNK_SIZE 4096
 
-#define RES_MAP_ENTRIES 409600
-
+#define RATE_LIMITER
 #define MAX_SCHED_SUBPORTS 1
-#define MAX_SCHED_PIPES 4096
+#define MAX_SCHED_PIPES 1
+#define RTE_SCHED_PIPE_PROFILES_PER_PORT 1
 
 int app_pipe_to_profile[MAX_SCHED_SUBPORTS][MAX_SCHED_PIPES];
 
@@ -52,33 +50,15 @@ struct client_param {
   struct rte_timer stat_timer;
   struct rte_timer recv_timer;
   struct rte_mempool *mbuf_pool;
+  struct rte_mempool *tx_pkt_pool;
+  struct rte_mbuf *base_pkt;
   uint64_t latency_pkts;
   uint64_t latencies;
   uint32_t learner_ip;
-  struct rte_hash *res_map;
   struct rte_sched_port *sched_port;
 };
 
 struct client_param client;
-
-struct res_key {
-  uint32_t inst;
-  uint8_t worker_id;
-};
-
-static void __rte_unused init_res_map() {
-  struct rte_hash_parameters params;
-  params.entries = RES_MAP_ENTRIES;
-  params.key_len = sizeof(struct res_key);
-  params.hash_func = rte_jhash;
-  params.hash_func_init_val = 0;
-  params.socket_id = rte_socket_id();
-  params.name = "res_map";
-  client.res_map = rte_hash_create(&params);
-  if (client.res_map == NULL) {
-    rte_panic("Failed to create response map, errno = %d\n", rte_errno);
-  }
-}
 
 static struct rte_sched_subport_params subport_params[MAX_SCHED_SUBPORTS] = {
     {
@@ -105,10 +85,10 @@ struct rte_sched_port_params port_params = {
     .name = "port_scheduler_0",
     .socket = 0, /* computed */
     .rate = 0,   /* computed */
-    .mtu = 1500,
+    .mtu = 1522,
     .frame_overhead = RTE_SCHED_FRAME_OVERHEAD_DEFAULT,
     .n_subports_per_port = 1,
-    .n_pipes_per_subport = 256,
+    .n_pipes_per_subport = 1,
     .qsize = {64, 64, 64, 64},
     .pipe_profiles = pipe_profiles,
     .n_pipe_profiles =
@@ -138,13 +118,14 @@ static struct rte_sched_port *app_init_sched_port(uint32_t portid,
   printf("RTE_SCHED_PIPE_PROFILES_PER_PORT %u\n",
          RTE_SCHED_PIPE_PROFILES_PER_PORT);
   printf("n_pipe_profiles %u\n", port_params.n_pipe_profiles);
+  printf("set rate %u\n", app.p4xos_conf.rate);
   uint32_t i, j;
   for (i = 0; i < port_params.n_pipe_profiles; i++) {
     struct rte_sched_pipe_params *p = port_params.pipe_profiles + i;
-    p->tb_rate = app.p4xos_conf.rate * 1000 * 1000 / 8;
+    p->tb_rate = (uint64_t)app.p4xos_conf.rate * 1000 * 1000 / 8;
     p->tb_size = 1000000;
     for (j = 0; j < RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE; j++) {
-      p->tc_rate[j] = app.p4xos_conf.rate * 1000 * 1000 / 8;
+      p->tc_rate[j] = (uint64_t)app.p4xos_conf.rate * 1000 * 1000 / 8;
     }
     p->tc_period = 10;
     for (j = 0; j < RTE_SCHED_QUEUES_PER_PIPE; j++) {
@@ -152,11 +133,22 @@ static struct rte_sched_port *app_init_sched_port(uint32_t portid,
     }
   }
 
+  printf("pipe_profile: tb_rate %u, tb_size %u, tc_rate %u, tc_period %u\n",
+         port_params.pipe_profiles[0].tb_rate,
+         port_params.pipe_profiles[0].tb_size,
+         port_params.pipe_profiles[0].tc_rate[0],
+         port_params.pipe_profiles[0].tc_period);
+
   port = rte_sched_port_config(&port_params);
   if (port == NULL) {
     rte_exit(EXIT_FAILURE, "Unable to config sched port\n");
   }
+
+  printf("subport params: tb_rate %u, tb_size %u, tc_rate %u, tc_period %u\n",
+         subport_params[0].tb_rate, subport_params[0].tb_size,
+         subport_params[0].tc_rate[0], subport_params[0].tc_period);
   for (subport = 0; subport < port_params.n_subports_per_port; subport++) {
+    printf("Configure subport %u\n", subport);
     err = rte_sched_subport_config(port, subport, &subport_params[subport]);
     if (err) {
       rte_exit(EXIT_FAILURE, "Unable to config sched subport %u, err=%d\n",
@@ -164,6 +156,8 @@ static struct rte_sched_port *app_init_sched_port(uint32_t portid,
     }
     for (pipe = 0; pipe < port_params.n_pipes_per_subport; pipe++) {
       if (app_pipe_to_profile[subport][pipe] != -1) {
+        printf("Configure pipe %u subport %u, app_pipe_to_profile %d\n", pipe,
+               subport, app_pipe_to_profile[subport][pipe]);
         err = rte_sched_pipe_config(port, subport, pipe,
                                     app_pipe_to_profile[subport][pipe]);
         if (err) {
@@ -180,9 +174,6 @@ static struct rte_sched_port *app_init_sched_port(uint32_t portid,
 static void init_client() {
   uint32_t global_log_level = rte_log_get_global_level();
   rte_log_set_level(RTE_LOGTYPE_XCLIENT, global_log_level);
-#ifdef FILTER_RESPONSE
-  init_res_map();
-#endif
   client.stat_fp = fopen("latency.txt", "w");
   client.buffer_count = 0;
   client.delivered_count = 0;
@@ -194,7 +185,6 @@ static void destroy_client() {
   }
   fclose(client.stat_fp);
   rte_sched_port_free(client.sched_port);
-  rte_hash_free(client.res_map);
 }
 
 static void set_app_hdr(struct app_hdr *ap, uint32_t inst, uint8_t msg_type,
@@ -206,40 +196,45 @@ static void set_app_hdr(struct app_hdr *ap, uint32_t inst, uint8_t msg_type,
   }
 }
 
-static void submit_requests(struct rte_mempool *mbuf_pool, uint8_t worker_id) {
-  int ret;
-  uint16_t port = app.p4xos_conf.tx_port;
-  uint32_t n_reqs = app.p4xos_conf.osd;
+static struct rte_mbuf *prepare_base_pkt(struct rte_mempool *mbuf_pool,
+                                         uint16_t port, uint8_t worker_id) {
 
-  struct rte_mbuf *prepare_pkts[n_reqs];
-  ret = rte_pktmbuf_alloc_bulk(mbuf_pool, prepare_pkts, n_reqs);
-
-  if (ret < 0) {
+  struct rte_mbuf *base_pkt = rte_pktmbuf_alloc(mbuf_pool);
+  if (base_pkt == NULL) {
     RTE_LOG(WARNING, XCLIENT,
             "Not enough entries in the mempools for new command\n");
-    return;
+    return NULL;
   }
-
-  uint32_t i;
-  uint16_t value;
 
   struct app_hdr ap;
+  uint8_t msg_type = WRITE_OP;
+  uint16_t value = 2345;
+  set_app_hdr(&ap, 0, msg_type, 1, value);
+
+  prepare_message(base_pkt, port, app.p4xos_conf.src_addr,
+                  app.p4xos_conf.dst_addr, app.p4xos_conf.msgtype, 0, 0,
+                  worker_id, app.p4xos_conf.node_id, (char *)&ap,
+                  sizeof(struct app_hdr));
+
+  // size_t paxos_offset = get_paxos_offset();
+  // struct paxos_hdr *paxos_hdr =
+  //     rte_pktmbuf_mtod_offset(base_pkt, struct paxos_hdr *, paxos_offset);
+  // uint64_t now = rte_get_timer_cycles();
+  // paxos_hdr->igress_ts = rte_cpu_to_be_64(now);
+
+  return base_pkt;
+}
+
+static void submit_requests(struct rte_mempool *mbuf_pool,
+                            struct rte_mbuf *pkt) {
+  uint16_t port = app.p4xos_conf.tx_port;
+  uint32_t n_reqs = app.p4xos_conf.osd;
+  struct rte_mbuf *prepare_pkts[n_reqs];
+
+  uint32_t i;
   for (i = 0; i < n_reqs; i++) {
-    uint8_t msg_type = WRITE_OP;
-    value = i * i;
-    set_app_hdr(&ap, i, msg_type, i, value);
-
-    prepare_message(prepare_pkts[i], port, app.p4xos_conf.src_addr,
-                    app.p4xos_conf.dst_addr, app.p4xos_conf.msgtype, 0, 0,
-                    worker_id, app.p4xos_conf.node_id, (char *)&ap,
-                    sizeof(struct app_hdr));
+    prepare_pkts[i] = rte_pktmbuf_clone(pkt, mbuf_pool);
   }
-
-  size_t paxos_offset = get_paxos_offset();
-  struct paxos_hdr *paxos_hdr = rte_pktmbuf_mtod_offset(
-      prepare_pkts[n_reqs - 1], struct paxos_hdr *, paxos_offset);
-  uint64_t now = rte_get_timer_cycles();
-  paxos_hdr->igress_ts = rte_cpu_to_be_64(now);
 
 #ifdef RATE_LIMITER
   struct rte_mbuf *pkts_tx[n_reqs];
@@ -247,13 +242,14 @@ static void submit_requests(struct rte_mempool *mbuf_pool, uint8_t worker_id) {
   uint32_t nb_eq =
       rte_sched_port_enqueue(client.sched_port, prepare_pkts, n_reqs);
 
-  if (unlikely(nb_eq == 0))
-    return;
-
   uint32_t n_pkts_tx =
       rte_sched_port_dequeue(client.sched_port, pkts_tx, nb_eq);
   /* Send burst of TX packets, to port X. */
-  uint32_t nb_tx = rte_eth_tx_burst(port, 0, pkts_tx, n_pkts_tx);
+
+  uint32_t nb_tx = 0;
+  if (likely(n_pkts_tx > 0)) {
+    nb_tx = rte_eth_tx_burst(port, 0, pkts_tx, n_pkts_tx);
+  }
 
   /* Free any unsent packets. */
   if (unlikely(nb_tx < n_pkts_tx)) {
@@ -261,8 +257,6 @@ static void submit_requests(struct rte_mempool *mbuf_pool, uint8_t worker_id) {
     for (idx = nb_tx; idx < n_pkts_tx; idx++)
       rte_pktmbuf_free(pkts_tx[idx]);
   }
-  RTE_LOG(INFO, XCLIENT, "Reqs %u, Enq %u Deq %u Tx %u\n", n_reqs, nb_eq,
-          n_pkts_tx, nb_tx);
 
 #else
   uint32_t idx;
@@ -332,8 +326,8 @@ static int paxos_handler(uint16_t in_port, struct rte_mbuf *pkt_in) {
   struct paxos_hdr *paxos_hdr =
       rte_pktmbuf_mtod_offset(pkt_in, struct paxos_hdr *, paxos_offset);
 
-  size_t data_size = sizeof(struct paxos_hdr);
-  prepare_hw_checksum(pkt_in, data_size);
+  // size_t data_size = sizeof(struct paxos_hdr);
+  // prepare_hw_checksum(pkt_in, data_size);
   uint16_t msgtype = paxos_hdr->msgtype;
   uint32_t inst = rte_be_to_cpu_32(paxos_hdr->inst);
 
@@ -342,49 +336,20 @@ static int paxos_handler(uint16_t in_port, struct rte_mbuf *pkt_in) {
 
   switch (msgtype) {
   case PAXOS_CHOSEN: {
-#ifdef FILTER_RESPONSE
-    struct res_key key = {.inst = inst, .worker_id = paxos_hdr->worker_id};
-    ret = rte_hash_lookup(client.res_map, (void *)&key);
-    if (ret == -EINVAL) {
-      RTE_LOG(WARNING, XCLIENT,
-              "LOOKUP Invalid key (worker %u, inst %u), ret %d\n",
-              paxos_hdr->worker_id, inst, ret);
-      return -1;
-    } else if (ret != -ENOENT) {
-      RTE_LOG(DEBUG, XCLIENT, "Key existed (worker %u, inst %u), ret %d\n",
-              paxos_hdr->worker_id, inst, ret);
-      ret = rte_hash_del_key(client.res_map, (void *)&key);
-      if (ret < 0) {
-        RTE_LOG(DEBUG, XCLIENT, "DEL KEY ERROR: (worker %u, inst %u), ret %d\n",
-                paxos_hdr->worker_id, inst, ret);
-      }
-      return -1;
-    } else {
-      ret = rte_hash_add_key(client.res_map, (void *)&key);
-      if (ret == -ENOSPC) {
-        RTE_LOG(WARNING, XCLIENT, "No Space Left (worker "
-                                  "%u, inst %u), ret %d\n",
-                paxos_hdr->worker_id, inst, ret);
-        return -1;
-      }
-      RTE_LOG(DEBUG, XCLIENT, "Add Key (worker %u, inst %u), ret %d\n",
-              paxos_hdr->worker_id, inst, ret);
-    }
-#endif
-
-    uint64_t previous = rte_be_to_cpu_64(paxos_hdr->igress_ts);
-    if (unlikely(previous > 0)) {
-      uint64_t now = rte_get_timer_cycles();
-      uint64_t latency = now - previous;
-      client.latencies += latency;
-      client.latency_pkts++;
-      client.buffer_count += sprintf(&client.file_buffer[client.buffer_count],
-                                     "%" PRIu64 "\n", latency);
-      if (client.buffer_count >= CHUNK_SIZE) {
-        fwrite(client.file_buffer, client.buffer_count, 1, client.stat_fp);
-        client.buffer_count = 0;
-      }
-    }
+    // uint64_t previous = rte_be_to_cpu_64(paxos_hdr->igress_ts);
+    // if (unlikely(previous > 0)) {
+    //   uint64_t now = rte_get_timer_cycles();
+    //   uint64_t latency = now - previous;
+    //   client.latencies += latency;
+    //   client.latency_pkts++;
+    //   client.buffer_count +=
+    //   sprintf(&client.file_buffer[client.buffer_count],
+    //                                  "%" PRIu64 "\n", latency);
+    //   if (client.buffer_count >= CHUNK_SIZE) {
+    //     fwrite(client.file_buffer, client.buffer_count, 1, client.stat_fp);
+    //     client.buffer_count = 0;
+    //   }
+    // }
     client.delivered_count++;
     client.pps++;
     client.Bps += pkt_in->pkt_len;
@@ -411,25 +376,27 @@ static int paxos_handler(uint16_t in_port, struct rte_mbuf *pkt_in) {
 
 static void stat_cb(__rte_unused struct rte_timer *timer,
                     __rte_unused void *arg) {
+  double avg_latency = 0.0;
   if (client.latency_pkts > 0) {
-    double avg_latency = (double)client.latencies / client.latency_pkts;
-    printf("%-8s\t%-4u\t%-4u\t%-8.1f\t%-10" PRIu64 "\t%-3.3f\n", "Stat",
-           app.p4xos_conf.osd, app.p4xos_conf.ts_interval, avg_latency,
-           client.pps, bytes_to_gbits(client.Bps));
-    client.latency_pkts = 0;
-    client.latencies = 0;
-    client.pps = 0;
-    client.Bps = 0;
+    avg_latency = (double)client.latencies / client.latency_pkts;
   }
+  printf("%-8s\t%-4u\t%-4u\t%-8.1f\t%-10" PRIu64 "\t%-3.3f\n", "Stat",
+         app.p4xos_conf.osd, app.p4xos_conf.ts_interval, avg_latency,
+         client.pps, bytes_to_gbits(client.Bps));
+  client.latency_pkts = 0;
+  client.latencies = 0;
+  client.pps = 0;
+  client.Bps = 0;
   struct rte_eth_stats stats;
   unsigned lcore = rte_lcore_id();
   uint16_t port = app.p4xos_conf.tx_port;
   rte_eth_stats_get(port, &stats);
 
-  printf("I/O RX %u in (NIC port %u): NIC rx %" PRIu64 ", tx %" PRIu64
-         ", missed %" PRIu64 ", rx err: %" PRIu64 ", tx err %" PRIu64
-         ", mbuf err: %" PRIu64 "\n",
-         lcore, port, stats.ipackets, stats.opackets, stats.imissed,
+  printf("I/O RX %u in (NIC port %u): NIC rx %" PRIu64
+         " ~ %2.3f Gbps, tx %" PRIu64 " ~ %2.3f Gbps, missed %" PRIu64
+         ", rx err: %" PRIu64 ", tx err %" PRIu64 ", mbuf err: %" PRIu64 "\n",
+         lcore, port, stats.ipackets, bytes_to_gbits(stats.ibytes),
+         stats.opackets, bytes_to_gbits(stats.obytes), stats.imissed,
          stats.ierrors, stats.oerrors, stats.rx_nombuf);
 }
 
@@ -438,7 +405,7 @@ static void submit_new_requests(__rte_unused struct rte_timer *timer,
 
   struct rte_mempool *mbuf_pool = (struct rte_mempool *)arg;
   RTE_LOG(WARNING, XCLIENT, "Resubmit new packets\n");
-  submit_requests(mbuf_pool, app.p4xos_conf.node_id);
+  submit_requests(mbuf_pool, client.base_pkt);
   int ret =
       rte_timer_reset(&client.recv_timer, app.hz * 3, SINGLE, rte_lcore_id(),
                       submit_new_requests, client.mbuf_pool);
@@ -542,7 +509,44 @@ static inline int port_init(uint16_t port, struct rte_mempool *mbuf_pool) {
   return 0;
 }
 
-static void lcore_main(struct rte_mempool *mbuf_pool) {
+static int lcore_rx(void *arg) {
+  uint16_t port = app.p4xos_conf.tx_port;
+  uint64_t prev_tsc = 0, cur_tsc, diff_tsc;
+  /*
+   * Check that the port is on the same NUMA node as the polling thread
+   * for best performance.
+   */
+  if (rte_eth_dev_socket_id(port) > 0 &&
+      rte_eth_dev_socket_id(port) != (int)rte_socket_id())
+    printf("WARNING, port %u is on remote NUMA node to "
+           "polling thread.\n\tPerformance will "
+           "not be optimal.\n",
+           port);
+
+  printf("\nCore %u Receiving packets. [Ctrl+C to quit]\n", rte_lcore_id());
+
+  /* Run until the application is quit or killed. */
+  while (client.delivered_count < app.p4xos_conf.max_inst) {
+    cur_tsc = rte_get_timer_cycles();
+    diff_tsc = cur_tsc - prev_tsc;
+    if (diff_tsc > TIMER_RESOLUTION_CYCLES) {
+      rte_timer_manage();
+      prev_tsc = cur_tsc;
+    }
+
+    /* Get burst of RX packets, from first port. */
+    uint32_t RX_BURST = app.burst_size_io_rx_read;
+    struct rte_mbuf *pkts_rx[RX_BURST];
+    const uint32_t nb_rx = rte_eth_rx_burst(port, 0, pkts_rx, RX_BURST);
+
+    if (likely(nb_rx > 0))
+      packet_handler(port, pkts_rx, nb_rx);
+  }
+  return 0;
+}
+
+static int lcore_tx(void *arg) {
+  struct rte_mempool *mbuf_pool = arg;
   uint16_t port = app.p4xos_conf.tx_port;
   uint64_t prev_tsc = 0, cur_tsc, diff_tsc;
   /*
@@ -561,7 +565,10 @@ static void lcore_main(struct rte_mempool *mbuf_pool) {
   if (app.p4xos_conf.reset_inst)
     reset_instance(mbuf_pool, app.p4xos_conf.node_id);
 
-  submit_requests(mbuf_pool, app.p4xos_conf.node_id);
+  struct rte_mbuf *base_pkt =
+      prepare_base_pkt(client.tx_pkt_pool, port, app.p4xos_conf.node_id);
+
+  client.base_pkt = base_pkt;
 
   /* Run until the application is quit or killed. */
   while (client.delivered_count < app.p4xos_conf.max_inst) {
@@ -571,17 +578,38 @@ static void lcore_main(struct rte_mempool *mbuf_pool) {
       rte_timer_manage();
       prev_tsc = cur_tsc;
     }
-
-    /* Get burst of RX packets, from first port. */
-    uint32_t RX_BURST = app.burst_size_io_rx_read;
-    struct rte_mbuf *pkts_rx[RX_BURST];
-    const uint32_t nb_rx = rte_eth_rx_burst(port, 0, pkts_rx, RX_BURST);
-
-    if (likely(nb_rx > 0))
-      packet_handler(port, pkts_rx, nb_rx);
-
-    submit_requests(mbuf_pool, app.p4xos_conf.node_id);
+    submit_requests(client.tx_pkt_pool, base_pkt);
   }
+  return 0;
+}
+
+static int master_core(void *arg) {
+  uint16_t port = app.p4xos_conf.tx_port;
+  uint64_t prev_tsc = 0, cur_tsc, diff_tsc;
+
+  /*
+   * Check that the port is on the same NUMA node as the polling thread
+   * for best performance.
+   */
+  if (rte_eth_dev_socket_id(port) > 0 &&
+      rte_eth_dev_socket_id(port) != (int)rte_socket_id())
+    printf("WARNING, port %u is on remote NUMA node to "
+           "polling thread.\n\tPerformance will "
+           "not be optimal.\n",
+           port);
+
+  printf("\nCore %u monitoring. [Ctrl+C to quit]\n", rte_lcore_id());
+
+  /* Run until the application is quit or killed. */
+  while (client.delivered_count < app.p4xos_conf.max_inst) {
+    cur_tsc = rte_get_timer_cycles();
+    diff_tsc = cur_tsc - prev_tsc;
+    if (diff_tsc > TIMER_RESOLUTION_CYCLES) {
+      rte_timer_manage();
+      prev_tsc = cur_tsc;
+    }
+  }
+  return 0;
 }
 
 /*
@@ -613,8 +641,10 @@ int main(int argc, char *argv[]) {
   /* fetch default timer frequency. */
   app.hz = rte_get_timer_hz();
 
+  unsigned lcore_id = rte_get_master_lcore();
+
   rte_timer_init(&client.stat_timer);
-  ret = rte_timer_reset(&client.stat_timer, app.hz, PERIODICAL, rte_lcore_id(),
+  ret = rte_timer_reset(&client.stat_timer, app.hz, PERIODICAL, lcore_id,
                         stat_cb, &client);
   if (ret < 0) {
     printf("timer is in the RUNNING state\n");
@@ -628,6 +658,13 @@ int main(int argc, char *argv[]) {
   if (client.mbuf_pool == NULL)
     rte_exit(EXIT_FAILURE, "Cannot create mbuf pool\n");
 
+  /* Creates a new mempool in memory to hold the mbufs. */
+  client.tx_pkt_pool = rte_pktmbuf_pool_create(
+      "TX_PKT_POOL", NUM_MBUFS, MBUF_CACHE_SIZE, 0, 128, rte_socket_id());
+
+  if (client.tx_pkt_pool == NULL)
+    rte_exit(EXIT_FAILURE, "Cannot create tx pkt pool\n");
+
 #ifdef RATE_LIMITER
   client.sched_port = app_init_sched_port(portid, rte_socket_id());
   if (client.sched_port == NULL)
@@ -638,18 +675,24 @@ int main(int argc, char *argv[]) {
   if (port_init(portid, client.mbuf_pool) != 0)
     rte_exit(EXIT_FAILURE, "Cannot init port %" PRIu16 "\n", portid);
 
+  lcore_id = rte_get_next_lcore(lcore_id, 1, 1);
+
 #ifdef CLIENT_TIMEOUT
   rte_timer_init(&client.recv_timer);
 
-  ret = rte_timer_reset(&client.recv_timer, app.hz * 3, SINGLE, rte_lcore_id(),
+  ret = rte_timer_reset(&client.recv_timer, app.hz * 3, SINGLE, lcore_id,
                         submit_new_requests, client.mbuf_pool);
   if (ret < 0) {
     printf("receiver timer is in the RUNNING state\n");
   }
 #endif
   /* Call lcore_main on the master core only. */
-  lcore_main(client.mbuf_pool);
+  rte_eal_remote_launch(lcore_tx, (void *)client.tx_pkt_pool, lcore_id);
 
+  lcore_id = rte_get_next_lcore(lcore_id, 1, 1);
+  rte_eal_remote_launch(lcore_rx, (void *)client.mbuf_pool, lcore_id);
+
+  master_core(NULL);
   destroy_client();
 
   return 0;
