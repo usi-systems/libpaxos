@@ -36,6 +36,7 @@
 #define RATE_LIMITER
 #define MAX_SCHED_SUBPORTS 1
 #define MAX_SCHED_PIPES 1
+#undef RTE_SCHED_PIPE_PROFILES_PER_PORT
 #define RTE_SCHED_PIPE_PROFILES_PER_PORT 1
 
 int app_pipe_to_profile[MAX_SCHED_SUBPORTS][MAX_SCHED_PIPES];
@@ -65,7 +66,7 @@ static struct rte_sched_subport_params subport_params[MAX_SCHED_SUBPORTS] = {
         .tb_rate = 1250000000,
         .tb_size = 1000000,
         .tc_rate = {1250000000, 1250000000, 1250000000, 1250000000},
-        .tc_period = 10,
+        .tc_period = 1,
     },
 };
 
@@ -94,6 +95,14 @@ struct rte_sched_port_params port_params = {
     .n_pipe_profiles =
         sizeof(pipe_profiles) / sizeof(struct rte_sched_pipe_params),
 };
+
+/* Convert cycles to ns */
+static inline double cycles_to_ns(uint64_t cycles) {
+  double t = cycles;
+  t *= (double)NS_PER_S;
+  t /= app.hz;
+  return t;
+}
 
 static struct rte_sched_port *app_init_sched_port(uint32_t portid,
                                                   uint32_t socketid) {
@@ -127,7 +136,7 @@ static struct rte_sched_port *app_init_sched_port(uint32_t portid,
     for (j = 0; j < RTE_SCHED_TRAFFIC_CLASSES_PER_PIPE; j++) {
       p->tc_rate[j] = (uint64_t)app.p4xos_conf.rate * 1000 * 1000 / 8;
     }
-    p->tc_period = 10;
+    p->tc_period = 1;
     for (j = 0; j < RTE_SCHED_QUEUES_PER_PIPE; j++) {
       p->wrr_weights[j] = 1;
     }
@@ -196,8 +205,17 @@ static void set_app_hdr(struct app_hdr *ap, uint32_t inst, uint8_t msg_type,
   }
 }
 
+static void update_ts(struct rte_mbuf *base_pkt) {
+  size_t paxos_offset = get_paxos_offset();
+  struct paxos_hdr *paxos_hdr =
+      rte_pktmbuf_mtod_offset(base_pkt, struct paxos_hdr *, paxos_offset);
+  uint64_t now = rte_get_timer_cycles();
+  paxos_hdr->igress_ts = rte_cpu_to_be_64(now);
+}
+
 static struct rte_mbuf *prepare_base_pkt(struct rte_mempool *mbuf_pool,
-                                         uint16_t port, uint8_t worker_id) {
+                                         uint16_t port, uint8_t worker_id,
+                                         uint8_t get_igress) {
 
   struct rte_mbuf *base_pkt = rte_pktmbuf_alloc(mbuf_pool);
   if (base_pkt == NULL) {
@@ -216,26 +234,25 @@ static struct rte_mbuf *prepare_base_pkt(struct rte_mempool *mbuf_pool,
                   worker_id, app.p4xos_conf.node_id, (char *)&ap,
                   sizeof(struct app_hdr));
 
-  // size_t paxos_offset = get_paxos_offset();
-  // struct paxos_hdr *paxos_hdr =
-  //     rte_pktmbuf_mtod_offset(base_pkt, struct paxos_hdr *, paxos_offset);
-  // uint64_t now = rte_get_timer_cycles();
-  // paxos_hdr->igress_ts = rte_cpu_to_be_64(now);
+  if (get_igress) {
+    update_ts(base_pkt);
+  }
 
   return base_pkt;
 }
 
-static void submit_requests(struct rte_mempool *mbuf_pool,
-                            struct rte_mbuf *pkt) {
+static void submit_requests(struct rte_mbuf *pkt) {
   uint16_t port = app.p4xos_conf.tx_port;
   uint32_t n_reqs = app.p4xos_conf.osd;
+
+  update_ts(pkt);
   struct rte_mbuf *prepare_pkts[n_reqs];
+  rte_pktmbuf_refcnt_update(pkt, n_reqs);
 
   uint32_t i;
   for (i = 0; i < n_reqs; i++) {
-    prepare_pkts[i] = rte_pktmbuf_clone(pkt, mbuf_pool);
+    prepare_pkts[i] = pkt;
   }
-
 #ifdef RATE_LIMITER
   struct rte_mbuf *pkts_tx[n_reqs];
 
@@ -303,17 +320,6 @@ static const struct rte_eth_conf port_conf_default = {
         },
 };
 
-static void swap_ips(struct ipv4_hdr *ip) {
-  uint32_t tmp = ip->dst_addr;
-  ip->dst_addr = ip->src_addr;
-  ip->src_addr = tmp;
-}
-
-static void set_ips(struct ipv4_hdr *ip) {
-  ip->dst_addr = app.p4xos_conf.dst_addr;
-  ip->src_addr = app.p4xos_conf.src_addr;
-}
-
 static int paxos_handler(uint16_t in_port, struct rte_mbuf *pkt_in) {
   int ret = filter_packets(pkt_in);
   if (ret < 0) {
@@ -336,20 +342,21 @@ static int paxos_handler(uint16_t in_port, struct rte_mbuf *pkt_in) {
 
   switch (msgtype) {
   case PAXOS_CHOSEN: {
-    // uint64_t previous = rte_be_to_cpu_64(paxos_hdr->igress_ts);
-    // if (unlikely(previous > 0)) {
-    //   uint64_t now = rte_get_timer_cycles();
-    //   uint64_t latency = now - previous;
-    //   client.latencies += latency;
-    //   client.latency_pkts++;
-    //   client.buffer_count +=
-    //   sprintf(&client.file_buffer[client.buffer_count],
-    //                                  "%" PRIu64 "\n", latency);
-    //   if (client.buffer_count >= CHUNK_SIZE) {
-    //     fwrite(client.file_buffer, client.buffer_count, 1, client.stat_fp);
-    //     client.buffer_count = 0;
-    //   }
-    // }
+    uint64_t previous = rte_be_to_cpu_64(paxos_hdr->igress_ts);
+    if (unlikely(previous > 0)) {
+      uint64_t now = rte_get_timer_cycles();
+
+      uint64_t latency = now - previous;
+
+      client.latencies += latency;
+      client.latency_pkts++;
+      client.buffer_count += sprintf(&client.file_buffer[client.buffer_count],
+                                     "%" PRIu64 "\n", latency);
+      if (client.buffer_count >= CHUNK_SIZE) {
+        fwrite(client.file_buffer, client.buffer_count, 1, client.stat_fp);
+        client.buffer_count = 0;
+      }
+    }
     client.delivered_count++;
     client.pps++;
     client.Bps += pkt_in->pkt_len;
@@ -378,7 +385,7 @@ static void stat_cb(__rte_unused struct rte_timer *timer,
                     __rte_unused void *arg) {
   double avg_latency = 0.0;
   if (client.latency_pkts > 0) {
-    avg_latency = (double)client.latencies / client.latency_pkts;
+    avg_latency = cycles_to_ns(client.latencies / client.latency_pkts);
   }
   printf("%-8s\t%-4u\t%-4u\t%-8.1f\t%-10" PRIu64 "\t%-3.3f\n", "Stat",
          app.p4xos_conf.osd, app.p4xos_conf.ts_interval, avg_latency,
@@ -392,20 +399,18 @@ static void stat_cb(__rte_unused struct rte_timer *timer,
   uint16_t port = app.p4xos_conf.tx_port;
   rte_eth_stats_get(port, &stats);
 
-  printf("I/O RX %u in (NIC port %u): NIC rx %" PRIu64
-         " ~ %2.3f Gbps, tx %" PRIu64 " ~ %2.3f Gbps, missed %" PRIu64
-         ", rx err: %" PRIu64 ", tx err %" PRIu64 ", mbuf err: %" PRIu64 "\n",
-         lcore, port, stats.ipackets, bytes_to_gbits(stats.ibytes),
-         stats.opackets, bytes_to_gbits(stats.obytes), stats.imissed,
+  printf("I/O RX %u in (NIC port %u): NIC rx %" PRIu64 ", tx %" PRIu64
+         ", missed %" PRIu64 ", rx err: %" PRIu64 ", tx err %" PRIu64
+         ", mbuf err: %" PRIu64 "\n",
+         lcore, port, stats.ipackets, stats.opackets, stats.imissed,
          stats.ierrors, stats.oerrors, stats.rx_nombuf);
 }
 
 static void submit_new_requests(__rte_unused struct rte_timer *timer,
                                 __rte_unused void *arg) {
 
-  struct rte_mempool *mbuf_pool = (struct rte_mempool *)arg;
   RTE_LOG(WARNING, XCLIENT, "Resubmit new packets\n");
-  submit_requests(mbuf_pool, client.base_pkt);
+  submit_requests(client.base_pkt);
   int ret =
       rte_timer_reset(&client.recv_timer, app.hz * 3, SINGLE, rte_lcore_id(),
                       submit_new_requests, client.mbuf_pool);
@@ -566,19 +571,18 @@ static int lcore_tx(void *arg) {
     reset_instance(mbuf_pool, app.p4xos_conf.node_id);
 
   struct rte_mbuf *base_pkt =
-      prepare_base_pkt(client.tx_pkt_pool, port, app.p4xos_conf.node_id);
+      prepare_base_pkt(client.tx_pkt_pool, port, app.p4xos_conf.node_id, 1);
 
   client.base_pkt = base_pkt;
-
   /* Run until the application is quit or killed. */
-  while (client.delivered_count < app.p4xos_conf.max_inst) {
+  while (unlikely(client.delivered_count < app.p4xos_conf.max_inst)) {
     cur_tsc = rte_get_timer_cycles();
     diff_tsc = cur_tsc - prev_tsc;
     if (diff_tsc > TIMER_RESOLUTION_CYCLES) {
       rte_timer_manage();
       prev_tsc = cur_tsc;
     }
-    submit_requests(client.tx_pkt_pool, base_pkt);
+    submit_requests(base_pkt);
   }
   return 0;
 }
