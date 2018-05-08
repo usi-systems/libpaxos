@@ -98,7 +98,6 @@ static void set_paxos_hdr(struct paxos_hdr *px, uint8_t msgtype, uint32_t inst,
   // igress_ts = (inst % (app.p4xos_conf.ts_interval) == 0) ?
   // rte_get_timer_cycles() : 0;
   px->igress_ts = rte_cpu_to_be_64(igress_ts);
-  px->egress_ts = rte_cpu_to_be_64(0);
 }
 
 void prepare_message(struct rte_mbuf *created_pkt, uint16_t port,

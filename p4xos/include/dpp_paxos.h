@@ -42,9 +42,9 @@ struct paxos_hdr {
     uint16_t vrnd;
     uint16_t acptid;
     uint16_t reserved;
-    uint8_t value[MAX_APP_MESSAGE_LEN];
+    uint32_t value;
+    uint32_t reserved2;
     uint64_t igress_ts;
-    uint64_t egress_ts;
 } __attribute__((__packed__));
 
 size_t get_paxos_offset(void);
