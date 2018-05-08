@@ -43,6 +43,8 @@
 #include "main.h"
 #include "paxos.h"
 
+#define PREAMBLE_CRC_IPG 24
+
 /* Convert bytes to Gbit */
 inline double bytes_to_gbits(uint64_t bytes) {
   double t = bytes;
@@ -119,7 +121,7 @@ int filter_packets(struct rte_mbuf *pkt_in) {
 int proposer_handler(struct rte_mbuf *pkt_in, void *arg) {
   struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
   lp->total_pkts++;
-  lp->total_bytes += pkt_in->pkt_len;
+  lp->total_bytes += pkt_in->pkt_len + PREAMBLE_CRC_IPG;
   int ret = filter_packets(pkt_in);
   if (ret < 0) {
     RTE_LOG(DEBUG, P4XOS, "Drop packets. Code %d\n", ret);
@@ -160,7 +162,7 @@ int proposer_handler(struct rte_mbuf *pkt_in, void *arg) {
 int leader_handler(struct rte_mbuf *pkt_in, void *arg) {
   struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
   lp->total_pkts++;
-  lp->total_bytes += pkt_in->pkt_len;
+  lp->total_bytes += pkt_in->pkt_len + PREAMBLE_CRC_IPG;
   int ret = filter_packets(pkt_in);
   if (ret < 0) {
     RTE_LOG(DEBUG, P4XOS, "Drop packets. Code %d\n", ret);
@@ -194,7 +196,7 @@ int leader_handler(struct rte_mbuf *pkt_in, void *arg) {
 int acceptor_handler(struct rte_mbuf *pkt_in, void *arg) {
   struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
   lp->total_pkts++;
-  lp->total_bytes += pkt_in->pkt_len;
+  lp->total_bytes += pkt_in->pkt_len + PREAMBLE_CRC_IPG;
   int ret = filter_packets(pkt_in);
   if (ret < 0) {
     RTE_LOG(DEBUG, P4XOS, "Drop packets. Code %d\n", ret);
@@ -253,7 +255,7 @@ int acceptor_handler(struct rte_mbuf *pkt_in, void *arg) {
 int learner_handler(struct rte_mbuf *pkt_in, void *arg) {
   struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
   lp->total_pkts++;
-  lp->total_bytes += pkt_in->pkt_len;
+  lp->total_bytes += pkt_in->pkt_len + PREAMBLE_CRC_IPG;
   int ret = filter_packets(pkt_in);
   if (ret < 0) {
     RTE_LOG(DEBUG, P4XOS, "Drop packets. Code %d\n", ret);
@@ -460,10 +462,6 @@ static inline int handle_paxos_messages(struct paxos_hdr *paxos_hdr,
       lp->deliver(lp->worker_id, out.iid, out.value.paxos_value_val,
                   out.value.paxos_value_len, lp->deliver_arg);
       paxos_hdr->msgtype = PAXOS_CHOSEN;
-      paxos_hdr->inst = rte_cpu_to_be_32(out.iid);
-      if (app.p4xos_conf.inc_inst) {
-        paxos_hdr->inst = rte_cpu_to_be_32(lp->cur_inst++);
-      }
       paxos_accepted_destroy(&out);
     } else {
       return NO_MAJORITY;
@@ -484,7 +482,7 @@ static inline int handle_paxos_messages(struct paxos_hdr *paxos_hdr,
 int replica_handler(struct rte_mbuf *pkt_in, void *arg) {
   struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
   lp->total_pkts++;
-  lp->total_bytes += pkt_in->pkt_len;
+  lp->total_bytes += pkt_in->pkt_len + PREAMBLE_CRC_IPG;
   int ret = filter_packets(pkt_in);
   if (ret < 0) {
     RTE_LOG(DEBUG, P4XOS, "Drop packets. Code %d\n", ret);
