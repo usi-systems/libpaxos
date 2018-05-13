@@ -58,6 +58,11 @@ static void set_ips(struct ipv4_hdr *ip) {
   ip->src_addr = app.p4xos_conf.src_addr;
 }
 
+static void multicast_acceptors(struct ipv4_hdr *ip) {
+  ip->dst_addr = app.p4xos_conf.dst_addr;
+  ip->src_addr = app.p4xos_conf.src_addr;
+}
+
 size_t get_paxos_offset(void) {
   return sizeof(struct ether_hdr) + sizeof(struct ipv4_hdr) +
          sizeof(struct udp_hdr);
@@ -150,6 +155,12 @@ static inline int promise_handler(struct paxos_hdr *paxos_hdr,
                                   struct app_lcore_params_worker *lp) {
   int ret = 0;
   int vsize = 4; // rte_be_to_cpu_32(paxos_hdr->value_len);
+
+  uint32_t inst = rte_be_to_cpu_32(paxos_hdr->inst);
+  if (likely(inst) > lp->cur_inst) {
+    lp->cur_inst = inst;
+  }
+
   struct paxos_promise promise = {
       .iid = rte_be_to_cpu_32(paxos_hdr->inst),
       .ballot = rte_be_to_cpu_16(paxos_hdr->rnd),
@@ -180,6 +191,10 @@ static inline int accepted_handler(struct paxos_hdr *paxos_hdr,
       return DROP_ORIGINAL_PACKET;
   }
   int vsize = 4; // rte_be_to_cpu_32(paxos_hdr->value_len);
+  uint32_t inst = rte_be_to_cpu_32(paxos_hdr->inst);
+  if (inst > lp->cur_inst) {
+    lp->cur_inst = inst;
+  }
   struct paxos_accepted ack = {.iid = rte_be_to_cpu_32(paxos_hdr->inst),
                                .ballot = rte_be_to_cpu_16(paxos_hdr->rnd),
                                .value_ballot =
@@ -208,6 +223,15 @@ static inline int new_command_handler(struct paxos_hdr *paxos_hdr,
                                       struct app_lcore_params_worker *lp) {
   paxos_hdr->inst = rte_cpu_to_be_32(lp->cur_inst++);
   paxos_hdr->msgtype = PAXOS_ACCEPT;
+  return SUCCESS;
+}
+
+static inline int
+learner_new_command_handler(struct paxos_hdr *paxos_hdr,
+                            struct app_lcore_params_worker *lp) {
+  lp->cur_inst++;
+  paxos_hdr->inst = rte_cpu_to_be_32(lp->cur_inst);
+  paxos_hdr->msgtype = LEARNER_NEW_COMMAND;
   return SUCCESS;
 }
 
@@ -396,14 +420,26 @@ void learner_check_holes(__rte_unused struct rte_timer *timer,
   }
 }
 
-static inline int handle_paxos_messages(struct paxos_hdr *paxos_hdr,
+static inline int handle_paxos_messages(struct rte_mbuf *pkt_in,
                                         struct app_lcore_params_worker *lp) {
+  size_t ip_offset = sizeof(struct ether_hdr);
+  struct ipv4_hdr *ip =
+      rte_pktmbuf_mtod_offset(pkt_in, struct ipv4_hdr *, ip_offset);
+  size_t paxos_offset = get_paxos_offset();
+  struct paxos_hdr *paxos_hdr =
+      rte_pktmbuf_mtod_offset(pkt_in, struct paxos_hdr *, paxos_offset);
+
   uint8_t msgtype = paxos_hdr->msgtype;
   switch (msgtype) {
   case PAXOS_RESET: {
     RTE_LOG(DEBUG, P4XOS, "Worker %u Reset instance %u\n", lp->worker_id,
             rte_be_to_cpu_32(paxos_hdr->inst));
     return TO_DROP;
+  }
+  case FAST_ACCEPT: {
+    learner_new_command_handler(paxos_hdr, lp);
+    multicast_acceptors(ip);
+    break;
   }
   case PAXOS_PREPARE: {
     prepare_handler(paxos_hdr, lp);
@@ -419,6 +455,7 @@ static inline int handle_paxos_messages(struct paxos_hdr *paxos_hdr,
   }
   case PAXOS_ACCEPTED: {
     accepted_handler(paxos_hdr, lp);
+    set_ips(ip);
     break;
   }
   default: {
@@ -428,6 +465,8 @@ static inline int handle_paxos_messages(struct paxos_hdr *paxos_hdr,
     return NO_HANDLER;
   }
   }
+  size_t data_size = sizeof(struct paxos_hdr);
+  prepare_hw_checksum(pkt_in, data_size);
   return SUCCESS;
 }
 
@@ -441,16 +480,9 @@ int replica_handler(struct rte_mbuf *pkt_in, void *arg) {
     return ret;
   }
 
-  size_t paxos_offset = get_paxos_offset();
-  struct paxos_hdr *paxos_hdr =
-      rte_pktmbuf_mtod_offset(pkt_in, struct paxos_hdr *, paxos_offset);
-
-  ret = handle_paxos_messages(paxos_hdr, lp);
+  ret = handle_paxos_messages(pkt_in, lp);
   if (ret < 0) {
     return ret;
   }
-
-  respond(pkt_in);
-
   return SUCCESS;
 }

@@ -21,6 +21,7 @@ extern "C" {
 #define LEARNER_PREPARE    0x20
 #define LEARNER_ACCEPT     0x21
 #define LEARNER_CHECKPOINT 0x22
+#define LEARNER_NEW_COMMAND 0x23
 
 enum PAXOS_RETURN_CODE {
   SUCCESS = 0,
