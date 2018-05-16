@@ -25,8 +25,8 @@
 
 #define RTE_LOGTYPE_XCLIENT RTE_LOGTYPE_USER1
 
-#define RX_RING_SIZE 4096
-#define TX_RING_SIZE 1024
+#define RX_RING_SIZE 8192
+#define TX_RING_SIZE 2048
 
 #define NUM_MBUFS 8192 * 4
 #define MBUF_CACHE_SIZE 256
@@ -282,7 +282,8 @@ static int submit_requests(struct rte_mbuf *pkt) {
   }
 
   struct rte_mbuf *pkts_tx[app.p4xos_conf.osd];
-  nb_deq = rte_sched_port_dequeue(client.sched_port, pkts_tx, app.p4xos_conf.osd);
+  nb_deq =
+      rte_sched_port_dequeue(client.sched_port, pkts_tx, app.p4xos_conf.osd);
   if (likely(nb_deq == 0)) {
     return 0;
   }
@@ -422,7 +423,7 @@ static void stat_cb(__rte_unused struct rte_timer *timer,
   }
   printf("%-8s\t%-4u\t%-4u\t%-8u\t%-8.1f\t%-10" PRIu64 "\t%-3.3f\n", "Stat",
          app.p4xos_conf.osd, app.p4xos_conf.ts_interval, client.latency_pkts,
-	 avg_latency, client.pps, bytes_to_gbits(client.Bps));
+         avg_latency, client.pps, bytes_to_gbits(client.Bps));
   client.latency_pkts = 0;
   client.latencies = 0;
   client.pps = 0;
@@ -634,7 +635,7 @@ static int master_core(void *arg) {
   printf("\nCore %u monitoring. [Ctrl+C to quit]\n", rte_lcore_id());
 
   /* Run until the application is quit or killed. */
-  while (client.delivered_count < app.p4xos_conf.max_inst) {
+  while (likely(client.delivered_count < app.p4xos_conf.max_inst)) {
     cur_tsc = rte_get_timer_cycles();
     diff_tsc = cur_tsc - prev_tsc;
     if (diff_tsc > TIMER_RESOLUTION_CYCLES) {
