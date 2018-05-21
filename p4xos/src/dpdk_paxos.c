@@ -219,13 +219,6 @@ static inline int accepted_handler(struct paxos_hdr *paxos_hdr,
   return SUCCESS;
 }
 
-static inline int new_command_handler(struct paxos_hdr *paxos_hdr,
-                                      struct app_lcore_params_worker *lp) {
-  paxos_hdr->inst = rte_cpu_to_be_32(lp->cur_inst++);
-  paxos_hdr->msgtype = PAXOS_ACCEPT;
-  return SUCCESS;
-}
-
 static inline int
 learner_new_command_handler(struct paxos_hdr *paxos_hdr,
                             struct app_lcore_params_worker *lp) {
@@ -247,6 +240,35 @@ static inline int chosen_handler(struct paxos_hdr *paxos_hdr,
   }
   lp->nb_delivery++;
   paxos_hdr->msgtype = app.p4xos_conf.msgtype;
+  return SUCCESS;
+}
+
+static inline int learner_chosen_handler(struct paxos_hdr *paxos_hdr,
+                                         struct app_lcore_params_worker *lp) {
+  int vsize = 4; // rte_be_to_cpu_32(paxos_hdr->value_len);
+  uint32_t inst = rte_be_to_cpu_32(paxos_hdr->inst);
+  if (inst > lp->cur_inst) {
+    lp->cur_inst = inst;
+  }
+  struct paxos_accepted ack = {.iid = rte_be_to_cpu_32(paxos_hdr->inst),
+                               .ballot = rte_be_to_cpu_16(paxos_hdr->rnd),
+                               .value_ballot =
+                                   rte_be_to_cpu_16(paxos_hdr->vrnd),
+                               .aid = rte_be_to_cpu_16(paxos_hdr->acptid),
+                               .value = {vsize, (char *)&paxos_hdr->value}};
+  RTE_LOG(DEBUG, P4XOS, "Worker %u, log_index %u, Received Chosen for instance "
+                        "%u, aid %u, ballot %u\n",
+          lp->worker_id, rte_be_to_cpu_16(paxos_hdr->log_index), ack.iid,
+          ack.aid, ack.ballot);
+  lp->deliver(lp->worker_id, ack.iid, ack.value.paxos_value_val,
+              ack.value.paxos_value_len, lp->deliver_arg);
+  return SUCCESS;
+}
+
+static inline int new_command_handler(struct paxos_hdr *paxos_hdr,
+                                      struct app_lcore_params_worker *lp) {
+  paxos_hdr->inst = rte_cpu_to_be_32(lp->cur_inst++);
+  paxos_hdr->msgtype = PAXOS_ACCEPT;
   return SUCCESS;
 }
 
@@ -455,6 +477,11 @@ static inline int handle_paxos_messages(struct rte_mbuf *pkt_in,
   }
   case PAXOS_ACCEPTED: {
     accepted_handler(paxos_hdr, lp);
+    set_ips(ip);
+    break;
+  }
+  case PAXOS_CHOSEN: {
+    learner_chosen_handler(paxos_hdr, lp);
     set_ips(ip);
     break;
   }
