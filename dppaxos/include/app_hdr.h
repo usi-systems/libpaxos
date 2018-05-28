@@ -53,6 +53,7 @@ struct rocksdb_params {
     uint64_t last_cycle[MAX_WORKER_CORE];
     uint32_t num_workers;
     uint32_t total_delivered_count;
+    char hostname[32];
 };
 
 #ifdef __cplusplus

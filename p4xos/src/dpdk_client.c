@@ -59,45 +59,42 @@ static void set_ether_hdr(struct ether_hdr *eth, uint16_t ethtype,
 
 static void set_ipv4_hdr(struct ipv4_hdr *ip, uint8_t proto, uint32_t src,
                          uint32_t dst) {
-  ip->version_ihl = 0x45;
-  ip->total_length =
-      rte_cpu_to_be_16(sizeof(struct ipv4_hdr) + sizeof(struct udp_hdr) +
-                       sizeof(struct paxos_hdr));
-  ip->packet_id = rte_cpu_to_be_16(rte_rdtsc());
-  ip->fragment_offset = rte_cpu_to_be_16(IPV4_HDR_DF_FLAG);
-  ip->time_to_live = 64;
-  ip->next_proto_id = proto;
-  ip->hdr_checksum = 0;
-  ip->src_addr = src;
-  ip->dst_addr = dst;
-  // rte_hexdump(stdout, "IP", ip, sizeof(struct ipv4_hdr));
+    ip->version_ihl = 0x45;
+    ip->total_length = rte_cpu_to_be_16(
+                                        sizeof(struct ipv4_hdr) +
+                                        sizeof(struct udp_hdr) +
+                                        sizeof(struct paxos_hdr));
+    ip->packet_id = rte_cpu_to_be_16(0);
+    ip->fragment_offset = rte_cpu_to_be_16(IPV4_HDR_DF_FLAG);
+    ip->time_to_live = 64;
+    ip->next_proto_id = proto;
+    ip->hdr_checksum = 0;
+    ip->src_addr = src;
+    ip->dst_addr = dst;
 }
 
 static void set_udp_hdr(struct udp_hdr *udp, uint16_t src_port,
                         uint16_t dst_port, uint16_t dgram_len) {
-  udp->src_port = rte_cpu_to_be_16(src_port);
-  udp->dst_port = rte_cpu_to_be_16(dst_port);
-  udp->dgram_len = rte_cpu_to_be_16(dgram_len);
-  udp->dgram_cksum = 0;
-  // rte_hexdump(stdout, "UDP", udp, sizeof(struct udp_hdr));
+    udp->src_port = rte_cpu_to_be_16(src_port);
+    udp->dst_port = rte_cpu_to_be_16(dst_port);
+    udp->dgram_len = rte_cpu_to_be_16(dgram_len);
+    udp->dgram_cksum = 0;
 }
 
 static void set_paxos_hdr(struct paxos_hdr *px, uint8_t msgtype, uint32_t inst,
                           uint16_t rnd, uint8_t worker_id, uint16_t acptid,
                           char *value, int size) {
-  uint64_t igress_ts = 0;
-  px->msgtype = msgtype;
-  px->inst = rte_cpu_to_be_32(inst);
-  px->rnd = rte_cpu_to_be_16(rnd);
-  px->vrnd = rte_cpu_to_be_16(0);
-  px->acptid = rte_cpu_to_be_16(acptid);
-  px->worker_id = worker_id;
-  if (size > 0 && value != NULL) {
+    uint64_t igress_ts = 0;
+    px->msgtype = msgtype;
+    px->inst = rte_cpu_to_be_32(inst);
+    px->rnd = rte_cpu_to_be_16(rnd);
+    px->vrnd = rte_cpu_to_be_16(0);
+    px->acptid = rte_cpu_to_be_16(acptid);
+    px->worker_id = worker_id;
+    if (size > 0 && value != NULL) {
     rte_memcpy(&px->value, value, size);
-  }
-  // igress_ts = (inst % (app.p4xos_conf.ts_interval) == 0) ?
-  // rte_get_timer_cycles() : 0;
-  px->igress_ts = rte_cpu_to_be_64(igress_ts);
+    }
+    px->igress_ts = rte_cpu_to_be_64(igress_ts);
 }
 
 void prepare_message(struct rte_mbuf *created_pkt, uint16_t port,

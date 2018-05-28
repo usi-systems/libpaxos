@@ -17,15 +17,15 @@
 #include "app_hdr.h"
 #include "main.h"
 
-const char DBPath[] = "/tmp/";
+const char DBPath[] = "p4xos_rocksdb/";
 
 struct rocksdb_params rocks;
 
-static uint64_t log_size_for_flush = 1048576;
+static uint64_t log_size_for_flush = 1024 * 1024 * 1024LL;
 
 static void init_rocksdb(void) {
   char *err = NULL;
-  uint64_t mem_budget = 1048576;
+  uint64_t mem_budget = 4 * 1024 * 1024 * 1024LL;
   rocks.options = rocksdb_options_create();
   long cpus = sysconf(_SC_NPROCESSORS_ONLN);
   rocksdb_options_increase_parallelism(rocks.options, (int)(cpus));
@@ -43,10 +43,14 @@ static void init_rocksdb(void) {
   } else {
     rocks.num_workers = 1;
   }
+
+  gethostname(rocks.hostname, 32);
+
   char db_name[DB_NAME_LENGTH];
   uint32_t i;
   for (i = 0; i < rocks.num_workers; i++) {
-    snprintf(db_name, DB_NAME_LENGTH, "%s/p4xos-rocksdb-worker-%u", DBPath, i);
+    snprintf(db_name, DB_NAME_LENGTH, "%s/%s-core%u", DBPath, rocks.hostname,
+             i);
     rocks.db[i] = rocksdb_open(rocks.options, db_name, &err);
     if (err != NULL) {
       rte_panic("Cannot open DB: %s\n", err);
@@ -128,11 +132,11 @@ static void deliver(unsigned int worker_id, unsigned int __rte_unused inst,
 
   rocks->delivered_count[worker_id]++;
 
-  if (app.p4xos_conf.checkpoint_interval > 0 &&
+  if (inst > 0 && app.p4xos_conf.checkpoint_interval > 0 &&
       (inst % app.p4xos_conf.checkpoint_interval == 0)) {
     char cp_path[DB_NAME_LENGTH];
-    snprintf(cp_path, DB_NAME_LENGTH, "%s/checkpoints/worker-%u-inst-%u",
-             DBPath, worker_id, inst);
+    snprintf(cp_path, DB_NAME_LENGTH, "%s/checkpoints/%s-core-%u-inst-%u",
+             DBPath, rocks->hostname, worker_id, inst);
     rocksdb_checkpoint_create(rocks->cp[worker_id], cp_path, log_size_for_flush,
                               &err);
     if (err != NULL) {
