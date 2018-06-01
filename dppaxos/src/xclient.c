@@ -440,7 +440,7 @@ static void stat_cb(__rte_unused struct rte_timer *timer,
          stats.ierrors, stats.oerrors, stats.rx_nombuf);
 }
 
-static void submit_new_requests(__rte_unused struct rte_timer *timer,
+static void __rte_unused submit_new_requests(__rte_unused struct rte_timer *timer,
                                 __rte_unused void *arg) {
 
   RTE_LOG(WARNING, XCLIENT, "Resubmit new packets\n");
@@ -495,7 +495,7 @@ static inline int port_init(uint16_t port, struct rte_mempool *mbuf_pool) {
   struct rte_eth_dev_info dev_info;
   struct rte_eth_txconf txconf;
 
-  if (port >= rte_eth_dev_count())
+  if (port >= rte_eth_dev_count_avail())
     return -1;
 
   rte_eth_dev_info_get(port, &dev_info);

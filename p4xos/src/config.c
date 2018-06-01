@@ -443,7 +443,7 @@ static int parse_arg_lpm(const char *arg) {
   return 0;
 }
 
-static int app_check_lpm_table(void) {
+static int __rte_unused app_check_lpm_table(void) {
   uint32_t rule;
 
   /* For each rule, check that the output I/F is enabled */
