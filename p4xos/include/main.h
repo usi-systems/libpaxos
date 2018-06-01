@@ -354,6 +354,7 @@ struct app_lcore_params_worker {
 	/* LPM table */
 	struct rte_lpm *lpm_table;
 	uint32_t worker_id;
+	uint32_t lcore_id;
 
 	/* Internal buffers */
 	struct app_mbuf_array mbuf_in;
@@ -386,6 +387,7 @@ struct app_lcore_params_worker {
 	struct rte_timer stat_timer;
 	struct rte_timer deliver_timer;
 	struct rte_timer check_hole_timer;
+	struct rte_timer recv_timer[APP_MAX_LCORES];
 	char* default_value;
 	uint32_t default_value_len;
 };
@@ -465,6 +467,8 @@ uint32_t app_get_lcores_worker(void);
 struct app_lcore_params_worker* app_get_worker(uint32_t worker_id);
 void app_print_params(void);
 void submit(uint8_t worker_id, char* value, int size);
+void submit_bulk(uint8_t worker_id, uint32_t nb_pkts,
+    struct app_lcore_params_worker *lp, char *value, int size);
 void app_set_deliver_callback(deliver_cb, void *arg);
 void app_set_worker_callback(worker_cb);
 int learner_handler(struct rte_mbuf *pkt_in, void *arg);
@@ -476,9 +480,11 @@ void app_set_stat_callback(rte_timer_cb_t, void *arg);
 void app_init_learner(void);
 void app_init_acceptor(void);
 void app_init_leader(void);
+void app_init_proposer(void);
 void app_set_default_value(char *arg, uint32_t vlen);
 void learner_call_deliver(struct rte_timer *timer, void *arg);
 void learner_check_holes(struct rte_timer *timer, void *arg);
+void proposer_resubmit(struct rte_timer *timer, void *arg);
 void reset_leader_instance();
 double bytes_to_gbits(uint64_t bytes);
 void send_prepare(struct app_lcore_params_worker *lp, uint32_t inst, uint32_t prepare_size, char* value, int size);

@@ -102,13 +102,17 @@ main(int argc, char **argv)
 	app_print_params();
 	app_set_worker_callback(proposer_handler);
 	app_set_stat_callback(stat_cb, NULL);
+	app_init_proposer();
+
+	uint32_t n_workers = app_get_lcores_worker();
 
 	struct app_hdr ap;
 	uint32_t i;
-	for (i = 1; i <= app.p4xos_conf.osd; i++) {
+	for (i = 0; i < app.p4xos_conf.osd*n_workers; i++) {
 		set_app_hdr(&ap, i);
-		submit(0, (char*)&ap, sizeof(struct app_hdr));
+		submit(i%n_workers, (char*)&ap, sizeof(struct app_hdr));
 	}
+
 	/* Launch per-lcore init on every lcore */
 	rte_eal_mp_remote_launch(app_lcore_main_loop, NULL, CALL_MASTER);
 	RTE_LCORE_FOREACH_SLAVE(lcore) {

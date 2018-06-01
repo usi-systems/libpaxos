@@ -17,7 +17,7 @@
 #include "app_hdr.h"
 #include "main.h"
 
-const char DBPath[] = "p4xos_rocksdb/";
+const char DBPath[] = "p4xos_rocksdb";
 
 struct rocksdb_params rocks;
 
@@ -142,6 +142,7 @@ static void deliver(unsigned int worker_id, unsigned int __rte_unused inst,
     if (err != NULL) {
       printf("Checkpoint Error: %s\n", err);
     }
+    printf("Worker %u Checkpoint inst:%u\n",worker_id, inst);
     send_checkpoint_message(worker_id, inst);
   }
 }
@@ -210,6 +211,20 @@ int main(int argc, char **argv) {
   app_init_learner();
   app_init_acceptor();
   app_print_params();
+
+  // Clean checkpoint directory
+  char cmd[256];
+  snprintf(cmd, 256, "exec rm -rf %s/checkpoints", DBPath);
+  ret = system(cmd);
+  if (ret < 0) {
+      fprintf(stderr, "Cannot remove Checkpoint dir\n");
+  }
+  snprintf(cmd, 256, "mkdir -p %s/checkpoints", DBPath);
+  ret = system(cmd);
+  if (ret < 0) {
+      fprintf(stderr, "Cannot create Checkpoint dir\n");
+  }
+
   init_rocksdb();
 
   if (app.p4xos_conf.baseline)

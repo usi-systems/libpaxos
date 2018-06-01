@@ -125,6 +125,31 @@ void app_init_learner(void) {
   }
 }
 
+void app_init_proposer(void) {
+  uint32_t lcore;
+  int ret;
+  rte_timer_subsystem_init();
+  /* fetch default timer frequency. */
+  app.hz = rte_get_timer_hz();
+  /* Create a learner for each worker */
+  for (lcore = 0; lcore < APP_MAX_LCORES; lcore++) {
+    struct app_lcore_params_worker *lp = &app.lcore_params[lcore].worker;
+
+    if (app.lcore_params[lcore].type != e_APP_LCORE_WORKER) {
+      continue;
+    }
+    lp->lcore_id = lcore;
+
+    rte_timer_init(&lp->recv_timer[lp->lcore_id]);
+
+    ret = rte_timer_reset(&lp->recv_timer[lp->lcore_id], app.hz*3, SINGLE, lp->lcore_id,
+       proposer_resubmit, lp);
+    if (ret < 0) {
+     printf("Worker %u timer is in the RUNNING state\n", lcore);
+    }
+  }
+}
+
 static void app_init_mbuf_pools(void) {
   unsigned socket, lcore;
 

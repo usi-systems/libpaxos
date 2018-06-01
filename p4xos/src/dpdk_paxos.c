@@ -250,18 +250,11 @@ static inline int learner_chosen_handler(struct paxos_hdr *paxos_hdr,
   if (inst > lp->cur_inst) {
     lp->cur_inst = inst;
   }
-  struct paxos_accepted ack = {.iid = rte_be_to_cpu_32(paxos_hdr->inst),
-                               .ballot = rte_be_to_cpu_16(paxos_hdr->rnd),
-                               .value_ballot =
-                                   rte_be_to_cpu_16(paxos_hdr->vrnd),
-                               .aid = rte_be_to_cpu_16(paxos_hdr->acptid),
-                               .value = {vsize, (char *)&paxos_hdr->value}};
-  RTE_LOG(DEBUG, P4XOS, "Worker %u, log_index %u, Received Chosen for instance "
-                        "%u, aid %u, ballot %u\n",
-          lp->worker_id, rte_be_to_cpu_16(paxos_hdr->log_index), ack.iid,
-          ack.aid, ack.ballot);
-  lp->deliver(lp->worker_id, ack.iid, ack.value.paxos_value_val,
-              ack.value.paxos_value_len, lp->deliver_arg);
+
+  RTE_LOG(DEBUG, P4XOS, "Worker %u, log_index %u, Chosen instance %u\n",
+          lp->worker_id, rte_be_to_cpu_16(paxos_hdr->log_index), inst);
+  lp->deliver(lp->worker_id, inst, (char *)&paxos_hdr->value,
+              vsize, lp->deliver_arg);
   return SUCCESS;
 }
 
@@ -302,6 +295,8 @@ int proposer_handler(struct rte_mbuf *pkt_in, void *arg) {
   }
 
   respond(pkt_in);
+  rte_timer_reset_sync(&lp->recv_timer[lp->lcore_id], app.hz*3, SINGLE, lp->worker_id,
+     proposer_resubmit, lp);
   return SUCCESS;
 }
 
@@ -396,6 +391,19 @@ int learner_handler(struct rte_mbuf *pkt_in, void *arg) {
   respond(pkt_in);
   return SUCCESS;
 }
+
+void proposer_resubmit(struct rte_timer *timer, void *arg) {
+    struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
+    int ret;
+    submit_bulk(lp->worker_id, app.p4xos_conf.osd, lp, NULL, 0);
+    printf("Worker %u Resumit %u packets\n", lp->worker_id, app.p4xos_conf.osd);
+    ret = rte_timer_reset(&lp->recv_timer[lp->lcore_id], app.hz*3, SINGLE, lp->lcore_id,
+       proposer_resubmit, lp);
+    if (ret < 0) {
+     printf("Worker %u timer is in the RUNNING state\n", lp->worker_id);
+    }
+}
+
 
 void learner_call_deliver(__rte_unused struct rte_timer *timer,
                           __rte_unused void *arg) {
