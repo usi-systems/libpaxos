@@ -16,47 +16,10 @@
 
 #include "app_hdr.h"
 #include "main.h"
-
-const char DBPath[] = "/tmp/";
+#include "datastore.h"
 
 struct rocksdb_params rocks;
-
-static void init_rocksdb(void) {
-  char *err = NULL;
-  uint64_t mem_budget = 1048576;
-  rocks.options = rocksdb_options_create();
-  long cpus = sysconf(_SC_NPROCESSORS_ONLN);
-  rocksdb_options_increase_parallelism(rocks.options, (int)(cpus));
-  rocksdb_options_optimize_level_style_compaction(rocks.options, mem_budget);
-  // create the DB if it's not already present
-  rocksdb_options_set_create_if_missing(rocks.options, 1);
-  // Write asynchronously
-  rocks.writeoptions = rocksdb_writeoptions_create();
-  // Disable WAL (Flush to disk manually)
-  rocksdb_writeoptions_disable_WAL(rocks.writeoptions, 1);
-  rocksdb_writeoptions_set_sync(rocks.writeoptions, 0);
-  rocks.readoptions = rocksdb_readoptions_create();
-  if (app.p4xos_conf.multi_dbs) {
-    rocks.num_workers = app_get_lcores_worker();
-  } else {
-    rocks.num_workers = 1;
-  }
-  char db_name[DB_NAME_LENGTH];
-  uint32_t i;
-  for (i = 0; i < rocks.num_workers; i++) {
-    snprintf(db_name, DB_NAME_LENGTH, "%s/p4xos-rocksdb-worker-%u", DBPath, i);
-    rocks.db[i] = rocksdb_open(rocks.options, db_name, &err);
-    if (err != NULL) {
-      rte_panic("Cannot open DB: %s\n", err);
-    }
-    rocks.wrbatch[i] = rocksdb_writebatch_create();
-    rocks.cp[i] = rocksdb_checkpoint_object_create(rocks.db[i], &err);
-    if (err != NULL) {
-      rte_panic("Cannot create checkpoint object: %s\n", err);
-    }
-  }
-  rocks.flops = rocksdb_flushoptions_create();
-}
+struct rocksdb_configurations rocksdb_configurations;
 
 static void deliver(unsigned int worker_id, unsigned int __rte_unused inst,
                     __rte_unused char *val, __rte_unused size_t size,
@@ -161,12 +124,19 @@ int main(int argc, char **argv) {
     app_print_usage();
     return -1;
   }
-
+  argc -= ret;
+  argv += ret;
+  /* Parse application arguments (after the EAL ones) */
+  ret = parse_rocksdb_configuration(argc, argv);
+  if (ret < 0) {
+    rocksdb_print_usage();
+    return -1;
+  }
   /* Init */
   app_init();
   app_init_learner();
   app_print_params();
-  init_rocksdb();
+  init_rocksdb(&rocks);
   app_set_deliver_callback(deliver, &rocks);
   app_set_worker_callback(learner_handler);
   app_set_stat_callback(stat_cb, &rocks);

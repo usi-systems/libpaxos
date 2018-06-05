@@ -26,6 +26,7 @@ add_subdirectory(benchmark)
 add_subdirectory(rockspaxos)
 add_subdirectory(leveldb-bench)
 add_subdirectory(p4xos)
+add_subdirectory(datastore)
 add_subdirectory(dppaxos)
 
 enable_testing()

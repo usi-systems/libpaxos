@@ -16,10 +16,10 @@
 
 #include "main.h"
 #include "app_hdr.h"
-
-const char DBPath[] = "/tmp/";
+#include "datastore.h"
 
 struct rocksdb_params rocks;
+struct rocksdb_configurations rocksdb_configurations;
 
 
 static uint8_t DEFAULT_KEY[] = "A";
@@ -90,7 +90,14 @@ main(int argc, char **argv)
 		app_print_usage();
 		return -1;
 	}
-
+	argc -= ret;
+    argv += ret;
+	/* Parse application arguments (after the EAL ones) */
+    ret = parse_rocksdb_configuration(argc, argv);
+    if (ret < 0) {
+      rocksdb_print_usage();
+      return -1;
+    }
 	// ret = rte_eal_hpet_init(1);
     // if (ret < 0)
     //         rte_exit(EXIT_FAILURE, "Error with EAL HPET initialization\n");

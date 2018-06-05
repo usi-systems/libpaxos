@@ -16,53 +16,11 @@
 
 #include "app_hdr.h"
 #include "main.h"
-
-const char DBPath[] = "p4xos_rocksdb";
+#include "datastore.h"
 
 struct rocksdb_params rocks;
+struct rocksdb_configurations rocksdb_configurations;
 
-static uint64_t log_size_for_flush = 1024 * 1024 * 1024LL;
-
-static void init_rocksdb(void) {
-  char *err = NULL;
-  uint64_t mem_budget = 4 * 1024 * 1024 * 1024LL;
-  rocks.options = rocksdb_options_create();
-  long cpus = sysconf(_SC_NPROCESSORS_ONLN);
-  rocksdb_options_increase_parallelism(rocks.options, (int)(cpus));
-  rocksdb_options_optimize_level_style_compaction(rocks.options, mem_budget);
-  // create the DB if it's not already present
-  rocksdb_options_set_create_if_missing(rocks.options, 1);
-  // Write asynchronously
-  rocks.writeoptions = rocksdb_writeoptions_create();
-  // Disable WAL (Flush to disk manually)
-  rocksdb_writeoptions_disable_WAL(rocks.writeoptions, 1);
-  rocksdb_writeoptions_set_sync(rocks.writeoptions, 0);
-  rocks.readoptions = rocksdb_readoptions_create();
-  if (app.p4xos_conf.multi_dbs) {
-    rocks.num_workers = app_get_lcores_worker();
-  } else {
-    rocks.num_workers = 1;
-  }
-
-  gethostname(rocks.hostname, 32);
-
-  char db_name[DB_NAME_LENGTH];
-  uint32_t i;
-  for (i = 0; i < rocks.num_workers; i++) {
-    snprintf(db_name, DB_NAME_LENGTH, "%s/%s-core%u", DBPath, rocks.hostname,
-             i);
-    rocks.db[i] = rocksdb_open(rocks.options, db_name, &err);
-    if (err != NULL) {
-      rte_panic("Cannot open DB: %s\n", err);
-    }
-    rocks.wrbatch[i] = rocksdb_writebatch_create();
-    rocks.cp[i] = rocksdb_checkpoint_object_create(rocks.db[i], &err);
-    if (err != NULL) {
-      rte_panic("Cannot create checkpoint object: %s\n", err);
-    }
-  }
-  rocks.flops = rocksdb_flushoptions_create();
-}
 
 static void baseline_deliver(unsigned int worker_id,
                              unsigned int __rte_unused inst,
@@ -134,15 +92,14 @@ static void deliver(unsigned int worker_id, unsigned int __rte_unused inst,
 
   if (inst > 0 && app.p4xos_conf.checkpoint_interval > 0 &&
       (inst % app.p4xos_conf.checkpoint_interval == 0)) {
-    char cp_path[DB_NAME_LENGTH];
-    snprintf(cp_path, DB_NAME_LENGTH, "%s/checkpoints/%s-core-%u-inst-%u",
-             DBPath, rocks->hostname, worker_id, inst);
-    rocksdb_checkpoint_create(rocks->cp[worker_id], cp_path, log_size_for_flush,
-                              &err);
-    if (err != NULL) {
-      printf("Checkpoint Error: %s\n", err);
-    }
-    printf("Worker %u Checkpoint inst:%u\n",worker_id, inst);
+    // char cp_path[DB_NAME_LENGTH];
+    // snprintf(cp_path, DB_NAME_LENGTH, "%s/checkpoints/%s-core-%u-inst-%u",
+    //          DBPath, rocks->hostname, worker_id, inst);
+    // rocksdb_checkpoint_create(rocks->cp[worker_id], cp_path, log_size_for_flush,
+    //                           &err);
+    // if (err != NULL) {
+    //   printf("Checkpoint Error: %s\n", err);
+    // }
     send_checkpoint_message(worker_id, inst);
   }
 }
@@ -205,28 +162,23 @@ int main(int argc, char **argv) {
     app_print_usage();
     return -1;
   }
-
+  argc -= ret;
+  argv += ret;
+  /* Parse application arguments (after the EAL ones) */
+  ret = parse_rocksdb_configuration(argc, argv);
+  if (ret < 0) {
+    rocksdb_print_usage();
+    return -1;
+  }
+  rocks.num_workers = app_get_lcores_worker();
   /* Init */
   app_init();
   app_init_learner();
   app_init_acceptor();
   app_print_params();
+  print_parameters();
 
-  // Clean checkpoint directory
-  char cmd[256];
-  snprintf(cmd, 256, "exec rm -rf %s/checkpoints", DBPath);
-  ret = system(cmd);
-  if (ret < 0) {
-      fprintf(stderr, "Cannot remove Checkpoint dir\n");
-  }
-  snprintf(cmd, 256, "mkdir -p %s/checkpoints", DBPath);
-  ret = system(cmd);
-  if (ret < 0) {
-      fprintf(stderr, "Cannot create Checkpoint dir\n");
-  }
-
-  init_rocksdb();
-
+  init_rocksdb(&rocks);
   if (app.p4xos_conf.baseline)
     app_set_deliver_callback(baseline_deliver, &rocks);
   else

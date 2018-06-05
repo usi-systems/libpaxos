@@ -17,6 +17,7 @@ set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mssse3 -O0 -Wall -Wextra -Wno-unused-p
 
 include_directories (${CMAKE_SOURCE_DIR}/paxos/include)
 include_directories (${CMAKE_SOURCE_DIR}/p4xos/include)
+include_directories (${CMAKE_SOURCE_DIR}/datastore/include)
 include_directories (${CMAKE_SOURCE_DIR}/dppaxos/include)
 
 aux_source_directory (src SRCS)
@@ -26,6 +27,7 @@ foreach(p ${SRCS})
     target_link_libraries(${target}
     p4xos
     ${ROCKSDB_LIBRARIES}
+	datastore
     ${LIBEVENT_LIBRARIES} # udp_client only
     ${PLATFORM_LDFLAGS})
     set_target_properties (${target} PROPERTIES COMPILE_FLAGS ${CMAKE_CXX_FLAGS})
