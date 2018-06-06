@@ -15,7 +15,6 @@
 #include <unistd.h>
 
 #include "main.h"
-#include "app_hdr.h"
 
 static void
 stat_cb(__rte_unused struct rte_timer *timer, __rte_unused void *arg)

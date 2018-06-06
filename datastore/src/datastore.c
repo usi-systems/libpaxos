@@ -12,20 +12,15 @@ void handle_put(struct rocksdb_params *lp, const char *key, uint32_t keylen,
     }
 }
 
-void handle_get(struct rocksdb_params *lp, const char *key, uint32_t keylen) {
+char* handle_get(struct rocksdb_params *lp, const char *key, uint32_t keylen, size_t *vallen) {
     char *err = NULL;
-    size_t vallen;
     char *retval = rocksdb_get(lp->db[lp->lcore_id], lp->readoptions, key,
-                               keylen, &vallen, &err);
+                               keylen, vallen, &err);
     if (err != NULL) {
         fprintf(stderr, "Read Error: %s\n", err);
-        return;
+        return NULL;
     }
-
-    if (retval != NULL) {
-        printf("Returned value %s\n", retval);
-        free(retval);
-    }
+    return retval;
 }
 
 

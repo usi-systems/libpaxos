@@ -15,7 +15,6 @@
 #include <unistd.h>
 
 #include "main.h"
-#include "app_hdr.h"
 #include "datastore.h"
 
 struct rocksdb_params rocks;
@@ -23,13 +22,13 @@ struct rocksdb_configurations rocksdb_configurations;
 
 
 static uint8_t DEFAULT_KEY[] = "A";
-static uint8_t DEFAULT_VALUE[] = "BC";
+static uint8_t DEFAULT_VALUE[] = "B";
 
 static void
-set_app_hdr(struct app_hdr *ap, uint32_t inst) {
-	ap->msg_type = (inst % 2);
+set_request(struct request *ap, uint32_t inst) {
+	ap->type = (inst % 2);
 	rte_memcpy((char *)&ap->key, DEFAULT_KEY, sizeof(DEFAULT_KEY));
-	if (ap->msg_type == WRITE_OP) {
+	if (ap->type == WRITE_REQ) {
 		rte_memcpy((char *)&ap->value, DEFAULT_VALUE, sizeof(DEFAULT_VALUE));
 	}
 }
@@ -113,11 +112,11 @@ main(int argc, char **argv)
 
 	uint32_t n_workers = app_get_lcores_worker();
 
-	struct app_hdr ap;
+	struct request ap;
 	uint32_t i;
 	for (i = 0; i < app.p4xos_conf.osd*n_workers; i++) {
-		set_app_hdr(&ap, i);
-		submit(i%n_workers, (char*)&ap, sizeof(struct app_hdr));
+		set_request(&ap, i);
+		submit(i%n_workers, (char*)&ap, sizeof(struct request));
 	}
 
 	/* Launch per-lcore init on every lcore */

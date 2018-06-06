@@ -19,9 +19,9 @@
 #include <rte_udp.h>
 #include <stdint.h>
 
-#include "app_hdr.h"
 #include "dpp_paxos.h"
 #include "main.h"
+#include "datastore.h"
 
 #define RTE_LOGTYPE_XCLIENT RTE_LOGTYPE_USER1
 
@@ -200,11 +200,11 @@ static void destroy_client() {
   rte_sched_port_free(client.sched_port);
 }
 
-static void set_app_hdr(struct app_hdr *ap, uint32_t inst, uint8_t msg_type,
+static void set_request(struct request *ap, uint32_t inst, uint8_t msg_type,
                         uint8_t key, uint16_t value) {
-  ap->msg_type = msg_type;
+  ap->type = msg_type;
   ap->key = key;
-  if (ap->msg_type == WRITE_OP) {
+  if (ap->type == WRITE_REQ) {
     ap->value = value;
   }
 }
@@ -242,15 +242,15 @@ static struct rte_mbuf *prepare_base_pkt(struct rte_mempool *mbuf_pool,
     return NULL;
   }
 
-  struct app_hdr ap;
-  uint8_t msg_type = WRITE_OP;
+  struct request ap;
+  uint8_t msg_type = WRITE_REQ;
   uint16_t value = 2345;
-  set_app_hdr(&ap, 0, msg_type, 1, value);
+  set_request(&ap, 0, msg_type, 1, value);
 
   prepare_message(base_pkt, port, app.p4xos_conf.src_addr,
                   app.p4xos_conf.dst_addr, app.p4xos_conf.msgtype, 0, 0,
                   worker_id, app.p4xos_conf.node_id, (char *)&ap,
-                  sizeof(struct app_hdr));
+                  sizeof(struct request));
 
   if (get_igress) {
     update_ts(base_pkt);

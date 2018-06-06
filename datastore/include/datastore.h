@@ -82,7 +82,7 @@ void print_parameters(void);
 int init_rocksdb(struct rocksdb_params *lp);
 void handle_put(struct rocksdb_params *lp, const char *key, uint32_t keylen,
                 const char *value, uint32_t vallen);
-void handle_get(struct rocksdb_params *lp, const char *key, uint32_t keylen);
+char* handle_get(struct rocksdb_params *lp, const char *key, uint32_t keylen, size_t *vallen);
 void handle_checkpoint(struct rocksdb_params *lp, const char *cp_path);
 void display_rocksdb_statistics(struct rocksdb_params *lp);
 #endif // _DATASTORE_H_
