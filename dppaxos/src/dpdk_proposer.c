@@ -17,9 +17,9 @@
 #include "main.h"
 #include "datastore.h"
 
+
 struct rocksdb_params rocks;
 struct rocksdb_configurations rocksdb_configurations;
-
 
 static uint8_t DEFAULT_KEY[] = "A";
 static uint8_t DEFAULT_VALUE[] = "B";
@@ -46,7 +46,7 @@ stat_cb(__rte_unused struct rte_timer *timer, __rte_unused void *arg)
 		if (app.lcore_params[lcore].type != e_APP_LCORE_WORKER) {
 			continue;
 		}
-
+		printf("%-10"PRIu64, lp->nb_delivery);
 		nb_latency += lp->nb_latency;
 		nb_delivery += lp->nb_delivery;
 		latency += lp->latency;
@@ -59,14 +59,15 @@ stat_cb(__rte_unused struct rte_timer *timer, __rte_unused void *arg)
 		lp->total_bytes = 0;
 	}
 
-	if (nb_delivery && latency) {
-		double avg_cycle_latency = (double) latency / (double) nb_latency;
-		double avg_ns_latency = avg_cycle_latency * NS_PER_S / rte_get_timer_hz();
-		printf("Throughput = %"PRIu64" pkts, %2.1f Gbits; "
-				"Paxos TP = %u Avg latency = %.2f cycles ~ %.1f ns\n",
-				total_pkts, bytes_to_gbits(total_bytes),
-				nb_delivery, avg_cycle_latency, avg_ns_latency);
+	double avg_cycle_latency = 0.0, avg_ns_latency = 0.0;
+	if (latency) {
+		avg_cycle_latency = (double) latency / (double) nb_latency;
+		avg_ns_latency = avg_cycle_latency * NS_PER_S / rte_get_timer_hz();
 	}
+	printf("Throughput = %"PRIu64" pkts, %2.1f Gbits; "
+			"Paxos TP = %u Avg latency = %.2f cycles ~ %.1f ns\n",
+			total_pkts, bytes_to_gbits(total_bytes),
+			nb_delivery, avg_cycle_latency, avg_ns_latency);
 }
 
 
@@ -102,7 +103,7 @@ main(int argc, char **argv)
     //         rte_exit(EXIT_FAILURE, "Error with EAL HPET initialization\n");
 
 	uint64_t cycles_per_s = rte_get_timer_hz();
-	printf("Cycles per s: %lu", cycles_per_s);
+	printf("Cycles per s: %lu\n", cycles_per_s);
 	/* Init */
 	app_init();
 	app_print_params();
@@ -113,10 +114,20 @@ main(int argc, char **argv)
 	uint32_t n_workers = app_get_lcores_worker();
 
 	struct request ap;
-	uint32_t i;
-	for (i = 0; i < app.p4xos_conf.osd*n_workers; i++) {
-		set_request(&ap, i);
-		submit(i%n_workers, (char*)&ap, sizeof(struct request));
+	uint32_t worker_id = 0;
+
+	for (lcore = 0; lcore < APP_MAX_LCORES; lcore ++) {
+		struct app_lcore_params_worker *lp = &app.lcore_params[lcore].worker;
+
+		if (app.lcore_params[lcore].type != e_APP_LCORE_WORKER) {
+			continue;
+		}
+		set_request(&ap, worker_id);
+		submit_bulk(worker_id, app.p4xos_conf.osd, lp, (char*)&ap, sizeof(struct request));
+		worker_id++;
+		if (worker_id == n_workers)
+			break;
+
 	}
 
 	/* Launch per-lcore init on every lcore */

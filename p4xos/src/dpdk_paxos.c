@@ -295,7 +295,7 @@ int proposer_handler(struct rte_mbuf *pkt_in, void *arg) {
   }
 
   respond(pkt_in);
-  rte_timer_reset_sync(&lp->recv_timer[lp->lcore_id], app.hz*3, SINGLE, lp->worker_id,
+  rte_timer_reset_sync(&lp->recv_timer[lp->lcore_id], app.hz, SINGLE, lp->lcore_id,
      proposer_resubmit, lp);
   return SUCCESS;
 }
@@ -396,11 +396,25 @@ void proposer_resubmit(struct rte_timer *timer, void *arg) {
     struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
     int ret;
     submit_bulk(lp->worker_id, app.p4xos_conf.osd, lp, NULL, 0);
-    printf("Worker %u Resumit %u packets\n", lp->worker_id, app.p4xos_conf.osd);
-    ret = rte_timer_reset(&lp->recv_timer[lp->lcore_id], app.hz*3, SINGLE, lp->lcore_id,
+    RTE_LOG(DEBUG, P4XOS, "Worker %u Timeout. Resumit %u packets\n",
+        lp->worker_id, app.p4xos_conf.osd);
+    ret = rte_timer_reset(&lp->recv_timer[lp->lcore_id], app.hz, SINGLE, lp->lcore_id,
        proposer_resubmit, lp);
     if (ret < 0) {
-     printf("Worker %u timer is in the RUNNING state\n", lp->worker_id);
+         printf("Worker %u timer is in the RUNNING state\n", lp->worker_id);
+    }
+}
+
+void timer_send_checkpoint(struct rte_timer *timer, void *arg) {
+    struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
+    int ret;
+    RTE_LOG(DEBUG, P4XOS, "Worker %u timeout. Sent checkpoint instance %u\n",
+        lp->worker_id, lp->cur_inst);
+    send_checkpoint_message(lp->worker_id, lp->cur_inst);
+    ret = rte_timer_reset(&lp->recv_timer[lp->lcore_id], app.hz, SINGLE, lp->lcore_id,
+       timer_send_checkpoint, lp);
+    if (ret < 0) {
+        printf("Worker %u timer is in the RUNNING state\n", lp->worker_id);
     }
 }
 
@@ -502,6 +516,8 @@ static inline int handle_paxos_messages(struct rte_mbuf *pkt_in,
   }
   size_t data_size = sizeof(struct paxos_hdr);
   prepare_hw_checksum(pkt_in, data_size);
+  rte_timer_reset_sync(&lp->recv_timer[lp->lcore_id], app.hz, SINGLE, lp->lcore_id,
+     timer_send_checkpoint, lp);
   return SUCCESS;
 }
 

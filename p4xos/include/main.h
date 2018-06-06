@@ -494,6 +494,7 @@ void prepare_message(struct rte_mbuf *created_pkt, uint16_t port, uint32_t src_a
 						uint32_t dst_addr, uint8_t msgtype, uint32_t inst,
 						uint16_t rnd, uint8_t worker_id, uint16_t node_id, char* value, int size);
 void send_checkpoint_message(uint8_t worker_id, uint32_t inst);
+void timer_send_checkpoint(struct rte_timer *timer, void *arg);
 
 #ifdef __cplusplus
 }  /* end extern "C" */

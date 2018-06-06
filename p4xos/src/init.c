@@ -90,7 +90,6 @@ void app_init_acceptor(void) {
 
 void app_init_learner(void) {
   uint32_t lcore;
-  int ret;
   rte_timer_subsystem_init();
   /* fetch default timer frequency. */
   app.hz = rte_get_timer_hz();
@@ -101,12 +100,12 @@ void app_init_learner(void) {
     if (app.lcore_params[lcore].type != e_APP_LCORE_WORKER) {
       continue;
     }
-
+    lp->lcore_id = lcore;
     lp->learner = learner_new(app.p4xos_conf.num_acceptors);
     learner_set_instance_id(lp->learner, 0);
     lp->cur_inst = 0;
     lp->artificial_drop = app.p4xos_conf.drop;
-    uint64_t freq = app.hz;
+    // uint64_t freq = app.hz;
 
     // rte_timer_init(&lp->deliver_timer);
     //
@@ -116,12 +115,20 @@ void app_init_learner(void) {
     //  printf("timer is in the RUNNING state\n");
     // }
 
-    rte_timer_init(&lp->check_hole_timer);
-    ret = rte_timer_reset(&lp->check_hole_timer, freq, PERIODICAL, lcore,
-                          learner_check_holes, lp);
-    if (ret < 0) {
-      printf("timer is in the RUNNING state\n");
-    }
+    // rte_timer_init(&lp->check_hole_timer);
+    // ret = rte_timer_reset(&lp->check_hole_timer, freq, PERIODICAL, lcore,
+    //                       learner_check_holes, lp);
+    // if (ret < 0) {
+    //   printf("timer is in the RUNNING state\n");
+    // }
+
+    rte_timer_init(&lp->recv_timer[lp->lcore_id]);
+
+    // ret = rte_timer_reset(&lp->recv_timer[lp->lcore_id], app.hz*3, SINGLE, lp->lcore_id,
+    //    get_chosen, lp);
+    // if (ret < 0) {
+    //  printf("Worker %u timer is in the RUNNING state\n", lcore);
+    // }
   }
 }
 
@@ -140,12 +147,13 @@ void app_init_proposer(void) {
     }
     lp->lcore_id = lcore;
 
+    printf("Worker %u init timer\n", lp->worker_id);
     rte_timer_init(&lp->recv_timer[lp->lcore_id]);
 
-    ret = rte_timer_reset(&lp->recv_timer[lp->lcore_id], app.hz*3, SINGLE, lp->lcore_id,
+    ret = rte_timer_reset(&lp->recv_timer[lp->lcore_id], app.hz*2, SINGLE, lp->lcore_id,
        proposer_resubmit, lp);
     if (ret < 0) {
-     printf("Worker %u timer is in the RUNNING state\n", lcore);
+     printf("Worker %u timer is in the RUNNING state\n", lp->worker_id);
     }
   }
 }
