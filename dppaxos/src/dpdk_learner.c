@@ -34,25 +34,23 @@ static void deliver(unsigned int worker_id, unsigned int __rte_unused inst,
         uint32_t key_len = KEYLEN;   // rte_be_to_cpu_32(ap->key_len);
         uint32_t value_len = VALLEN; // rte_be_to_cpu_32(ap->value_len);
         // printf("Key %s, Value %s\n", ap->key, ap->value);
-        handle_put(rocks, (const char *)&ap->key,
+        handle_put(rocks->worker[worker_id].db, rocks->writeoptions, (const char *)&ap->key,
                     key_len, (const char *)&ap->value, value_len);
-        rocks->write_count[worker_id]++;
-
-        rocks->write_count[worker_id]++;
+        rocks->worker[worker_id].write_count++;
     } else if (ap->type == READ_REQ) {
         size_t len;
         uint32_t key_len = KEYLEN; // rte_be_to_cpu_32(ap->key_len);
         // printf("Key %s\n", ap->key);
         char *returned_value =
-        handle_get(rocks, (const char *)&ap->key, key_len, &len);
+        handle_get(rocks->worker[worker_id].db, rocks->readoptions, (const char *)&ap->key, key_len, &len);
         if (returned_value != NULL) {
             // printf("return value %s\n", returned_value);
             rte_memcpy(&ap->value, returned_value, len);
             free(returned_value);
         }
-        rocks->read_count[worker_id]++;
+        rocks->worker[worker_id].read_count++;
     }
-    rocks->delivered_count[worker_id]++;
+    rocks->worker[worker_id].delivered_count++;
 }
 
 static void stat_cb(__rte_unused struct rte_timer *timer,
@@ -77,8 +75,8 @@ static void stat_cb(__rte_unused struct rte_timer *timer,
   struct rocksdb_params *rocks = (struct rocksdb_params *)arg;
   uint32_t delivered_count = 0;
   for (i = 0; i < rocks->num_workers; i++) {
-    delivered_count += rocks->delivered_count[i];
-    rocks->delivered_count[i] = 0;
+    delivered_count += rocks->worker[i].delivered_count;
+    rocks->worker[i].delivered_count = 0;
   }
   if (delivered_count > 0) {
     printf("Throughput = %" PRIu64 " pkts, %2.1f Gbits; "

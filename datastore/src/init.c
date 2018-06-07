@@ -41,15 +41,15 @@ int init_rocksdb(struct rocksdb_params *lp) {
             }
         }
 
-        lp->db_path[i] = rocksdb_configurations.db_paths[i];
+        lp->worker[i].db_path = rocksdb_configurations.db_paths[i];
 
-        lp->db[i] = rocksdb_open(lp->options, rocksdb_configurations.db_paths[i], &err);
+        lp->worker[i].db = rocksdb_open(lp->options, rocksdb_configurations.db_paths[i], &err);
         if (err != NULL) {
             fprintf(stderr, "Cannot open DB: %s\n", err);
             return -1;
         }
 
-        lp->cp[i] = rocksdb_checkpoint_object_create(lp->db[i], &err);
+        lp->worker[i].cp = rocksdb_checkpoint_object_create(lp->worker[i].db, &err);
         if (err != NULL) {
             fprintf(stderr, "Cannot create checkpoint object: %s\n", err);
             return -1;
@@ -72,7 +72,6 @@ int init_rocksdb(struct rocksdb_params *lp) {
     }
     lp->flops = rocksdb_flushoptions_create();
     lp->readoptions = rocksdb_readoptions_create();
-    lp->nb_keys = rocksdb_configurations.nb_keys;
 
     return 0;
 }

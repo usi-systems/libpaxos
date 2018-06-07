@@ -29,7 +29,7 @@ static void baseline_deliver(unsigned int worker_id,
     worker_id = 0;
   }
   struct rocksdb_params *rocks = (struct rocksdb_params *)arg;
-  rocks->delivered_count[worker_id]++;
+  rocks->worker[worker_id].delivered_count++;
   if (app.p4xos_conf.checkpoint_interval > 0 &&
       (inst % app.p4xos_conf.checkpoint_interval == 0)) {
     send_checkpoint_message(worker_id, inst);
@@ -51,33 +51,33 @@ static void deliver(unsigned int worker_id, unsigned int __rte_unused inst,
         uint32_t value_len = VALLEN; // rte_be_to_cpu_32(ap->value_len);
         // printf("Key %s, Value %s\n", ap->key, ap->value);
         // // Single PUT
-        handle_put(rocks, (const char *)&ap->key,
+        handle_put(rocks->worker[worker_id].db, rocks->writeoptions, (const char *)&ap->key,
                     key_len, (const char *)&ap->value, value_len);
-        rocks->write_count[worker_id]++;
+        rocks->worker[worker_id].write_count++;
 
     } else if (ap->type == READ_REQ) {
         size_t len;
         uint32_t key_len = KEYLEN; // rte_be_to_cpu_32(ap->key_len);
         // printf("Key %s\n", ap->key);
         char *returned_value =
-        handle_get(rocks, (const char *)&ap->key, key_len, &len);
+        handle_get(rocks->worker[worker_id].db, rocks->readoptions, (const char *)&ap->key, key_len, &len);
         if (returned_value != NULL) {
             // printf("Key %s: return value %s\n", ap->key, returned_value);
             rte_memcpy((char *)&ap->value, returned_value, len);
             free(returned_value);
         }
-        rocks->read_count[worker_id]++;
+        rocks->worker[worker_id].read_count++;
     }
 
-    rocks->delivered_count[worker_id]++;
+    rocks->worker[worker_id].delivered_count++;
 
     if (inst > 0 && app.p4xos_conf.checkpoint_interval > 0 &&
       (inst % app.p4xos_conf.checkpoint_interval == 0)) {
         if (rocksdb_configurations.enable_checkpoint) {
             char cp_path[FILENAME_LENGTH];
             snprintf(cp_path, FILENAME_LENGTH, "%s/checkpoints/%s-core-%u-inst-%u",
-            rocks->db_path[worker_id], rocks->hostname, worker_id, inst);
-            handle_checkpoint(rocks, cp_path);
+            rocks->worker[worker_id].db_path, rocks->hostname, worker_id, inst);
+            handle_checkpoint(rocks->worker[worker_id].cp, cp_path);
         }
     send_checkpoint_message(worker_id, inst);
     }
@@ -108,12 +108,12 @@ static void stat_cb(__rte_unused struct rte_timer *timer,
   uint32_t delivered_count = 0;
   for (i = 0; i < rocks->num_workers; i++) {
     if (i == 0) {
-      printf("%-10u", rocks->delivered_count[i]);
+      printf("%-10u", rocks->worker[i].delivered_count);
     } else {
-      printf("\t%-10u", rocks->delivered_count[i]);
+      printf("\t%-10u", rocks->worker[i].delivered_count);
     }
-    delivered_count += rocks->delivered_count[i];
-    rocks->delivered_count[i] = 0;
+    delivered_count += rocks->worker[i].delivered_count;
+    rocks->worker[i].delivered_count = 0;
   }
   rocks->total_delivered_count += delivered_count;
   printf("\t%-10" PRIu64 "\t%-2.7f"

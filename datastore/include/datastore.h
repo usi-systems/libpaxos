@@ -45,25 +45,25 @@ struct rocksdb_configurations {
   char* db_paths[MAX_NB_PARTITION];
 };
 
+struct rocksdb_lcore_params {
+    char *db_path;
+    rocksdb_t *db;
+    rocksdb_checkpoint_t *cp;
+    uint32_t delivered_count;
+    uint32_t write_count;
+    uint32_t read_count;
+};
+
 struct rocksdb_params {
     /* Rocksdb */
-    unsigned lcore_id;
-    uint32_t nb_keys;
-	rocksdb_t *db[MAX_WORKER_CORE];
+    struct rocksdb_lcore_params worker[MAX_WORKER_CORE];
     rocksdb_options_t *options;
     rocksdb_writeoptions_t *writeoptions;
     rocksdb_readoptions_t *readoptions;
-	rocksdb_writebatch_t* wrbatch[MAX_WORKER_CORE];
-	rocksdb_checkpoint_t *cp[MAX_WORKER_CORE];
 	rocksdb_flushoptions_t* flops;
-    uint32_t delivered_count[MAX_WORKER_CORE];
-    uint32_t write_count[MAX_WORKER_CORE];
-    uint32_t read_count[MAX_WORKER_CORE];
-    uint64_t last_cycle[MAX_WORKER_CORE];
     uint32_t num_workers;
     uint32_t total_delivered_count;
     char hostname[32];
-    char *db_path[MAX_WORKER_CORE];
 };
 
 #define KEYLEN 4
@@ -84,9 +84,11 @@ void populate_configuration(char *config_file, struct rocksdb_configurations *co
 void free_rocksdb_configurations(struct rocksdb_configurations *conf);
 void print_parameters(void);
 int init_rocksdb(struct rocksdb_params *lp);
-void handle_put(struct rocksdb_params *lp, const char *key, uint32_t keylen,
+void handle_put(struct rocksdb_t *db, struct rocksdb_writeoptions_t *writeoptions,
+                const char *key, uint32_t keylen,
                 const char *value, uint32_t vallen);
-char* handle_get(struct rocksdb_params *lp, const char *key, uint32_t keylen, size_t *vallen);
-void handle_checkpoint(struct rocksdb_params *lp, const char *cp_path);
+char* handle_get(struct rocksdb_t *db, struct rocksdb_readoptions_t *readoptions,
+                const char *key, uint32_t keylen, size_t *vallen);
+void handle_checkpoint(struct rocksdb_checkpoint_t *cp, const char *cp_path);
 void display_rocksdb_statistics(struct rocksdb_params *lp);
 #endif // _DATASTORE_H_
