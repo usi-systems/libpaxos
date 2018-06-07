@@ -13,6 +13,8 @@ extern "C" {
 #error "APP_DEFAULT_NUM_ACCEPTORS is too big"
 #endif
 
+#define PAXOS_VALUE_SIZE 8
+
 #define PAXOS_CHOSEN       0x04
 #define PAXOS_RESET        0x07
 #define NEW_COMMAND        0x08
@@ -43,7 +45,7 @@ struct paxos_hdr {
     uint16_t vrnd;
     uint16_t acptid;
     uint16_t reserved;
-    uint32_t value;
+    uint64_t value;
     uint32_t reserved2;
     uint64_t igress_ts;
 } __attribute__((__packed__));

@@ -154,7 +154,7 @@ static inline int accept_handler(struct paxos_hdr *paxos_hdr,
 static inline int promise_handler(struct paxos_hdr *paxos_hdr,
                                   struct app_lcore_params_worker *lp) {
   int ret = 0;
-  int vsize = 4; // rte_be_to_cpu_32(paxos_hdr->value_len);
+  int vsize = PAXOS_VALUE_SIZE; // rte_be_to_cpu_32(paxos_hdr->value_len);
 
   uint32_t inst = rte_be_to_cpu_32(paxos_hdr->inst);
   if (likely(inst) > lp->cur_inst) {
@@ -190,7 +190,7 @@ static inline int accepted_handler(struct paxos_hdr *paxos_hdr,
     if (rand() % 1299827 == 0)
       return DROP_ORIGINAL_PACKET;
   }
-  int vsize = 4; // rte_be_to_cpu_32(paxos_hdr->value_len);
+  int vsize = PAXOS_VALUE_SIZE; // rte_be_to_cpu_32(paxos_hdr->value_len);
   uint32_t inst = rte_be_to_cpu_32(paxos_hdr->inst);
   if (inst > lp->cur_inst) {
     lp->cur_inst = inst;
@@ -239,7 +239,7 @@ static inline int chosen_handler(struct paxos_hdr *paxos_hdr,
     paxos_hdr->igress_ts = rte_cpu_to_be_64(now);
   }
   uint32_t inst = rte_be_to_cpu_32(paxos_hdr->inst);
-  size_t vsize = 4;
+  size_t vsize = PAXOS_VALUE_SIZE;
   lp->deliver(lp->worker_id, inst, (char *)&paxos_hdr->value, vsize, lp->deliver_arg);
 
   lp->nb_delivery++;
@@ -249,7 +249,7 @@ static inline int chosen_handler(struct paxos_hdr *paxos_hdr,
 
 static inline int learner_chosen_handler(struct paxos_hdr *paxos_hdr,
                                          struct app_lcore_params_worker *lp) {
-  int vsize = 4; // rte_be_to_cpu_32(paxos_hdr->value_len);
+  int vsize = PAXOS_VALUE_SIZE; // rte_be_to_cpu_32(paxos_hdr->value_len);
   uint32_t inst = rte_be_to_cpu_32(paxos_hdr->inst);
   if (inst > lp->cur_inst) {
     lp->cur_inst = inst;

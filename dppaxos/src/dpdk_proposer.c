@@ -24,8 +24,8 @@ struct rocksdb_configurations rocksdb_configurations;
 static void
 set_request(struct request *ap, uint32_t some_value) {
 	ap->type = WRITE_REQ;
-	rte_memcpy((char *)&ap->key, (char*)&some_value, 1);
-	rte_memcpy((char *)&ap->value, (char*)&some_value, 1);
+	rte_memcpy((char *)&ap->key, (char*)&some_value, KEYLEN);
+	rte_memcpy((char *)&ap->value, (char*)&some_value, VALLEN);
 }
 
 static void receive_response(unsigned int worker_id,
@@ -137,7 +137,6 @@ main(int argc, char **argv)
 		worker_id++;
 		if (worker_id == n_workers)
 			break;
-
 	}
 
 	/* Launch per-lcore init on every lcore */

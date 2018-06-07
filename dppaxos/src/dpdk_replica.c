@@ -47,8 +47,8 @@ static void deliver(unsigned int worker_id, unsigned int __rte_unused inst,
     // printf("inst %d, type: %d, key %s, value %s\n", inst, ap->msg_type,
     // ap->key, ap->value);
     if (ap->type == WRITE_REQ) {
-        uint32_t key_len = 1;   // rte_be_to_cpu_32(ap->key_len);
-        uint32_t value_len = 2; // rte_be_to_cpu_32(ap->value_len);
+        uint32_t key_len = KEYLEN;   // rte_be_to_cpu_32(ap->key_len);
+        uint32_t value_len = VALLEN; // rte_be_to_cpu_32(ap->value_len);
         // printf("Key %s, Value %s\n", ap->key, ap->value);
         // // Single PUT
         handle_put(rocks, (const char *)&ap->key,
@@ -57,7 +57,7 @@ static void deliver(unsigned int worker_id, unsigned int __rte_unused inst,
 
     } else if (ap->type == READ_REQ) {
         size_t len;
-        uint32_t key_len = 1; // rte_be_to_cpu_32(ap->key_len);
+        uint32_t key_len = KEYLEN; // rte_be_to_cpu_32(ap->key_len);
         // printf("Key %s\n", ap->key);
         char *returned_value =
         handle_get(rocks, (const char *)&ap->key, key_len, &len);
@@ -73,10 +73,12 @@ static void deliver(unsigned int worker_id, unsigned int __rte_unused inst,
 
     if (inst > 0 && app.p4xos_conf.checkpoint_interval > 0 &&
       (inst % app.p4xos_conf.checkpoint_interval == 0)) {
-    char cp_path[FILENAME_LENGTH];
-    snprintf(cp_path, FILENAME_LENGTH, "%s/checkpoints/%s-core-%u-inst-%u",
-             rocks->db_path[worker_id], rocks->hostname, worker_id, inst);
-    handle_checkpoint(rocks, cp_path);
+        if (rocksdb_configurations.enable_checkpoint) {
+            char cp_path[FILENAME_LENGTH];
+            snprintf(cp_path, FILENAME_LENGTH, "%s/checkpoints/%s-core-%u-inst-%u",
+            rocks->db_path[worker_id], rocks->hostname, worker_id, inst);
+            handle_checkpoint(rocks, cp_path);
+        }
     send_checkpoint_message(worker_id, inst);
     }
 }

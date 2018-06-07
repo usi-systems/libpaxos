@@ -66,10 +66,13 @@ struct rocksdb_params {
     char *db_path[MAX_WORKER_CORE];
 };
 
+#define KEYLEN 4
+#define VALLEN 2
+
 struct request {
+    uint32_t key;
+    uint16_t value;
     uint8_t type;
-    uint8_t key;
-    uint8_t value;
     uint8_t terminator;
 }  __attribute__((__packed__));
 
