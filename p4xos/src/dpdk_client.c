@@ -385,6 +385,7 @@ void submit_bulk(uint8_t worker_id, uint32_t nb_pkts,
                         app.p4xos_conf.msgtype, 0, 0, worker_id,
                         app.p4xos_conf.node_id, value, size);
 
+    value += size;
     pos = lp->mbuf_out[port].n_mbufs;
 
     lp->mbuf_out[port].array[pos++] = pkts[i];

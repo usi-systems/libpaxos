@@ -41,6 +41,8 @@ int init_rocksdb(struct rocksdb_params *lp) {
             }
         }
 
+        lp->db_path[i] = rocksdb_configurations.db_paths[i];
+
         lp->db[i] = rocksdb_open(lp->options, rocksdb_configurations.db_paths[i], &err);
         if (err != NULL) {
             fprintf(stderr, "Cannot open DB: %s\n", err);

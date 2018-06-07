@@ -50,7 +50,7 @@
 #endif
 
 #ifndef APP_STATS
-#define APP_STATS 1000000
+#define APP_STATS 125000
 #endif
 
 #define APP_IO_RX_DROP_ALL_PACKETS 0

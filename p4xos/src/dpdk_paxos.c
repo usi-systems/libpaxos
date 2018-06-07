@@ -238,6 +238,10 @@ static inline int chosen_handler(struct paxos_hdr *paxos_hdr,
     lp->nb_latency++;
     paxos_hdr->igress_ts = rte_cpu_to_be_64(now);
   }
+  uint32_t inst = rte_be_to_cpu_32(paxos_hdr->inst);
+  size_t vsize = 4;
+  lp->deliver(lp->worker_id, inst, (char *)&paxos_hdr->value, vsize, lp->deliver_arg);
+
   lp->nb_delivery++;
   paxos_hdr->msgtype = app.p4xos_conf.msgtype;
   return SUCCESS;
@@ -287,6 +291,7 @@ int proposer_handler(struct rte_mbuf *pkt_in, void *arg) {
   switch (msgtype) {
   case PAXOS_CHOSEN: {
     chosen_handler(paxos_hdr, lp);
+
     break;
   }
   default:

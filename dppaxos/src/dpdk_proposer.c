@@ -18,19 +18,25 @@
 #include "datastore.h"
 
 
-struct rocksdb_params rocks;
 struct rocksdb_configurations rocksdb_configurations;
 
-static uint8_t DEFAULT_KEY[] = "A";
-static uint8_t DEFAULT_VALUE[] = "B";
 
 static void
-set_request(struct request *ap, uint32_t inst) {
-	ap->type = (inst % 2);
-	rte_memcpy((char *)&ap->key, DEFAULT_KEY, sizeof(DEFAULT_KEY));
-	if (ap->type == WRITE_REQ) {
-		rte_memcpy((char *)&ap->value, DEFAULT_VALUE, sizeof(DEFAULT_VALUE));
-	}
+set_request(struct request *ap, uint32_t some_value) {
+	ap->type = WRITE_REQ;
+	rte_memcpy((char *)&ap->key, (char*)&some_value, 1);
+	rte_memcpy((char *)&ap->value, (char*)&some_value, 1);
+}
+
+static void receive_response(unsigned int worker_id,
+                             unsigned int __rte_unused inst,
+                             __rte_unused char *val, __rte_unused size_t size,
+                             __rte_unused void *arg) {
+	struct request *req = (struct request*) val;
+	// printf("Worker %u Received a response: %u %u %u\n", worker_id, req->type, req->key, req->value);
+	req->type = WRITE_REQ;
+	req->key = req->key + 1;
+	req->value = req->value + 1;
 }
 
 static void
@@ -107,13 +113,18 @@ main(int argc, char **argv)
 	/* Init */
 	app_init();
 	app_print_params();
+	app_set_deliver_callback(receive_response, NULL);
 	app_set_worker_callback(proposer_handler);
 	app_set_stat_callback(stat_cb, NULL);
 	app_init_proposer();
 
 	uint32_t n_workers = app_get_lcores_worker();
 
-	struct request ap;
+	struct request req[app.p4xos_conf.osd];
+	uint32_t i;
+	for (i = 0; i < app.p4xos_conf.osd; i++) {
+		set_request(&req[i], i+1);
+	}
 	uint32_t worker_id = 0;
 
 	for (lcore = 0; lcore < APP_MAX_LCORES; lcore ++) {
@@ -122,8 +133,7 @@ main(int argc, char **argv)
 		if (app.lcore_params[lcore].type != e_APP_LCORE_WORKER) {
 			continue;
 		}
-		set_request(&ap, worker_id);
-		submit_bulk(worker_id, app.p4xos_conf.osd, lp, (char*)&ap, sizeof(struct request));
+		submit_bulk(worker_id, app.p4xos_conf.osd, lp, (char*)req, sizeof(struct request));
 		worker_id++;
 		if (worker_id == n_workers)
 			break;

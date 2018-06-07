@@ -73,15 +73,11 @@ static void deliver(unsigned int worker_id, unsigned int __rte_unused inst,
 
     if (inst > 0 && app.p4xos_conf.checkpoint_interval > 0 &&
       (inst % app.p4xos_conf.checkpoint_interval == 0)) {
-    // char cp_path[DB_NAME_LENGTH];
-    // snprintf(cp_path, DB_NAME_LENGTH, "%s/checkpoints/%s-core-%u-inst-%u",
-    //          DBPath, rocks->hostname, worker_id, inst);
-    // rocksdb_checkpoint_create(rocks->cp[worker_id], cp_path, log_size_for_flush,
-    //                           &err);
-    // if (err != NULL) {
-    //   printf("Checkpoint Error: %s\n", err);
-    // }
-        send_checkpoint_message(worker_id, inst);
+    char cp_path[FILENAME_LENGTH];
+    snprintf(cp_path, FILENAME_LENGTH, "%s/checkpoints/%s-core-%u-inst-%u",
+             rocks->db_path[worker_id], rocks->hostname, worker_id, inst);
+    handle_checkpoint(rocks, cp_path);
+    send_checkpoint_message(worker_id, inst);
     }
 }
 

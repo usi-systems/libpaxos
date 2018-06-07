@@ -63,6 +63,7 @@ struct rocksdb_params {
     uint32_t num_workers;
     uint32_t total_delivered_count;
     char hostname[32];
+    char *db_path[MAX_WORKER_CORE];
 };
 
 struct request {

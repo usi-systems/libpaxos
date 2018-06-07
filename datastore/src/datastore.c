@@ -32,6 +32,7 @@ void handle_checkpoint(struct rocksdb_params *lp, const char *cp_path) {
     }
 }
 
+
 void display_rocksdb_statistics(struct rocksdb_params *lp)
 {
     if (rocksdb_configurations.enable_statistics) {
