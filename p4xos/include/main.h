@@ -29,6 +29,7 @@
 #include <rte_tcp.h>
 #include <rte_lpm.h>
 #include <rte_timer.h>
+#include <rte_sched.h>
 
 #include "paxos.h"
 /* Logical cores */
@@ -256,6 +257,11 @@
 #define APP_DEFAULT_MAX_INST	24000000
 #define APP_DEFAULT_SENDING_RATE 10000
 
+#define MAX_SCHED_SUBPORTS 1
+#define MAX_SCHED_PIPES 1
+#undef RTE_SCHED_PIPE_PROFILES_PER_PORT
+#define RTE_SCHED_PIPE_PROFILES_PER_PORT 1
+#define SCHED_PORT_QUEUE_SIZE 64
 
 #define TIMER_RESOLUTION_CYCLES 20000000ULL /* around 10ms at 2 Ghz */
 
@@ -332,6 +338,9 @@ struct app_lcore_params_io {
 		/* NIC */
 		uint16_t nic_ports[APP_MAX_NIC_TX_PORTS_PER_IO_LCORE];
 		uint32_t n_nic_ports;
+
+		/* Sched Port */
+		struct rte_sched_port *sched_port;
 
 		/* Internal buffers */
 		struct app_mbuf_array mbuf_out[APP_MAX_NIC_TX_PORTS_PER_IO_LCORE];
@@ -464,6 +473,7 @@ int app_get_lcore_for_nic_tx(uint16_t port, uint32_t *lcore_out);
 int app_is_socket_used(uint32_t socket);
 uint32_t app_get_lcores_io_rx(void);
 uint32_t app_get_lcores_worker(void);
+int app_get_lcore_worker(uint32_t worker_id);
 struct app_lcore_params_worker* app_get_worker(uint32_t worker_id);
 void app_print_params(void);
 void submit(uint8_t worker_id, char* value, int size);
@@ -485,7 +495,7 @@ void app_set_default_value(char *arg, uint32_t vlen);
 void learner_call_deliver(struct rte_timer *timer, void *arg);
 void learner_check_holes(struct rte_timer *timer, void *arg);
 void proposer_resubmit(struct rte_timer *timer, void *arg);
-void reset_leader_instance();
+void reset_leader_instance(uint32_t worker_id);
 double bytes_to_gbits(uint64_t bytes);
 void send_prepare(struct app_lcore_params_worker *lp, uint32_t inst, uint32_t prepare_size, char* value, int size);
 void fill_holes(struct app_lcore_params_worker *lp, uint32_t inst, uint32_t prepare_size, char* value, int size);
@@ -495,6 +505,8 @@ void prepare_message(struct rte_mbuf *created_pkt, uint16_t port, uint32_t src_a
 						uint16_t rnd, uint8_t worker_id, uint16_t node_id, char* value, int size);
 void send_checkpoint_message(uint8_t worker_id, uint32_t inst);
 void timer_send_checkpoint(struct rte_timer *timer, void *arg);
+struct rte_sched_port *app_init_sched_port(uint32_t portid,
+                                                  uint32_t socketid);
 
 #ifdef __cplusplus
 }  /* end extern "C" */

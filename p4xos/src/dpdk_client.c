@@ -135,292 +135,175 @@ void prepare_message(struct rte_mbuf *created_pkt, uint16_t port,
   udp->dgram_cksum = rte_ipv4_phdr_cksum(ip, created_pkt->ol_flags);
 }
 
-void reset_leader_instance() {
-  uint32_t lcore_io;
-  int ret;
-  uint16_t port = app.p4xos_conf.tx_port;
-
-  app_get_lcore_for_nic_tx(port, &lcore_io);
-  struct app_lcore_params_io *lp = &app.lcore_params[lcore_io].io;
-
-  uint32_t n_workers = app_get_lcores_worker();
-  struct rte_mbuf *prepare_pkts[n_workers];
-  ret = rte_pktmbuf_alloc_bulk(app.lcore_params[lcore_io].pool, prepare_pkts,
-                               n_workers);
-
-  if (ret < 0) {
-    RTE_LOG(INFO, USER1, "Not enough entries in the mempools for RESET\n");
-    return;
-  }
-
-  uint32_t i;
-  uint32_t mbuf_idx;
-
-  for (i = 0; i < n_workers; i++) {
-    mbuf_idx = lp->tx.mbuf_out[port].n_mbufs;
-    prepare_message(prepare_pkts[i], port, app.p4xos_conf.src_addr,
-                    app.p4xos_conf.dst_addr, PAXOS_RESET, 0, 0, i,
-                    app.p4xos_conf.node_id, NULL, 0);
-    lp->tx.mbuf_out[port].array[mbuf_idx] = prepare_pkts[i];
-    lp->tx.mbuf_out[port].n_mbufs++;
-  }
-  lp->tx.mbuf_out_flush[port] = 1;
+void reset_leader_instance(uint32_t worker_id) {
+    uint16_t port = app.p4xos_conf.tx_port;
+    struct app_lcore_params_worker *lp = app_get_worker(worker_id);
+    int lcore = app_get_lcore_worker(worker_id);
+    if (lcore < 0) {
+        rte_panic("Invalid worker_id\n");
+    }
+    uint32_t mbuf_idx = lp->mbuf_out[port].n_mbufs;
+    struct rte_mbuf *pkt = rte_pktmbuf_alloc(app.lcore_params[lcore].pool);
+    if (pkt != NULL) {
+        prepare_message(pkt, port, app.p4xos_conf.src_addr,
+                        app.p4xos_conf.dst_addr, PAXOS_RESET, 0, 0, worker_id,
+                        app.p4xos_conf.node_id, NULL, 0);
+    }
+    lp->mbuf_out[port].array[mbuf_idx] = pkt;
+    lp->mbuf_out[port].n_mbufs++;
 }
 
 void send_prepare(struct app_lcore_params_worker *lp, uint32_t inst,
                   uint32_t prepare_size, char *value, int size) {
-  uint16_t port = app.p4xos_conf.tx_port;
-  uint32_t lcore_io;
-  int ret;
-  uint32_t pos;
-
-  if (app.nic_tx_port_mask[port] == 0) {
-    return;
-  }
-
-  if (app_get_lcore_for_nic_tx(port, &lcore_io) < 0) {
-    rte_panic("Algorithmic error (no I/O core to handle TX of port %u)\n",
-              port);
-  }
-
-  struct rte_mbuf *prepare_pkts[prepare_size];
-  ret = rte_pktmbuf_alloc_bulk(app.lcore_params[lcore_io].pool, prepare_pkts,
-                               prepare_size);
-
-  if (ret < 0) {
-    RTE_LOG(INFO, USER1, "Not enough entries in the mempools for ACCEPT\n");
-    return;
-  }
-
-  uint32_t i;
-  for (i = 0; i < prepare_size; i++) {
-    paxos_prepare out;
-    learner_prepare(lp->learner, &out, inst + i);
-    prepare_message(prepare_pkts[i], port, app.p4xos_conf.src_addr,
-                    app.p4xos_conf.dst_addr, LEARNER_PREPARE, out.iid,
-                    out.ballot, lp->worker_id, app.p4xos_conf.node_id, value,
-                    size);
-
-    pos = lp->mbuf_out[port].n_mbufs;
-
-    lp->mbuf_out[port].array[pos++] = prepare_pkts[i];
-    lp->mbuf_out[port].n_mbufs = pos;
-  }
-  ret = rte_ring_sp_enqueue_bulk(lp->rings_out[port],
-                                 (void **)lp->mbuf_out[port].array,
-                                 prepare_size, NULL);
-
-  if (unlikely(ret == 0)) {
-    uint32_t k;
-    for (k = 0; k < prepare_size; k++) {
-      struct rte_mbuf *pkt_to_free = lp->mbuf_out[port].array[k];
-      rte_pktmbuf_free(pkt_to_free);
+    int ret;
+    uint32_t i;
+    uint32_t mbuf_idx;
+    uint16_t port = app.p4xos_conf.tx_port;
+    int lcore = app_get_lcore_worker(lp->worker_id);
+    if (lcore < 0) {
+        rte_panic("Invalid worker_id\n");
     }
-  }
-  lp->mbuf_out[port].n_mbufs = 0;
-  lp->mbuf_out_flush[port] = 0;
+    struct rte_mbuf *pkts[prepare_size];
+    ret = rte_pktmbuf_alloc_bulk(app.lcore_params[lcore].pool, pkts, prepare_size);
+
+    if (ret < 0) {
+        RTE_LOG(INFO, USER1, "Not enough entries in the mempools for ACCEPT\n");
+        return;
+    }
+
+    for (i = 0; i < prepare_size; i++) {
+        paxos_prepare out;
+        learner_prepare(lp->learner, &out, inst + i);
+        prepare_message(pkts[i], port, app.p4xos_conf.src_addr,
+            app.p4xos_conf.dst_addr, LEARNER_PREPARE, out.iid,
+            out.ballot, lp->worker_id, app.p4xos_conf.node_id, value, size);
+
+        mbuf_idx = lp->mbuf_out[port].n_mbufs;
+        lp->mbuf_out[port].array[mbuf_idx++] = pkts[i];
+        lp->mbuf_out[port].n_mbufs = mbuf_idx;
+    }
 }
 
 void fill_holes(struct app_lcore_params_worker *lp, uint32_t inst,
                 uint32_t prepare_size, char *value, int size) {
-  uint16_t port = app.p4xos_conf.tx_port;
-  uint32_t lcore_io;
-  int ret;
-  uint32_t pos;
-
-  if (app.nic_tx_port_mask[port] == 0) {
-    return;
-  }
-
-  if (app_get_lcore_for_nic_tx(port, &lcore_io) < 0) {
-    rte_panic("Algorithmic error (no I/O core to handle TX of port %u)\n",
-              port);
-  }
-
-  struct rte_mbuf *prepare_pkts[prepare_size];
-  ret = rte_pktmbuf_alloc_bulk(app.lcore_params[lcore_io].pool, prepare_pkts,
-                               prepare_size);
-
-  if (ret < 0) {
-    RTE_LOG(INFO, USER1, "Not enough entries in the mempools for ACCEPT\n");
-    return;
-  }
-
-  uint32_t i;
-  for (i = 0; i < prepare_size; i++) {
-    prepare_message(prepare_pkts[i], port, app.p4xos_conf.src_addr,
-                    app.p4xos_conf.dst_addr, LEARNER_ACCEPT, inst + i, 0,
-                    lp->worker_id, app.p4xos_conf.node_id, value, size);
-
-    pos = lp->mbuf_out[port].n_mbufs;
-
-    lp->mbuf_out[port].array[pos++] = prepare_pkts[i];
-    lp->mbuf_out[port].n_mbufs = pos;
-  }
-  ret = rte_ring_sp_enqueue_bulk(lp->rings_out[port],
-                                 (void **)lp->mbuf_out[port].array,
-                                 prepare_size, NULL);
-
-  if (unlikely(ret == 0)) {
-    uint32_t k;
-    for (k = 0; k < prepare_size; k++) {
-      struct rte_mbuf *pkt_to_free = lp->mbuf_out[port].array[k];
-      rte_pktmbuf_free(pkt_to_free);
+    int ret;
+    uint32_t i;
+    uint32_t mbuf_idx;
+    uint16_t port = app.p4xos_conf.tx_port;
+    int lcore = app_get_lcore_worker(lp->worker_id);
+    if (lcore < 0) {
+        rte_panic("Invalid worker_id\n");
     }
-  }
-  lp->mbuf_out[port].n_mbufs = 0;
-  lp->mbuf_out_flush[port] = 0;
+    struct rte_mbuf *pkts[prepare_size];
+    ret = rte_pktmbuf_alloc_bulk(app.lcore_params[lcore].pool, pkts, prepare_size);
+
+    if (ret < 0) {
+        RTE_LOG(INFO, USER1, "Not enough entries in the mempools for ACCEPT\n");
+        return;
+    }
+
+    for (i = 0; i < prepare_size; i++) {
+        prepare_message(pkts[i], port, app.p4xos_conf.src_addr,
+                        app.p4xos_conf.dst_addr, LEARNER_ACCEPT, inst + i, 0,
+                        lp->worker_id, app.p4xos_conf.node_id, value, size);
+
+        mbuf_idx = lp->mbuf_out[port].n_mbufs;
+        lp->mbuf_out[port].array[mbuf_idx++] = pkts[i];
+        lp->mbuf_out[port].n_mbufs = mbuf_idx;
+    }
 }
 
 void send_accept(struct app_lcore_params_worker *lp, paxos_accept *accept) {
-  uint16_t port = app.p4xos_conf.tx_port;
-  uint32_t lcore_io;
-  int ret;
-  uint32_t pos;
-  uint32_t bsz = app.burst_size_io_tx_write;
-
-  if (app.nic_tx_port_mask[port] == 0) {
-    return;
-  }
-
-  if (app_get_lcore_for_nic_tx(port, &lcore_io) < 0) {
-    rte_panic("Algorithmic error (no I/O core to handle TX of port %u)\n",
-              port);
-  }
-
-  struct rte_mbuf *prepare_pkt =
-      rte_pktmbuf_alloc(app.lcore_params[lcore_io].pool);
-
-  if (prepare_pkt == NULL) {
-    RTE_LOG(INFO, USER1, "Not enough entries in the mempools for ACCEPT\n");
-    return;
-  }
-
-  char *value = accept->value.paxos_value_val;
-  int size = accept->value.paxos_value_len;
-  if (value == NULL) {
-    value = lp->default_value;
-    size = lp->default_value_len;
-  }
-
-  prepare_message(prepare_pkt, port, app.p4xos_conf.src_addr,
-                  app.p4xos_conf.dst_addr, LEARNER_ACCEPT, accept->iid,
-                  accept->ballot, lp->worker_id, app.p4xos_conf.node_id, value,
-                  size);
-
-  pos = lp->mbuf_out[port].n_mbufs;
-
-  lp->mbuf_out[port].array[pos++] = prepare_pkt;
-
-  if (likely(pos < bsz)) {
-    lp->mbuf_out[port].n_mbufs = pos;
-    return;
-  }
-  RTE_LOG(DEBUG, USER1, "Worker %u Send Accept instance %u to port %u\n",
-          lp->worker_id, accept->iid, port);
-
-  ret = rte_ring_sp_enqueue_bulk(lp->rings_out[port],
-                                 (void **)lp->mbuf_out[port].array, bsz, NULL);
-
-  if (unlikely(ret == 0)) {
-    uint32_t k;
-    for (k = 0; k < bsz; k++) {
-      struct rte_mbuf *pkt_to_free = lp->mbuf_out[port].array[k];
-      rte_pktmbuf_free(pkt_to_free);
+    uint16_t port = app.p4xos_conf.tx_port;
+    int lcore = app_get_lcore_worker(lp->worker_id);
+    if (lcore < 0) {
+        rte_panic("Invalid worker_id\n");
     }
-  }
-  lp->mbuf_out[port].n_mbufs = 0;
-  lp->mbuf_out_flush[port] = 0;
+    struct rte_mbuf *pkt = rte_pktmbuf_alloc(app.lcore_params[lcore].pool);
+    if (pkt == NULL) {
+        RTE_LOG(INFO, USER1, "Not enough entries in the mempools for ACCEPT\n");
+        return;
+    }
+
+    char *value = accept->value.paxos_value_val;
+    int size = accept->value.paxos_value_len;
+    if (value == NULL) {
+        value = lp->default_value;
+        size = lp->default_value_len;
+    }
+
+    prepare_message(pkt, port, app.p4xos_conf.src_addr,
+                    app.p4xos_conf.dst_addr, LEARNER_ACCEPT, accept->iid,
+                    accept->ballot, lp->worker_id, app.p4xos_conf.node_id, value,
+                    size);
+
+    uint32_t mbuf_idx = lp->mbuf_out[port].n_mbufs;
+    lp->mbuf_out[port].array[mbuf_idx++] = pkt;
 }
 
 void submit(uint8_t worker_id, char *value, int size) {
-  uint32_t lcore;
-  uint16_t port = app.p4xos_conf.tx_port;
-  struct app_lcore_params_worker *lp_worker = app_get_worker(worker_id);
+    uint16_t port = app.p4xos_conf.tx_port;
+    struct app_lcore_params_worker *lp = app_get_worker(worker_id);
+    int lcore = app_get_lcore_worker(worker_id);
+    if (lcore < 0) {
+        rte_panic("Invalid worker_id\n");
+    }
 
-  app_get_lcore_for_nic_tx(port, &lcore);
-  struct app_lcore_params_io *lp = &app.lcore_params[lcore].io;
-
-  uint32_t mbuf_idx = lp->tx.mbuf_out[port].n_mbufs;
-  lp->tx.mbuf_out[port].array[mbuf_idx] =
-      rte_pktmbuf_alloc(app.lcore_params[lcore].pool);
-  struct rte_mbuf *pkt = lp->tx.mbuf_out[port].array[mbuf_idx];
-  if (pkt != NULL) {
-    prepare_message(pkt, port, app.p4xos_conf.src_addr, app.p4xos_conf.dst_addr,
-                    app.p4xos_conf.msgtype, lp_worker->cur_inst++, 0, worker_id,
-                    app.p4xos_conf.node_id, value, size);
-  }
-  lp->tx.mbuf_out_flush[port] = 1;
-  lp->tx.mbuf_out[port].n_mbufs++;
+    uint32_t mbuf_idx = lp->mbuf_out[port].n_mbufs;
+    lp->mbuf_out[port].array[mbuf_idx] = rte_pktmbuf_alloc(app.lcore_params[lcore].pool);
+    struct rte_mbuf *pkt = lp->mbuf_out[port].array[mbuf_idx];
+    if (pkt != NULL) {
+        prepare_message(pkt, port, app.p4xos_conf.src_addr, app.p4xos_conf.dst_addr,
+                        app.p4xos_conf.msgtype, lp->cur_inst++, 0, worker_id,
+                        app.p4xos_conf.node_id, value, size);
+    }
+    lp->mbuf_out[port].n_mbufs++;
 }
 
 void submit_bulk(uint8_t worker_id, uint32_t nb_pkts,
     struct app_lcore_params_worker *lp, char *value, int size) {
+    int ret;
+    uint32_t mbuf_idx;
+    uint16_t port = app.p4xos_conf.tx_port;
+    int lcore = app_get_lcore_worker(worker_id);
+    if (lcore < 0) {
+        rte_panic("Invalid worker_id\n");
+    }
 
-  uint16_t port = app.p4xos_conf.tx_port;
-  uint32_t lcore_io;
-  int ret;
-  uint32_t pos;
+    struct rte_mbuf *pkts[nb_pkts];
+    ret = rte_pktmbuf_alloc_bulk(app.lcore_params[lcore].pool, pkts, nb_pkts);
 
-  if (app.nic_tx_port_mask[port] == 0) {
-    return;
-  }
+    if (ret < 0) {
+        RTE_LOG(INFO, USER1, "Not enough entries in the mempools\n");
+        return;
+    }
 
-  if (app_get_lcore_for_nic_tx(port, &lcore_io) < 0) {
-    rte_panic("Algorithmic error (no I/O core to handle TX of port %u)\n",
-              port);
-  }
-
-  struct rte_mbuf *pkts[nb_pkts];
-  ret = rte_pktmbuf_alloc_bulk(app.lcore_params[lcore_io].pool, pkts, nb_pkts);
-
-  if (ret < 0) {
-    RTE_LOG(INFO, USER1, "Not enough entries in the mempools\n");
-    return;
-  }
-
-  uint32_t i;
-  for (i = 0; i < nb_pkts; i++) {
-    prepare_message(pkts[i], port, app.p4xos_conf.src_addr, app.p4xos_conf.dst_addr,
+    uint32_t i;
+    for (i = 0; i < nb_pkts; i++) {
+        prepare_message(pkts[i], port, app.p4xos_conf.src_addr, app.p4xos_conf.dst_addr,
                         app.p4xos_conf.msgtype, 0, 0, worker_id,
                         app.p4xos_conf.node_id, value, size);
-
-    value += size;
-    pos = lp->mbuf_out[port].n_mbufs;
-
-    lp->mbuf_out[port].array[pos++] = pkts[i];
-    lp->mbuf_out[port].n_mbufs = pos;
-  }
-  ret = rte_ring_sp_enqueue_bulk(lp->rings_out[port],
-                                 (void **)lp->mbuf_out[port].array,
-                                 nb_pkts, NULL);
-
-  if (unlikely(ret == 0)) {
-    uint32_t k;
-    for (k = 0; k < nb_pkts; k++) {
-      struct rte_mbuf *pkt_to_free = lp->mbuf_out[port].array[k];
-      rte_pktmbuf_free(pkt_to_free);
+        value += size;
+        mbuf_idx = lp->mbuf_out[port].n_mbufs;
+        lp->mbuf_out[port].array[mbuf_idx++] = pkts[i];
+        lp->mbuf_out[port].n_mbufs = mbuf_idx;
     }
-  }
-  lp->mbuf_out[port].n_mbufs = 0;
-  lp->mbuf_out_flush[port] = 0;
 }
 
 void send_checkpoint_message(uint8_t worker_id, uint32_t inst) {
-  uint32_t lcore;
-  uint16_t port = app.p4xos_conf.tx_port;
-  app_get_lcore_for_nic_tx(port, &lcore);
-  struct app_lcore_params_io *lp = &app.lcore_params[lcore].io;
-
-  uint32_t mbuf_idx = lp->tx.mbuf_out[port].n_mbufs;
-  lp->tx.mbuf_out[port].array[mbuf_idx] =
-      rte_pktmbuf_alloc(app.lcore_params[lcore].pool);
-  struct rte_mbuf *pkt = lp->tx.mbuf_out[port].array[mbuf_idx];
-  if (pkt != NULL) {
-    prepare_message(pkt, port, app.p4xos_conf.src_addr, app.p4xos_conf.dst_addr,
-                    LEARNER_CHECKPOINT, inst, 0, worker_id,
-                    app.p4xos_conf.node_id, NULL, 0);
-  }
-  lp->tx.mbuf_out_flush[port] = 1;
-  lp->tx.mbuf_out[port].n_mbufs++;
+    uint16_t port = app.p4xos_conf.tx_port;
+    struct app_lcore_params_worker *lp = app_get_worker(worker_id);
+    int lcore = app_get_lcore_worker(worker_id);
+    if (lcore < 0) {
+        rte_panic("Invalid worker_id\n");
+    }
+    uint32_t mbuf_idx = lp->mbuf_out[port].n_mbufs;
+    struct rte_mbuf *pkt = rte_pktmbuf_alloc(app.lcore_params[lcore].pool);
+    if (pkt != NULL) {
+        prepare_message(pkt, port, app.p4xos_conf.src_addr, app.p4xos_conf.dst_addr,
+                        LEARNER_CHECKPOINT, inst, 0, worker_id,
+                        app.p4xos_conf.node_id, NULL, 0);
+    }
+    lp->mbuf_out[port].array[mbuf_idx] = pkt;
+    lp->mbuf_out[port].n_mbufs++;
 }
