@@ -372,9 +372,9 @@ static int parse_arg_w(const char *arg) {
     return -7;
   }
 
-  if ((n_tuples & (n_tuples - 1)) != 0) {
-    return -8;
-  }
+  // if ((n_tuples & (n_tuples - 1)) != 0) {
+  //   return -8;
+  // }
 
   return 0;
 }

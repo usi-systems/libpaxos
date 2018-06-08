@@ -227,8 +227,8 @@ static inline void app_lcore_io_rx(struct app_lcore_params_io *lp,
       APP_IO_RX_PREFETCH0(mbuf_2_0);
       APP_IO_RX_PREFETCH0(mbuf_2_1);
 
-      worker_0 = data_0_0[pos_lb] & (n_workers - 1);
-      worker_1 = data_0_1[pos_lb] & (n_workers - 1);
+      worker_0 = data_0_0[pos_lb] % (n_workers);
+      worker_1 = data_0_1[pos_lb] % (n_workers);
 
       app_lcore_io_rx_buffer_to_send(lp, worker_0, mbuf_0_0, bsz_wr);
       app_lcore_io_rx_buffer_to_send(lp, worker_1, mbuf_0_1, bsz_wr);
@@ -250,7 +250,7 @@ static inline void app_lcore_io_rx(struct app_lcore_params_io *lp,
 
       APP_IO_RX_PREFETCH0(mbuf_1_0);
 
-      worker = data[pos_lb] & (n_workers - 1);
+      worker = data[pos_lb] % (n_workers);
 
       app_lcore_io_rx_buffer_to_send(lp, worker, mbuf, bsz_wr);
     }
