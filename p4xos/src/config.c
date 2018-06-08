@@ -1105,6 +1105,21 @@ struct app_lcore_params_worker *app_get_worker(uint32_t worker_id) {
   return NULL;
 }
 
+int app_get_lcore_worker(uint32_t worker_id) {
+  int lcore;
+
+  for (lcore = 0; lcore < APP_MAX_LCORES; lcore++) {
+    if (app.lcore_params[lcore].type != e_APP_LCORE_WORKER) {
+      continue;
+    }
+    struct app_lcore_params_worker *lp = &app.lcore_params[lcore].worker;
+    if (lp->worker_id == worker_id)
+      return lcore;
+  }
+
+  return -1;
+}
+
 void app_print_params(void) {
   unsigned port, queue, lcore, rule, i, j;
 

@@ -17,6 +17,7 @@
 #include "main.h"
 #include "datastore.h"
 
+#define RATE_LIMITER
 
 struct rocksdb_configurations rocksdb_configurations;
 
