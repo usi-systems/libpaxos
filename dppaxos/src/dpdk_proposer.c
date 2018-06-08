@@ -20,6 +20,9 @@
 
 struct rocksdb_configurations rocksdb_configurations;
 
+struct app_stats {
+	uint64_t total_delivered_count;
+};
 
 static void
 set_request(struct request *ap, uint32_t some_value) {
@@ -40,12 +43,14 @@ static void receive_response(unsigned int worker_id,
 }
 
 static void
-stat_cb(__rte_unused struct rte_timer *timer, __rte_unused void *arg)
+stat_cb(__rte_unused struct rte_timer *timer, void *arg)
 {
+	struct app_stats *app_stats = (struct app_stats*) arg;
 	uint32_t lcore, nb_delivery = 0, nb_latency = 0;
 	uint64_t latency = 0;
 	uint64_t total_pkts = 0, total_bytes = 0;
 
+	printf("%-8s", "Stat");
 	for (lcore = 0; lcore < APP_MAX_LCORES; lcore ++) {
 		struct app_lcore_params_worker *lp = &app.lcore_params[lcore].worker;
 
@@ -65,6 +70,8 @@ stat_cb(__rte_unused struct rte_timer *timer, __rte_unused void *arg)
 		lp->total_bytes = 0;
 	}
 
+	app_stats->total_delivered_count += nb_delivery;
+
 	double avg_cycle_latency = 0.0, avg_ns_latency = 0.0;
 	if (latency) {
 		avg_cycle_latency = (double) latency / (double) nb_latency;
@@ -74,6 +81,10 @@ stat_cb(__rte_unused struct rte_timer *timer, __rte_unused void *arg)
 			"Paxos TP = %u Avg latency = %.2f cycles ~ %.1f ns\n",
 			total_pkts, bytes_to_gbits(total_bytes),
 			nb_delivery, avg_cycle_latency, avg_ns_latency);
+
+	if (app_stats->total_delivered_count >= app.p4xos_conf.max_inst) {
+		app.force_quit = 1;
+	}
 }
 
 
@@ -110,12 +121,13 @@ main(int argc, char **argv)
 
 	uint64_t cycles_per_s = rte_get_timer_hz();
 	printf("Cycles per s: %lu\n", cycles_per_s);
+	struct app_stats app_stats = {0};
 	/* Init */
 	app_init();
 	app_print_params();
 	app_set_deliver_callback(receive_response, NULL);
 	app_set_worker_callback(proposer_handler);
-	app_set_stat_callback(stat_cb, NULL);
+	app_set_stat_callback(stat_cb, &app_stats);
 	app_init_proposer();
 
 	uint32_t n_workers = app_get_lcores_worker();
