@@ -58,6 +58,12 @@ static void app_assign_worker_ids(void) {
 
     lp->worker_id = worker_id;
     worker_id++;
+#ifdef RATE_LIMITER
+    uint32_t socket = rte_lcore_to_socket_id(lcore);
+    uint16_t port = app.p4xos_conf.tx_port;
+    printf("Init Scheduled Port %u on socket %u\n", port, socket);
+    lp->sched_port = app_init_sched_port(port, socket);
+#endif
   }
 }
 
@@ -531,10 +537,6 @@ static void app_init_nics(void) {
       }
     }
 
-    #ifdef RATE_LIMITER
-        struct app_lcore_params_io *lp = &app.lcore_params[lcore].io;
-        lp->tx.sched_port = app_init_sched_port(port, socket);
-    #endif
     /* Start port */
     ret = rte_eth_dev_start(port);
     if (ret < 0) {

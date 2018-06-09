@@ -339,9 +339,6 @@ struct app_lcore_params_io {
 		uint16_t nic_ports[APP_MAX_NIC_TX_PORTS_PER_IO_LCORE];
 		uint32_t n_nic_ports;
 
-		/* Sched Port */
-		struct rte_sched_port *sched_port;
-
 		/* Internal buffers */
 		struct app_mbuf_array mbuf_out[APP_MAX_NIC_TX_PORTS_PER_IO_LCORE];
 		uint8_t mbuf_out_flush[APP_MAX_NIC_TX_PORTS_PER_IO_LCORE];
@@ -369,6 +366,9 @@ struct app_lcore_params_worker {
 	struct app_mbuf_array mbuf_in;
 	struct app_mbuf_array mbuf_out[APP_MAX_NIC_PORTS];
 	uint8_t mbuf_out_flush[APP_MAX_NIC_PORTS];
+
+	/* Sched Port */
+	struct rte_sched_port *sched_port;
 
 	/* Stats */
 	uint32_t rings_in_count[APP_MAX_IO_LCORES];

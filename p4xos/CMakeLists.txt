@@ -12,6 +12,12 @@ set (RTE_TARGET x86_64-native-linuxapp-gcc)
 
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mssse3 -O0 -Wall -Wextra -Wno-unused-parameter -ggdb -g")
 
+option (DEFINE_RATE_LIMITER "Option enable rate limiter" OFF) # Disabled by default
+if (DEFINE_RATE_LIMITER)
+    message("Adding RATE_LIMITER flag...")
+    add_definitions(-DRATE_LIMITER)
+endif (DEFINE_RATE_LIMITER)
+
 include_directories(${CMAKE_SOURCE_DIR}/paxos/include)
 include_directories(${CMAKE_SOURCE_DIR}/p4xos/include)
 
