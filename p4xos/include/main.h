@@ -251,6 +251,7 @@
 #define APP_DEFAULT_TX_PORT 0
 #define APP_DEFAULT_NODE_ID 0
 #define APP_DEFAULT_CHECKPOINT_INTERVAL 0
+#define APP_DEFAULT_SEND_RESPONSE 0
 #define APP_DEFAULT_TS_INTERVAL 4
 #define APP_DEFAULT_DROP 0
 #define APP_DEFAULT_OUTSTANDING	8
@@ -262,6 +263,8 @@
 #undef RTE_SCHED_PIPE_PROFILES_PER_PORT
 #define RTE_SCHED_PIPE_PROFILES_PER_PORT 1
 #define SCHED_PORT_QUEUE_SIZE 64
+
+#define RESUBMIT
 
 #define TIMER_RESOLUTION_CYCLES 20000000ULL /* around 10ms at 2 Ghz */
 
@@ -287,6 +290,7 @@ struct p4xos_configuration {
 	uint8_t baseline;
 	uint8_t drop;
 	uint8_t run_prepare;
+	uint8_t respond_to_client;
 	uint32_t checkpoint_interval;
 	uint32_t ts_interval;
 	uint32_t rate;
@@ -339,6 +343,9 @@ struct app_lcore_params_io {
 		uint16_t nic_ports[APP_MAX_NIC_TX_PORTS_PER_IO_LCORE];
 		uint32_t n_nic_ports;
 
+		/* Sched Port */
+		struct rte_sched_port *sched_port;
+
 		/* Internal buffers */
 		struct app_mbuf_array mbuf_out[APP_MAX_NIC_TX_PORTS_PER_IO_LCORE];
 		uint8_t mbuf_out_flush[APP_MAX_NIC_TX_PORTS_PER_IO_LCORE];
@@ -366,9 +373,6 @@ struct app_lcore_params_worker {
 	struct app_mbuf_array mbuf_in;
 	struct app_mbuf_array mbuf_out[APP_MAX_NIC_PORTS];
 	uint8_t mbuf_out_flush[APP_MAX_NIC_PORTS];
-
-	/* Sched Port */
-	struct rte_sched_port *sched_port;
 
 	/* Stats */
 	uint32_t rings_in_count[APP_MAX_IO_LCORES];
@@ -475,6 +479,7 @@ uint32_t app_get_lcores_io_rx(void);
 uint32_t app_get_lcores_worker(void);
 int app_get_lcore_worker(uint32_t worker_id);
 struct app_lcore_params_worker* app_get_worker(uint32_t worker_id);
+struct app_lcore_params_io* app_get_io(uint32_t lcore);
 void app_print_params(void);
 void submit(uint8_t worker_id, char* value, int size);
 void submit_bulk(uint8_t worker_id, uint32_t nb_pkts,
@@ -504,6 +509,7 @@ void prepare_message(struct rte_mbuf *created_pkt, uint16_t port, uint32_t src_a
 						uint32_t dst_addr, uint8_t msgtype, uint32_t inst,
 						uint16_t rnd, uint8_t worker_id, uint16_t node_id, char* value, int size);
 void send_checkpoint_message(uint8_t worker_id, uint32_t inst);
+void app_send_burst(uint16_t port, struct rte_mbuf **pkts, uint32_t n_pkts);
 void timer_send_checkpoint(struct rte_timer *timer, void *arg);
 struct rte_sched_port *app_init_sched_port(uint32_t portid,
                                                   uint32_t socketid);

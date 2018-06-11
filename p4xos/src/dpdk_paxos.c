@@ -86,12 +86,31 @@ void prepare_hw_checksum(struct rte_mbuf *pkt_in, size_t data_size) {
   udp->dgram_cksum = rte_ipv4_phdr_cksum(ip, pkt_in->ol_flags);
 }
 
+void print_ipv6(struct ipv6_hdr *ip_hdr) {
+    int i = 0;
+    printf("Proto %u. ", ip_hdr->proto);
+    printf("\nSrc addr: ");
+    for (i = 0; i < 16; i+=2) {
+        printf("%02X%02X:", ip_hdr->src_addr[i], ip_hdr->src_addr[i+1]);
+    }
+    printf("\nDst addr: ");
+    for (i = 0; i < 16; i+=2) {
+        printf("%02X%02X:", ip_hdr->dst_addr[i], ip_hdr->dst_addr[i+1]);
+    }
+    printf("\n");
+}
+
 int filter_packets(struct rte_mbuf *pkt_in) {
   struct ether_hdr *eth =
       rte_pktmbuf_mtod_offset(pkt_in, struct ether_hdr *, 0);
-  if (rte_be_to_cpu_16(eth->ether_type) != ETHER_TYPE_IPv4)
-    return NON_ETHERNET_PACKET;
   size_t ip_offset = sizeof(struct ether_hdr);
+  if (rte_be_to_cpu_16(eth->ether_type) != ETHER_TYPE_IPv4) {
+      if (rte_be_to_cpu_16(eth->ether_type) == ETHER_TYPE_IPv6) {
+          struct ipv6_hdr *ipv6 = rte_pktmbuf_mtod_offset(pkt_in, struct ipv6_hdr *, ip_offset);
+          print_ipv6(ipv6);
+      }
+      return NON_ETHERNET_PACKET;
+  }
   struct ipv4_hdr *ip =
       rte_pktmbuf_mtod_offset(pkt_in, struct ipv4_hdr *, ip_offset);
   if (ip->next_proto_id != IPPROTO_UDP)
@@ -276,132 +295,117 @@ static inline void stats(struct rte_mbuf *pkt_in,
 }
 
 int proposer_handler(struct rte_mbuf *pkt_in, void *arg) {
-  struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
-  stats(pkt_in, lp);
-  int ret = filter_packets(pkt_in);
-  if (ret < 0) {
-    RTE_LOG(DEBUG, P4XOS, "Drop packets. Code %d\n", ret);
-    return ret;
-  }
-  size_t paxos_offset = get_paxos_offset();
-  struct paxos_hdr *paxos_hdr =
-      rte_pktmbuf_mtod_offset(pkt_in, struct paxos_hdr *, paxos_offset);
-  uint8_t msgtype = paxos_hdr->msgtype;
+    struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
+    stats(pkt_in, lp);
+    size_t paxos_offset = get_paxos_offset();
+    struct paxos_hdr *paxos_hdr =
+            rte_pktmbuf_mtod_offset(pkt_in, struct paxos_hdr *, paxos_offset);
+    uint8_t msgtype = paxos_hdr->msgtype;
 
-  switch (msgtype) {
-  case PAXOS_CHOSEN: {
-    chosen_handler(paxos_hdr, lp);
+    switch (msgtype) {
+        case PAXOS_CHOSEN: {
+        chosen_handler(paxos_hdr, lp);
+        break;
+    }
+    default:
+        RTE_LOG(DEBUG, P4XOS, "No handler for %u\n", msgtype);
+        return NO_HANDLER;
+    }
 
-    break;
-  }
-  default:
-    RTE_LOG(DEBUG, P4XOS, "No handler for %u\n", msgtype);
-    return NO_HANDLER;
-  }
-
-  respond(pkt_in);
-  rte_timer_reset_sync(&lp->recv_timer[lp->lcore_id], app.hz, SINGLE, lp->lcore_id,
-     proposer_resubmit, lp);
-  return SUCCESS;
+    respond(pkt_in);
+#ifdef RESUBMIT
+    int ret;
+    ret = rte_timer_reset(&lp->recv_timer[lp->lcore_id], app.hz, SINGLE, lp->lcore_id,
+                        proposer_resubmit, lp);
+    if (ret < 0) {
+        RTE_LOG(INFO, P4XOS, "Worker %u Timer is in the RUNNING or CONFIG state\n", lp->worker_id);
+    }
+#endif
+    return SUCCESS;
 }
 
 int leader_handler(struct rte_mbuf *pkt_in, void *arg) {
-  struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
-  stats(pkt_in, lp);
-  int ret = filter_packets(pkt_in);
-  if (ret < 0) {
-    RTE_LOG(DEBUG, P4XOS, "Drop packets. Code %d\n", ret);
-    return ret;
-  }
-  size_t paxos_offset = get_paxos_offset();
-  struct paxos_hdr *paxos_hdr =
-      rte_pktmbuf_mtod_offset(pkt_in, struct paxos_hdr *, paxos_offset);
-  uint8_t msgtype = paxos_hdr->msgtype;
+    struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
+    stats(pkt_in, lp);
+    size_t paxos_offset = get_paxos_offset();
+    struct paxos_hdr *paxos_hdr =
+            rte_pktmbuf_mtod_offset(pkt_in, struct paxos_hdr *, paxos_offset);
+    uint8_t msgtype = paxos_hdr->msgtype;
 
-  switch (msgtype) {
-  case NEW_COMMAND: {
-    new_command_handler(paxos_hdr, lp);
-    break;
-  }
-  default: {
-    RTE_LOG(DEBUG, P4XOS, "No handler for %u\n", msgtype);
-    return NO_HANDLER;
-  }
-  }
+    switch (msgtype) {
+        case NEW_COMMAND: {
+            new_command_handler(paxos_hdr, lp);
+            break;
+        }
+        default: {
+            RTE_LOG(DEBUG, P4XOS, "No handler for %u\n", msgtype);
+            return NO_HANDLER;
+        }
+    }
 
-  respond(pkt_in);
-  return SUCCESS;
+    respond(pkt_in);
+    return SUCCESS;
 }
 
 int acceptor_handler(struct rte_mbuf *pkt_in, void *arg) {
-  struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
-  stats(pkt_in, lp);
-  int ret = filter_packets(pkt_in);
-  if (ret < 0) {
-    RTE_LOG(DEBUG, P4XOS, "Drop packets. Code %d\n", ret);
-    return ret;
-  }
-  size_t paxos_offset = get_paxos_offset();
-  struct paxos_hdr *paxos_hdr =
-      rte_pktmbuf_mtod_offset(pkt_in, struct paxos_hdr *, paxos_offset);
-  uint8_t msgtype = paxos_hdr->msgtype;
+    struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
+    stats(pkt_in, lp);
+    size_t paxos_offset = get_paxos_offset();
+    struct paxos_hdr *paxos_hdr =
+            rte_pktmbuf_mtod_offset(pkt_in, struct paxos_hdr *, paxos_offset);
+    uint8_t msgtype = paxos_hdr->msgtype;
 
-  switch (msgtype) {
-  case PAXOS_PREPARE: {
-    prepare_handler(paxos_hdr, lp);
-    break;
-  }
-  case PAXOS_ACCEPT: {
-    accept_handler(paxos_hdr, lp);
-    break;
-  }
-  default: {
-    RTE_LOG(DEBUG, P4XOS, "No handler for %u\n", msgtype);
-    return NO_HANDLER;
-  }
-  }
+    switch (msgtype) {
+        case PAXOS_PREPARE: {
+            prepare_handler(paxos_hdr, lp);
+            break;
+        }
+        case PAXOS_ACCEPT: {
+            accept_handler(paxos_hdr, lp);
+            break;
+        }
+        default: {
+            RTE_LOG(DEBUG, P4XOS, "No handler for %u\n", msgtype);
+            return NO_HANDLER;
+        }
+    }
 
-  respond(pkt_in);
-  return SUCCESS;
+    respond(pkt_in);
+    return SUCCESS;
 }
 
 int learner_handler(struct rte_mbuf *pkt_in, void *arg) {
-  struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
-  stats(pkt_in, lp);
-  int ret = filter_packets(pkt_in);
-  if (ret < 0) {
-    RTE_LOG(DEBUG, P4XOS, "Drop packets. Code %d\n", ret);
-    return ret;
-  }
-  size_t paxos_offset = get_paxos_offset();
-  struct paxos_hdr *paxos_hdr =
+    struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
+    stats(pkt_in, lp);
+    size_t paxos_offset = get_paxos_offset();
+    struct paxos_hdr *paxos_hdr =
       rte_pktmbuf_mtod_offset(pkt_in, struct paxos_hdr *, paxos_offset);
-  uint8_t msgtype = paxos_hdr->msgtype;
+    uint8_t msgtype = paxos_hdr->msgtype;
 
-  switch (msgtype) {
-  case PAXOS_PROMISE: {
-    prepare_handler(paxos_hdr, lp);
-    break;
-  }
-  case PAXOS_ACCEPTED: {
-    accepted_handler(paxos_hdr, lp);
-    break;
-  }
-  default: {
-    RTE_LOG(DEBUG, P4XOS, "No handler for %u\n", msgtype);
-    return NO_HANDLER;
-  }
-  }
+    switch (msgtype) {
+        case PAXOS_PROMISE: {
+            prepare_handler(paxos_hdr, lp);
+            break;
+        }
+        case PAXOS_ACCEPTED: {
+            accepted_handler(paxos_hdr, lp);
+            break;
+        }
+        default: {
+            RTE_LOG(DEBUG, P4XOS, "No handler for %u\n", msgtype);
+            return NO_HANDLER;
+        }
+    }
 
-  respond(pkt_in);
-  return SUCCESS;
+    respond(pkt_in);
+    return SUCCESS;
 }
 
 void proposer_resubmit(struct rte_timer *timer, void *arg) {
     struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
     int ret;
     submit_bulk(lp->worker_id, app.p4xos_conf.osd, lp, NULL, 0);
-    RTE_LOG(DEBUG, P4XOS, "Worker %u Timeout. Resumit %u packets\n",
+    RTE_LOG(INFO, P4XOS, "Worker %u Timeout. Resumit %u packets\n",
         lp->worker_id, app.p4xos_conf.osd);
     ret = rte_timer_reset(&lp->recv_timer[lp->lcore_id], app.hz, SINGLE, lp->lcore_id,
        proposer_resubmit, lp);
@@ -426,119 +430,110 @@ void timer_send_checkpoint(struct rte_timer *timer, void *arg) {
 
 void learner_call_deliver(__rte_unused struct rte_timer *timer,
                           __rte_unused void *arg) {
-  struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
-  paxos_accepted out;
-  while (learner_deliver_next(lp->learner, &out)) {
-    lp->deliver(lp->worker_id, out.iid, out.value.paxos_value_val,
-                out.value.paxos_value_len, lp->deliver_arg);
-    RTE_LOG(DEBUG, P4XOS, "Finished instance %u\n", out.iid);
-    submit(lp->worker_id, out.value.paxos_value_val, out.value.paxos_value_len);
-    paxos_accepted_destroy(&out);
-  }
+    struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
+    paxos_accepted out;
+    while (learner_deliver_next(lp->learner, &out)) {
+        lp->deliver(lp->worker_id, out.iid, out.value.paxos_value_val,
+        out.value.paxos_value_len, lp->deliver_arg);
+        RTE_LOG(DEBUG, P4XOS, "Finished instance %u\n", out.iid);
+        submit(lp->worker_id, out.value.paxos_value_val, out.value.paxos_value_len);
+        paxos_accepted_destroy(&out);
+    }
 }
 
 void learner_check_holes(__rte_unused struct rte_timer *timer,
                          __rte_unused void *arg) {
-  struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
-  if (lp->has_holes) {
-    paxos_accepted out;
-    while (learner_deliver_next(lp->learner, &out)) {
-      lp->deliver(lp->worker_id, out.iid, out.value.paxos_value_val,
-                  out.value.paxos_value_len, lp->deliver_arg);
-      RTE_LOG(DEBUG, P4XOS, "%s Finished instance %u\n", __func__, out.iid);
-      paxos_accepted_destroy(&out);
+    struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
+    if (lp->has_holes) {
+        paxos_accepted out;
+        while (learner_deliver_next(lp->learner, &out)) {
+            lp->deliver(lp->worker_id, out.iid, out.value.paxos_value_val,
+            out.value.paxos_value_len, lp->deliver_arg);
+            RTE_LOG(DEBUG, P4XOS, "%s Finished instance %u\n", __func__, out.iid);
+            paxos_accepted_destroy(&out);
+        }
+        lp->has_holes = 0;
     }
-    lp->has_holes = 0;
-  }
-  uint32_t from, to;
-  if (learner_has_holes(lp->learner, &from, &to)) {
-    lp->has_holes = 1;
-    RTE_LOG(WARNING, P4XOS, "Learner %u Holes from %u to %u\n", lp->worker_id,
-            from, to);
-    uint32_t prepare_size = to - from;
-    if (prepare_size > APP_DEFAULT_NIC_TX_PTHRESH) {
-      prepare_size = APP_DEFAULT_NIC_TX_PTHRESH;
+    uint32_t from, to;
+    if (learner_has_holes(lp->learner, &from, &to)) {
+        lp->has_holes = 1;
+        RTE_LOG(WARNING, P4XOS, "Learner %u Holes from %u to %u\n", lp->worker_id,
+        from, to);
+        uint32_t prepare_size = to - from;
+        if (prepare_size > APP_DEFAULT_NIC_TX_PTHRESH) {
+            prepare_size = APP_DEFAULT_NIC_TX_PTHRESH;
+        }
+        if (app.p4xos_conf.run_prepare) {
+            send_prepare(lp, from, prepare_size, lp->default_value, lp->default_value_len);
+        } else {
+            fill_holes(lp, from, prepare_size, lp->default_value,
+                        lp->default_value_len);
+        }
     }
-    if (app.p4xos_conf.run_prepare) {
-      send_prepare(lp, from, prepare_size, lp->default_value,
-                   lp->default_value_len);
-    } else {
-      fill_holes(lp, from, prepare_size, lp->default_value,
-                 lp->default_value_len);
-    }
-  }
 }
 
 static inline int handle_paxos_messages(struct rte_mbuf *pkt_in,
                                         struct app_lcore_params_worker *lp) {
-  size_t ip_offset = sizeof(struct ether_hdr);
-  struct ipv4_hdr *ip =
+    size_t ip_offset = sizeof(struct ether_hdr);
+    struct ipv4_hdr *ip =
       rte_pktmbuf_mtod_offset(pkt_in, struct ipv4_hdr *, ip_offset);
-  size_t paxos_offset = get_paxos_offset();
-  struct paxos_hdr *paxos_hdr =
+    size_t paxos_offset = get_paxos_offset();
+    struct paxos_hdr *paxos_hdr =
       rte_pktmbuf_mtod_offset(pkt_in, struct paxos_hdr *, paxos_offset);
 
-  uint8_t msgtype = paxos_hdr->msgtype;
-  switch (msgtype) {
-  case PAXOS_RESET: {
-    RTE_LOG(DEBUG, P4XOS, "Worker %u Reset instance %u\n", lp->worker_id,
-            rte_be_to_cpu_32(paxos_hdr->inst));
-    return TO_DROP;
-  }
-  case FAST_ACCEPT: {
-    learner_new_command_handler(paxos_hdr, lp);
-    multicast_acceptors(ip);
-    break;
-  }
-  case PAXOS_PREPARE: {
-    prepare_handler(paxos_hdr, lp);
-    break;
-  }
-  case PAXOS_ACCEPT: {
-    accept_handler(paxos_hdr, lp);
-    break;
-  }
-  case PAXOS_PROMISE: {
-    promise_handler(paxos_hdr, lp);
-    break;
-  }
-  case PAXOS_ACCEPTED: {
-    accepted_handler(paxos_hdr, lp);
-    set_ips(ip);
-    break;
-  }
-  case PAXOS_CHOSEN: {
-    learner_chosen_handler(paxos_hdr, lp);
-    set_ips(ip);
-    break;
-  }
-  default: {
-    RTE_LOG(DEBUG, P4XOS, "No handler for %u. Worker %u Tail pointer %u\n",
+    uint8_t msgtype = paxos_hdr->msgtype;
+    switch (msgtype) {
+    case PAXOS_RESET: {
+        RTE_LOG(DEBUG, P4XOS, "Worker %u Reset instance %u\n", lp->worker_id,
+                                            rte_be_to_cpu_32(paxos_hdr->inst));
+        return TO_DROP;
+        }
+        case FAST_ACCEPT: {
+            learner_new_command_handler(paxos_hdr, lp);
+            multicast_acceptors(ip);
+        break;
+        }
+        case PAXOS_PREPARE: {
+            prepare_handler(paxos_hdr, lp);
+        break;
+        }
+        case PAXOS_ACCEPT: {
+            accept_handler(paxos_hdr, lp);
+        break;
+        }
+        case PAXOS_PROMISE: {
+            promise_handler(paxos_hdr, lp);
+        break;
+        }
+        case PAXOS_ACCEPTED: {
+            accepted_handler(paxos_hdr, lp);
+            set_ips(ip);
+        break;
+        }
+        case PAXOS_CHOSEN: {
+            learner_chosen_handler(paxos_hdr, lp);
+            set_ips(ip);
+        break;
+        }
+        default: {
+            RTE_LOG(DEBUG, P4XOS, "No handler for %u. Worker %u Tail pointer %u\n",
             msgtype, paxos_hdr->worker_id,
             rte_be_to_cpu_16(paxos_hdr->log_index));
-    return NO_HANDLER;
-  }
-  }
-  size_t data_size = sizeof(struct paxos_hdr);
-  prepare_hw_checksum(pkt_in, data_size);
-  rte_timer_reset_sync(&lp->recv_timer[lp->lcore_id], app.hz, SINGLE, lp->lcore_id,
-     timer_send_checkpoint, lp);
-  return SUCCESS;
+            return NO_HANDLER;
+        }
+    }
+    size_t data_size = sizeof(struct paxos_hdr);
+    prepare_hw_checksum(pkt_in, data_size);
+    rte_timer_reset(&lp->recv_timer[lp->lcore_id], app.hz, SINGLE, lp->lcore_id,
+                    timer_send_checkpoint, lp);
+    return SUCCESS;
 }
 
 int replica_handler(struct rte_mbuf *pkt_in, void *arg) {
-  struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
-  lp->total_pkts++;
-  lp->total_bytes += pkt_in->pkt_len + PREAMBLE_CRC_IPG;
-  int ret = filter_packets(pkt_in);
-  if (ret < 0) {
-    RTE_LOG(DEBUG, P4XOS, "Drop packets. Code %d\n", ret);
+    struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
+    lp->total_pkts++;
+    lp->total_bytes += pkt_in->pkt_len + PREAMBLE_CRC_IPG;
+    int ret = SUCCESS;
+    ret = handle_paxos_messages(pkt_in, lp);
     return ret;
-  }
-
-  ret = handle_paxos_messages(pkt_in, lp);
-  if (ret < 0) {
-    return ret;
-  }
-  return SUCCESS;
 }

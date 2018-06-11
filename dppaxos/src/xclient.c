@@ -28,7 +28,7 @@
 #define RX_RING_SIZE 8192
 #define TX_RING_SIZE 2048
 
-#define NUM_MBUFS 8192 * 4
+#define NUM_MBUFS (2*1024*1024)
 #define MBUF_CACHE_SIZE 256
 
 #define CHUNK_SIZE 4096

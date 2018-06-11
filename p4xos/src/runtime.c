@@ -254,7 +254,7 @@ static inline void app_lcore_io_rx_flush(struct app_lcore_params_io *lp,
     }
 }
 
-static void app_send_burst(uint16_t port, struct rte_mbuf **pkts, uint32_t n_pkts) {
+void app_send_burst(uint16_t port, struct rte_mbuf **pkts, uint32_t n_pkts) {
     uint32_t sent;
     do {
         sent = rte_eth_tx_burst(port, 0, pkts, n_pkts);
@@ -283,16 +283,35 @@ static inline void app_lcore_io_tx(struct app_lcore_params_io *lp,
             if (unlikely(ret == 0))
                 continue;
 
+            RTE_LOG(DEBUG, P4XOS, "Port %u worker %u  dequeue %u packets\n",
+                    port, worker, ret);
+
             n_mbufs += bsz_rd;
 
             if (unlikely(n_mbufs < bsz_wr)) {
                 lp->tx.mbuf_out[port].n_mbufs = n_mbufs;
                 continue;
             }
+#ifdef RATE_LIMITER
+            struct rte_mbuf *pkts_tx[n_mbufs];
+            uint32_t nb_eq = rte_sched_port_enqueue(lp->tx.sched_port,
+                                            lp->tx.mbuf_out[port].array,
+                                            n_mbufs);
 
+            uint32_t nb_deq = rte_sched_port_dequeue(lp->tx.sched_port, pkts_tx, n_mbufs);
+            if (unlikely(nb_deq == 0)) {
+                lp->tx.mbuf_out[port].n_mbufs = 0;
+                lp->tx.mbuf_out_flush[port] = 0;
+                continue;
+            }
+            app_send_burst(port, lp->tx.mbuf_out[port].array, nb_deq);
+            lp->tx.mbuf_out[port].n_mbufs = 0;
+            lp->tx.mbuf_out_flush[port] = 0;
+#else
             app_send_burst(port, lp->tx.mbuf_out[port].array, n_mbufs);
             lp->tx.mbuf_out[port].n_mbufs = 0;
             lp->tx.mbuf_out_flush[port] = 0;
+#endif
         }
     }
 }
@@ -307,9 +326,27 @@ static inline void app_lcore_io_tx_flush(struct app_lcore_params_io *lp) {
             lp->tx.mbuf_out_flush[port] = 1;
             continue;
         }
+#ifdef RATE_LIMITER
+        uint32_t bsz_wr = app.burst_size_io_tx_write;
+        struct rte_mbuf *pkts_tx[bsz_wr];
+        uint32_t nb_eq = rte_sched_port_enqueue(lp->tx.sched_port,
+                                        lp->tx.mbuf_out[port].array,
+                                        lp->tx.mbuf_out[port].n_mbufs);
+
+        uint32_t nb_deq = rte_sched_port_dequeue(lp->tx.sched_port, pkts_tx, bsz_wr);
+        if (unlikely(nb_deq == 0)) {
+            lp->tx.mbuf_out[port].n_mbufs = 0;
+            lp->tx.mbuf_out_flush[port] = 0;
+            continue;
+        }
+        app_send_burst(port, lp->tx.mbuf_out[port].array, nb_deq);
+        lp->tx.mbuf_out[port].n_mbufs = 0;
+        lp->tx.mbuf_out_flush[port] = 0;
+#else
         app_send_burst(port, lp->tx.mbuf_out[port].array, lp->tx.mbuf_out[port].n_mbufs);
         lp->tx.mbuf_out[port].n_mbufs = 0;
         lp->tx.mbuf_out_flush[port] = 0;
+#endif
     }
 }
 
@@ -362,7 +399,8 @@ static inline void app_lcore_worker(struct app_lcore_params_worker *lp,
         if (unlikely(ret == 0))
             continue;
 
-        APP_WORKER_PREFETCH1( rte_pktmbuf_mtod(lp->mbuf_in.array[0], unsigned char *));
+        APP_WORKER_PREFETCH1(
+                rte_pktmbuf_mtod(lp->mbuf_in.array[0], unsigned char *));
         APP_WORKER_PREFETCH0(lp->mbuf_in.array[1]);
 
         for (j = 0; j < bsz_rd; j++) {
@@ -370,6 +408,7 @@ static inline void app_lcore_worker(struct app_lcore_params_worker *lp,
             struct ipv4_hdr *ipv4_hdr;
             uint32_t ipv4_dst, pos;
             uint32_t port;
+            int ret;
 
             if (likely(j < bsz_rd - 1)) {
                 APP_WORKER_PREFETCH1(
@@ -383,9 +422,21 @@ static inline void app_lcore_worker(struct app_lcore_params_worker *lp,
             ipv4_hdr = rte_pktmbuf_mtod_offset(pkt, struct ipv4_hdr *,
                                                 sizeof(struct ether_hdr));
 
-            int ret = lp->process_pkt(pkt, lp);
-
+            ret = filter_packets(pkt);
             if (ret < 0) {
+                RTE_LOG(DEBUG, P4XOS, "Drop packets. Code %d\n", ret);
+                rte_pktmbuf_free(pkt);
+                continue;
+            }
+
+            ret = lp->process_pkt(pkt, lp);
+            if (ret < 0) {
+                rte_pktmbuf_free(pkt);
+                continue;
+            }
+
+            if (!app.p4xos_conf.respond_to_client) {
+                RTE_LOG(DEBUG, P4XOS, "Drop packets. Do not Respond\n");
                 rte_pktmbuf_free(pkt);
                 continue;
             }
@@ -404,7 +455,6 @@ static inline void app_lcore_worker(struct app_lcore_params_worker *lp,
             uint32_t port_mask;
             if (IS_IPV4_MCAST(ipv4_dst)) {
                 port_mask = port;
-
                 /* Mark all packet's segments as referenced port_num times */
                 // rte_pktmbuf_refcnt_update(pkt, (uint16_t)port_num);
 
@@ -417,36 +467,12 @@ static inline void app_lcore_worker(struct app_lcore_params_worker *lp,
                             lp->mbuf_out[port].n_mbufs = pos;
                             continue;
                         }
-#ifdef RATE_LIMITER
-                        printf("Line %d, %s, n_mbufs %u.\n",
-                                __LINE__, __func__,
-                                lp->mbuf_out[port].n_mbufs);
-                        uint32_t nb_eq = rte_sched_port_enqueue(lp->sched_port,
-                                                lp->mbuf_out[port].array,
-                                                lp->mbuf_out[port].n_mbufs);
-                        lp->mbuf_out[port].n_mbufs = 0;
-                        lp->mbuf_out_flush[port] = 0;
-                        struct rte_mbuf *pkts_tx[bsz_wr];
-                        uint32_t nb_deq = rte_sched_port_dequeue(lp->sched_port,
-                                                pkts_tx, bsz_wr);
-                        printf("Line %d, %s, Enqueue %u. Dequeue %u.\n",
-                                            __LINE__, __func__, nb_eq, nb_deq);
-                        lp->rings_out_count_drop[port] += (nb_eq - lp->mbuf_out[port].n_mbufs);
-                        if (likely(nb_deq == 0)) {
-                            continue;
-                        }
                         while(rte_ring_sp_enqueue_bulk(lp->rings_out[port],
-                                                        (void **)pkts_tx,
-                                                        nb_deq, NULL) == 0)
-                            ; /* empty body */
-#else
-                            while(rte_ring_sp_enqueue_bulk(lp->rings_out[port],
-                                            (void **)lp->mbuf_out[port].array,
-                                            bsz_wr, NULL) == 0)
+                                        (void **)lp->mbuf_out[port].array,
+                                        bsz_wr, NULL) == 0)
                             ; /* empty body */
                         lp->mbuf_out[port].n_mbufs = 0;
                         lp->mbuf_out_flush[port] = 0;
-#endif
                     }
                 }
             } else {
@@ -456,40 +482,12 @@ static inline void app_lcore_worker(struct app_lcore_params_worker *lp,
                     lp->mbuf_out[port].n_mbufs = pos;
                     continue;
                 }
-
-#ifdef RATE_LIMITER
-                struct rte_mbuf *pkts_tx[bsz_wr];
-                printf("Line %d,%s worker %u n_mbufs %u.\n", __LINE__, __func__,
-                        lp->worker_id, pos);
-                uint32_t nb_eq = rte_sched_port_enqueue(lp->sched_port,
-                                                lp->mbuf_out[port].array,
-                                                pos);
-                uint32_t nb_deq = rte_sched_port_dequeue(lp->sched_port, pkts_tx,
-                                                            bsz_wr);
-                printf("Line %d,%s, worker %u Enqueue %u. Dequeue %u.\n", __LINE__, __func__,
-                        lp->worker_id, nb_eq, nb_deq);
-                if (likely(nb_deq == 0)) {
-                    lp->mbuf_out[port].n_mbufs = 0;
-                    lp->mbuf_out_flush[port] = 0;
-                    continue;
-                }
-                while(rte_ring_sp_enqueue_bulk(lp->rings_out[port],
-                                                (void **)pkts_tx,
-                                                nb_deq, NULL) == 0)
-                    ; /* empty body */
-                    printf("Line %d,%s, worker %u Sent %u.\n", __LINE__, __func__,
-                            lp->worker_id, nb_deq);
-                lp->mbuf_out[port].n_mbufs = 0;
-                lp->mbuf_out_flush[port] = 0;
-
-#else
                 while(rte_ring_sp_enqueue_bulk(lp->rings_out[port],
                                             (void **)lp->mbuf_out[port].array,
                                             bsz_wr, NULL) == 0)
                     ; /* empty body */
                 lp->mbuf_out[port].n_mbufs = 0;
                 lp->mbuf_out_flush[port] = 0;
-#endif
             }
         }
     }
@@ -509,41 +507,14 @@ static inline void app_lcore_worker_flush(struct app_lcore_params_worker *lp) {
             lp->mbuf_out_flush[port] = 1;
             continue;
         }
-
-#ifdef RATE_LIMITER
-        uint32_t bsz_wr = app.burst_size_worker_write;
-        struct rte_mbuf *pkts_tx[bsz_wr];
-        printf("Line %d,%s, worker %u n_mbufs %u.\n", __LINE__, __func__,
-                lp->worker_id, lp->mbuf_out[port].n_mbufs);
-        uint32_t nb_eq = rte_sched_port_enqueue(lp->sched_port,
-                            lp->mbuf_out[port].array,
-                            lp->mbuf_out[port].n_mbufs);
-        uint32_t nb_deq = rte_sched_port_dequeue(lp->sched_port, pkts_tx, bsz_wr);
-        printf("Line %d,%s, worker %u Enqueue %u. Dequeue %u.\n", __LINE__, __func__,
-                lp->worker_id, nb_eq, nb_deq);
-        if (likely(nb_deq == 0)) {
-            lp->mbuf_out[port].n_mbufs = 0;
-            lp->mbuf_out_flush[port] = 0;
-            continue;
-        }
-        while(rte_ring_sp_enqueue_bulk(lp->rings_out[port],
-                                       (void **)pkts_tx,
-                                       nb_deq, NULL) == 0)
-            ; /* empty body */
-        printf("Line %d,%s, worker %u Sent %u.\n", __LINE__, __func__,
-                lp->worker_id, nb_deq);
-        lp->mbuf_out[port].n_mbufs = 0;
-        lp->mbuf_out_flush[port] = 0;
-
-
-#else
         while(rte_ring_sp_enqueue_bulk(lp->rings_out[port],
                                    (void **)lp->mbuf_out[port].array,
                                    lp->mbuf_out[port].n_mbufs, NULL) == 0)
                 ; /* empty body */
+        RTE_LOG(DEBUG, P4XOS, "Worker %u flush %u packets\n", lp->worker_id,
+                lp->mbuf_out[port].n_mbufs);
         lp->mbuf_out[port].n_mbufs = 0;
         lp->mbuf_out_flush[port] = 0;
-#endif
     }
 }
 
