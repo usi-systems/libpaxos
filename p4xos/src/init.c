@@ -151,7 +151,7 @@ void app_init_proposer(void) {
     printf("Worker %u init timer\n", lp->worker_id);
     rte_timer_init(&lp->recv_timer[lp->lcore_id]);
 
-    ret = rte_timer_reset(&lp->recv_timer[lp->lcore_id], app.hz, SINGLE, lp->lcore_id,
+    ret = rte_timer_reset(&lp->recv_timer[lp->lcore_id], app.hz*5, SINGLE, lp->lcore_id,
        proposer_resubmit, lp);
     if (ret < 0) {
      printf("Worker %u timer is in the RUNNING state\n", lp->worker_id);

@@ -484,6 +484,8 @@ void app_print_params(void);
 void submit(uint8_t worker_id, char* value, int size);
 void submit_bulk(uint8_t worker_id, uint32_t nb_pkts,
     struct app_lcore_params_worker *lp, char *value, int size);
+void submit_bulk_priority(uint8_t worker_id, uint32_t nb_pkts, char *value, int size);
+void flush_port(uint16_t port);
 void app_set_deliver_callback(deliver_cb, void *arg);
 void app_set_worker_callback(worker_cb);
 int learner_handler(struct rte_mbuf *pkt_in, void *arg);

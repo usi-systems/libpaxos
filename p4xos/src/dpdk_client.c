@@ -291,24 +291,38 @@ void submit_bulk(uint8_t worker_id, uint32_t nb_pkts,
     lp->mbuf_out_flush[port] = 1;
 }
 
-// void send_checkpoint_message(uint8_t worker_id, uint32_t inst) {
-//     uint16_t port = app.p4xos_conf.tx_port;
-//     struct app_lcore_params_worker *lp = app_get_worker(worker_id);
-//     int lcore = app_get_lcore_worker(worker_id);
-//     if (lcore < 0) {
-//         rte_panic("Invalid worker_id\n");
-//     }
-//     uint32_t mbuf_idx = lp->mbuf_out[port].n_mbufs;
-//     struct rte_mbuf *pkt = rte_pktmbuf_alloc(app.lcore_params[lcore].pool);
-//     if (pkt != NULL) {
-//         prepare_message(pkt, port, app.p4xos_conf.src_addr, app.p4xos_conf.dst_addr,
-//                         LEARNER_CHECKPOINT, inst, 0, worker_id,
-//                         app.p4xos_conf.node_id, NULL, 0);
-//     }
-//     lp->mbuf_out[port].array[mbuf_idx] = pkt;
-//     lp->mbuf_out[port].n_mbufs++;
-//     lp->mbuf_out_flush[port] = 1;
-// }
+void submit_bulk_priority(uint8_t worker_id, uint32_t nb_pkts, char *value, int size)
+{
+    int ret;
+    uint32_t n_mbufs;
+    uint16_t port = app.p4xos_conf.tx_port;
+    uint32_t lcore;
+    if (app_get_lcore_for_nic_tx(port, &lcore) < 0) {
+        rte_panic("Error: get lcore tx\n");
+        return;
+    }
+    struct app_lcore_params_io *lp_io = &app.lcore_params[lcore].io;
+
+    struct rte_mbuf *pkts[nb_pkts];
+    ret = rte_pktmbuf_alloc_bulk(app.lcore_params[lcore].pool, pkts, nb_pkts);
+
+    if (ret < 0) {
+        RTE_LOG(INFO, USER1, "Not enough entries in the mempools\n");
+        return;
+    }
+
+    uint32_t i;
+    for (i = 0; i < nb_pkts; i++) {
+        prepare_message(pkts[i], port, app.p4xos_conf.src_addr, app.p4xos_conf.dst_addr,
+                        app.p4xos_conf.msgtype, 0, 0, worker_id,
+                        app.p4xos_conf.node_id, value, size);
+        value += size;
+        n_mbufs = lp_io->tx.mbuf_out[port].n_mbufs;
+        lp_io->tx.mbuf_out[port].array[n_mbufs++] = pkts[i];
+        lp_io->tx.mbuf_out[port].n_mbufs = n_mbufs;
+    }
+}
+
 
 void send_checkpoint_message(uint8_t worker_id, uint32_t inst) {
     uint16_t port = app.p4xos_conf.tx_port;

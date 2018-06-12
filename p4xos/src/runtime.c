@@ -105,10 +105,15 @@ app_lcore_io_rx_buffer_to_send(struct app_lcore_params_io *lp, uint32_t worker,
         return;
     }
 
-    while(rte_ring_sp_enqueue_bulk(lp->rx.rings[worker],
+    int ret = rte_ring_sp_enqueue_bulk(lp->rx.rings[worker],
              (void **)lp->rx.mbuf_out[worker].array, bsz,
-             NULL) == 0)
-        ;
+             NULL);
+    if (unlikely(ret == 0))
+     {
+        RTE_LOG(WARNING, P4XOS, "%d %s. RX failed to enqueue %u packets to Worker %u\n",
+                     __LINE__, __func__,  bsz, worker);
+        return;
+     } ;
 
     lp->rx.mbuf_out[worker].n_mbufs = 0;
     lp->rx.mbuf_out_flush[worker] = 0;
@@ -244,11 +249,15 @@ static inline void app_lcore_io_rx_flush(struct app_lcore_params_io *lp,
             continue;
         }
 
-        while(rte_ring_sp_enqueue_bulk(lp->rx.rings[worker],
+        int ret = rte_ring_sp_enqueue_bulk(lp->rx.rings[worker],
             (void **)lp->rx.mbuf_out[worker].array,
-            lp->rx.mbuf_out[worker].n_mbufs, NULL) == 0)
-            ; /* empty body */
-
+            lp->rx.mbuf_out[worker].n_mbufs, NULL);
+        if (unlikely(ret == 0))
+        {
+            RTE_LOG(WARNING, P4XOS, "[%d,%s] Worker %u RX failed to enqueue %u packets\n",
+                        __LINE__, __func__, worker, lp->rx.mbuf_out[worker].n_mbufs);
+            return;
+        }
         lp->rx.mbuf_out[worker].n_mbufs = 0;
         lp->rx.mbuf_out_flush[worker] = 0;
     }
@@ -256,10 +265,28 @@ static inline void app_lcore_io_rx_flush(struct app_lcore_params_io *lp,
 
 void app_send_burst(uint16_t port, struct rte_mbuf **pkts, uint32_t n_pkts) {
     uint32_t sent;
+    // sent = rte_eth_tx_burst(port, 0, pkts, n_pkts);
+    // if(unlikely(sent < n_pkts)) {
+    //     RTE_LOG(WARNING, P4XOS, "Request %u Sent %u. Drop %u packets at TX\n", n_pkts, sent, n_pkts - sent);
+    //     for (; sent < n_pkts; sent++) {
+    //         rte_pktmbuf_free(pkts[sent]);
+    //     }
+    // }
     do {
         sent = rte_eth_tx_burst(port, 0, pkts, n_pkts);
         n_pkts -= sent;
-    } while (n_pkts);
+    } while(n_pkts);
+}
+
+void flush_port(uint16_t port)
+{
+    uint32_t lcore;
+    if (app_get_lcore_for_nic_tx(port, &lcore) < 0) {
+        rte_panic("Error: get lcore tx\n");
+        return;
+    }
+    struct app_lcore_params_io *lp_io = &app.lcore_params[lcore].io;
+    app_send_burst(port, lp_io->tx.mbuf_out[port].array, lp_io->tx.mbuf_out[port].n_mbufs);
 }
 
 static inline void app_lcore_io_tx(struct app_lcore_params_io *lp,
@@ -482,10 +509,16 @@ static inline void app_lcore_worker(struct app_lcore_params_worker *lp,
                     lp->mbuf_out[port].n_mbufs = pos;
                     continue;
                 }
-                while(rte_ring_sp_enqueue_bulk(lp->rings_out[port],
-                                            (void **)lp->mbuf_out[port].array,
-                                            bsz_wr, NULL) == 0)
-                    ; /* empty body */
+
+                int ret = rte_ring_sp_enqueue_bulk(lp->rings_out[port],
+                                           (void **)lp->mbuf_out[port].array,
+                                           bsz_wr, NULL);
+                if (unlikely(ret == 0))
+                {
+                    RTE_LOG(WARNING, P4XOS, "[%d,%s] Worker %u failed to enqueue %u packets to port %u\n",
+                            __LINE__, __func__, lp->worker_id, bsz_wr, port);
+                    return;
+                };
                 lp->mbuf_out[port].n_mbufs = 0;
                 lp->mbuf_out_flush[port] = 0;
             }
@@ -507,12 +540,15 @@ static inline void app_lcore_worker_flush(struct app_lcore_params_worker *lp) {
             lp->mbuf_out_flush[port] = 1;
             continue;
         }
-        while(rte_ring_sp_enqueue_bulk(lp->rings_out[port],
+        int ret = rte_ring_sp_enqueue_bulk(lp->rings_out[port],
                                    (void **)lp->mbuf_out[port].array,
-                                   lp->mbuf_out[port].n_mbufs, NULL) == 0)
-                ; /* empty body */
-        RTE_LOG(DEBUG, P4XOS, "Worker %u flush %u packets\n", lp->worker_id,
-                lp->mbuf_out[port].n_mbufs);
+                                   lp->mbuf_out[port].n_mbufs, NULL);
+        if (unlikely(ret == 0))
+        {
+            RTE_LOG(WARNING, P4XOS, "[%d,%s] Worker %u failed to enqueue %u packets to port %u\n",
+                    __LINE__, __func__, lp->worker_id, lp->mbuf_out[port].n_mbufs, port);
+            return;
+        };
         lp->mbuf_out[port].n_mbufs = 0;
         lp->mbuf_out_flush[port] = 0;
     }
