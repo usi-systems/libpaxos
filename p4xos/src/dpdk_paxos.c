@@ -53,6 +53,15 @@ inline double bytes_to_gbits(uint64_t bytes) {
   return t;
 }
 
+/* Convert cycles to ns */
+inline double cycles_to_ns(uint64_t cycles, uint64_t hz) {
+  double t = cycles;
+
+  t *= (double)NS_PER_S;
+  t /= hz;
+  return t;
+}
+
 static void set_ips(struct ipv4_hdr *ip) {
   ip->dst_addr = ip->src_addr;
   ip->src_addr = app.p4xos_conf.src_addr;
@@ -249,21 +258,50 @@ learner_new_command_handler(struct paxos_hdr *paxos_hdr,
 
 static inline int chosen_handler(struct paxos_hdr *paxos_hdr,
                                  struct app_lcore_params_worker *lp) {
-  uint64_t previous = rte_be_to_cpu_64(paxos_hdr->igress_ts);
-  if (previous > 0) {
-    uint64_t now = rte_get_timer_cycles();
-    uint64_t latency = now - previous;
-    lp->latency += latency;
-    lp->nb_latency++;
-    paxos_hdr->igress_ts = rte_cpu_to_be_64(now);
-  }
-  uint32_t inst = rte_be_to_cpu_32(paxos_hdr->inst);
-  size_t vsize = PAXOS_VALUE_SIZE;
-  lp->deliver(lp->worker_id, inst, (char *)&paxos_hdr->value, vsize, lp->deliver_arg);
+    uint64_t previous = rte_be_to_cpu_64(paxos_hdr->igress_ts);
+    uint64_t now = 0;
+    if (previous > 0) {
+        now = rte_get_timer_cycles();
+        uint64_t diff = now - previous;
+        lp->latency += diff;
+        lp->nb_latency++;
+        paxos_hdr->igress_ts = rte_cpu_to_be_64(now);
+        double latency = cycles_to_ns(diff, app.hz);
+        lp->buffer_count += sprintf(&lp->file_buffer[lp->buffer_count], "%.0f\n", latency);
+        if (lp->buffer_count >= CHUNK_SIZE) {
+            fwrite(lp->file_buffer, lp->buffer_count, 1, lp->latency_fp);
+            lp->buffer_count = 0;
+        }
+    }
+    uint32_t inst = rte_be_to_cpu_32(paxos_hdr->inst);
+    size_t vsize = PAXOS_VALUE_SIZE;
+    lp->deliver(lp->worker_id, inst, (char *)&paxos_hdr->value, vsize, lp->deliver_arg);
+    lp->nb_delivery++;
+    paxos_hdr->msgtype = app.p4xos_conf.msgtype;
 
-  lp->nb_delivery++;
-  paxos_hdr->msgtype = app.p4xos_conf.msgtype;
-  return SUCCESS;
+    if (app.p4xos_conf.measure_latency && rte_be_to_cpu_32(paxos_hdr->inst) % 1000) {
+        if (now == 0) {
+            now = rte_get_timer_cycles();
+        }
+        paxos_hdr->igress_ts = rte_cpu_to_be_64(now);
+    }
+
+    return SUCCESS;
+}
+
+void print_paxos_hdr(struct paxos_hdr *paxos_hdr) {
+    printf("msgtype %u worker_id %u round %u inst %u log_index %u vrnd %u acptid %u reserved %u value %s reserved2 %u igress_ts %"PRIu64"\n",
+                paxos_hdr->msgtype,
+                paxos_hdr->worker_id,
+                rte_be_to_cpu_16(paxos_hdr->rnd),
+                rte_be_to_cpu_32(paxos_hdr->inst),
+                rte_be_to_cpu_16(paxos_hdr->log_index),
+                rte_be_to_cpu_16(paxos_hdr->vrnd),
+                rte_be_to_cpu_16(paxos_hdr->acptid),
+                rte_be_to_cpu_16(paxos_hdr->reserved),
+                (char*)&paxos_hdr->value,
+                rte_be_to_cpu_32(paxos_hdr->reserved2),
+                rte_be_to_cpu_64(paxos_hdr->igress_ts));
 }
 
 static inline int learner_chosen_handler(struct paxos_hdr *paxos_hdr,
@@ -404,7 +442,10 @@ int learner_handler(struct rte_mbuf *pkt_in, void *arg) {
 void proposer_resubmit(struct rte_timer *timer, void *arg) {
     struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
     int ret;
-    submit_bulk(lp->worker_id, app.p4xos_conf.osd, lp, NULL, 0);
+    uint16_t port = app.p4xos_conf.tx_port;
+    uint32_t n_mbufs = app.p4xos_conf.osd - lp->mbuf_out[port].n_mbufs;
+
+    submit_bulk(lp->worker_id, n_mbufs, lp, NULL, 0);
     RTE_LOG(INFO, P4XOS, "Worker %u Timeout. Resumit %u packets\n",
         lp->worker_id, app.p4xos_conf.osd);
     ret = rte_timer_reset(&lp->recv_timer[lp->lcore_id], app.hz, SINGLE, lp->lcore_id,

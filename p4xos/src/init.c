@@ -133,31 +133,52 @@ void app_init_learner(void) {
 }
 
 void app_init_proposer(void) {
-  uint32_t lcore;
-  rte_timer_subsystem_init();
-  /* fetch default timer frequency. */
-  app.hz = rte_get_timer_hz();
-  /* Create a learner for each worker */
-  for (lcore = 0; lcore < APP_MAX_LCORES; lcore++) {
-    struct app_lcore_params_worker *lp = &app.lcore_params[lcore].worker;
+    uint32_t lcore;
+    rte_timer_subsystem_init();
+    /* fetch default timer frequency. */
+    app.hz = rte_get_timer_hz();
+    /* Create a learner for each worker */
+    for (lcore = 0; lcore < APP_MAX_LCORES; lcore++) {
+        struct app_lcore_params_worker *lp = &app.lcore_params[lcore].worker;
 
-    if (app.lcore_params[lcore].type != e_APP_LCORE_WORKER) {
-      continue;
-    }
-    lp->lcore_id = lcore;
+        if (app.lcore_params[lcore].type != e_APP_LCORE_WORKER) {
+            continue;
+        }
+        lp->lcore_id = lcore;
+
 #ifdef RESUBMIT
-    int ret;
-
-    printf("Worker %u init timer\n", lp->worker_id);
-    rte_timer_init(&lp->recv_timer[lp->lcore_id]);
-
-    ret = rte_timer_reset(&lp->recv_timer[lp->lcore_id], app.hz*5, SINGLE, lp->lcore_id,
-       proposer_resubmit, lp);
-    if (ret < 0) {
-     printf("Worker %u timer is in the RUNNING state\n", lp->worker_id);
-    }
+        int ret;
+        printf("Worker %u init timer\n", lp->worker_id);
+        rte_timer_init(&lp->recv_timer[lp->lcore_id]);
+        ret = rte_timer_reset(&lp->recv_timer[lp->lcore_id], app.hz*5, SINGLE,
+                                lp->lcore_id, proposer_resubmit, lp);
+        if (ret < 0) {
+            printf("Worker %u timer is in the RUNNING state\n", lp->worker_id);
+        }
 #endif
-  }
+        /* Init Latency file */
+        char latency_fn[FILENAME_LENGTH];
+        snprintf(latency_fn, FILENAME_LENGTH, "latency-partition-%u.txt", lp->worker_id);
+        lp->latency_fp = fopen(latency_fn, "w");
+        lp->buffer_count = 0;
+    }
+}
+
+void app_free_proposer(void) {
+    uint32_t lcore;
+    for (lcore = 0; lcore < APP_MAX_LCORES; lcore++) {
+        struct app_lcore_params_worker *lp = &app.lcore_params[lcore].worker;
+
+        if (app.lcore_params[lcore].type != e_APP_LCORE_WORKER) {
+            continue;
+        }
+        if (lp->buffer_count >= CHUNK_SIZE) {
+            fwrite(lp->file_buffer, lp->buffer_count, 1, lp->latency_fp);
+        }
+        if (lp->latency_fp) {
+            fclose(lp->latency_fp);
+        }
+    }
 }
 
 static void app_init_mbuf_pools(void) {

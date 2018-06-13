@@ -51,6 +51,7 @@ struct paxos_hdr {
 } __attribute__((__packed__));
 
 size_t get_paxos_offset(void);
+void print_paxos_hdr(struct paxos_hdr *paxos_hdr);
 int filter_packets(struct rte_mbuf *pkt_in);
 void prepare_hw_checksum(struct rte_mbuf *pkt_in, size_t data_size);
 #ifdef __cplusplus

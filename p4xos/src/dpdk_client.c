@@ -91,9 +91,12 @@ static void set_paxos_hdr(struct paxos_hdr *px, uint8_t msgtype, uint32_t inst,
     px->vrnd = rte_cpu_to_be_16(0);
     px->acptid = rte_cpu_to_be_16(acptid);
     px->worker_id = worker_id;
+    char *pval = (char *) &px->value;
     if (size > 0 && value != NULL) {
-    rte_memcpy(&px->value, value, size);
+        rte_memcpy(pval, value, size);
     }
+    px->reserved = 0;
+    px->reserved2 = 0;
     px->igress_ts = rte_cpu_to_be_64(igress_ts);
 }
 

@@ -13,6 +13,7 @@
 #include <sys/queue.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <signal.h>
 
 #include "main.h"
 #include "datastore.h"
@@ -124,6 +125,16 @@ static void stat_cb(__rte_unused struct rte_timer *timer,
     app.force_quit = 1;
 }
 
+
+static void
+int_handler(int sig_num)
+{
+	printf("Exiting on signal %d\n", sig_num);
+	/* set quit flag for thread to exit */
+	app.force_quit = 1;
+}
+
+
 int main(int argc, char **argv) {
   uint32_t lcore;
   int ret;
@@ -143,6 +154,11 @@ int main(int argc, char **argv) {
   }
   argc -= ret;
   argv += ret;
+
+  /* catch ctrl-c so we can print on exit */
+  signal(SIGINT, int_handler);
+  signal(SIGKILL, int_handler);
+
   /* Parse application arguments (after the EAL ones) */
   ret = parse_rocksdb_configuration(argc, argv);
   if (ret < 0) {

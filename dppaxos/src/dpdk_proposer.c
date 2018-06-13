@@ -13,6 +13,7 @@
 #include <errno.h>
 #include <getopt.h>
 #include <unistd.h>
+#include <signal.h>
 
 #include "main.h"
 #include "datastore.h"
@@ -88,6 +89,13 @@ stat_cb(__rte_unused struct rte_timer *timer, void *arg)
 	}
 }
 
+static void
+int_handler(int sig_num)
+{
+	printf("Exiting on signal %d\n", sig_num);
+	/* set quit flag for thread to exit */
+	app.force_quit = 1;
+}
 
 int
 main(int argc, char **argv)
@@ -116,6 +124,11 @@ main(int argc, char **argv)
       rocksdb_print_usage();
       return -1;
     }
+
+	/* catch ctrl-c so we can print on exit */
+	signal(SIGINT, int_handler);
+	signal(SIGKILL, int_handler);
+
 	// ret = rte_eal_hpet_init(1);
     // if (ret < 0)
     //         rte_exit(EXIT_FAILURE, "Error with EAL HPET initialization\n");
@@ -159,6 +172,6 @@ main(int argc, char **argv)
 			return -1;
 		}
 	}
-
+	app_free_proposer();
 	return 0;
 }

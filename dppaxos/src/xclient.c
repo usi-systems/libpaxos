@@ -57,14 +57,6 @@ struct client_param {
 
 struct client_param client;
 
-/* Convert cycles to ns */
-static inline double cycles_to_ns(uint64_t cycles) {
-  double t = cycles;
-  t *= (double)NS_PER_S;
-  t /= app.hz;
-  return t;
-}
-
 
 static void init_client() {
   uint32_t global_log_level = rte_log_get_global_level();
@@ -245,7 +237,7 @@ static int paxos_handler(uint16_t in_port, struct rte_mbuf *pkt_in) {
       uint64_t now = rte_get_timer_cycles();
 
       uint64_t latency = now - previous;
-      if (cycles_to_ns(latency) > 1000000) {
+      if (cycles_to_ns(latency, app.hz) > 1000000) {
         RTE_LOG(DEBUG, XCLIENT,
                 "HIGH Latency %u %" PRIu64 " %" PRIu64 " %" PRIu64 "\n", inst,
                 latency, now, previous);
@@ -301,7 +293,7 @@ static void stat_cb(__rte_unused struct rte_timer *timer,
                     __rte_unused void *arg) {
   double avg_latency = 0.0;
   if (client.latency_pkts > 0) {
-    avg_latency = cycles_to_ns(client.latencies / client.latency_pkts);
+    avg_latency = cycles_to_ns(client.latencies / client.latency_pkts, app.hz);
   }
   printf("%-8s\t%-4u\t%-4u\t%-8u\t%-8.1f\t%-10" PRIu64 "\t%-3.3f\n", "Stat",
          app.p4xos_conf.osd, app.p4xos_conf.ts_interval, client.latency_pkts,

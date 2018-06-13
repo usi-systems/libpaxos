@@ -254,9 +254,12 @@
 #define APP_DEFAULT_SEND_RESPONSE 0
 #define APP_DEFAULT_TS_INTERVAL 4
 #define APP_DEFAULT_DROP 0
+#define APP_DEFAULT_MEASURE_LATENCY 0
 #define APP_DEFAULT_OUTSTANDING	8
 #define APP_DEFAULT_MAX_INST	24000000
 #define APP_DEFAULT_SENDING_RATE 10000
+#define FILENAME_LENGTH 128
+#define CHUNK_SIZE 4096
 
 #define MAX_SCHED_SUBPORTS 1
 #define MAX_SCHED_PIPES 1
@@ -289,6 +292,7 @@ struct p4xos_configuration {
 	uint8_t reset_inst;
 	uint8_t baseline;
 	uint8_t drop;
+	uint8_t measure_latency;
 	uint8_t run_prepare;
 	uint8_t respond_to_client;
 	uint32_t checkpoint_interval;
@@ -380,19 +384,21 @@ struct app_lcore_params_worker {
 	uint32_t rings_out_count[APP_MAX_NIC_PORTS];
 	uint32_t rings_out_count_drop[APP_MAX_NIC_PORTS];
 	uint32_t rings_out_iters[APP_MAX_NIC_PORTS];
-
-	/* Libpaxos */
-	struct learner *learner;
-	struct acceptor *acceptor;
-	deliver_cb deliver;
-	void*	deliver_arg;
-	worker_cb process_pkt;
 	uint64_t nb_delivery;
 	uint64_t nb_latency;
 	uint64_t latency;
 	uint64_t total_pkts;
 	uint64_t total_bytes;
 	uint64_t accepted_count;
+    FILE *latency_fp;
+	uint32_t buffer_count;
+    char file_buffer[CHUNK_SIZE + 64];
+	/* Libpaxos */
+	struct learner *learner;
+	struct acceptor *acceptor;
+	deliver_cb deliver;
+	void*	deliver_arg;
+	worker_cb process_pkt;
 	uint32_t cur_inst;
 	uint32_t has_holes;
 	uint32_t artificial_drop;
@@ -504,6 +510,7 @@ void learner_check_holes(struct rte_timer *timer, void *arg);
 void proposer_resubmit(struct rte_timer *timer, void *arg);
 void reset_leader_instance(uint32_t worker_id);
 double bytes_to_gbits(uint64_t bytes);
+double cycles_to_ns(uint64_t cycles, uint64_t hz);
 void send_prepare(struct app_lcore_params_worker *lp, uint32_t inst, uint32_t prepare_size, char* value, int size);
 void fill_holes(struct app_lcore_params_worker *lp, uint32_t inst, uint32_t prepare_size, char* value, int size);
 void send_accept(struct app_lcore_params_worker *lp, paxos_accept* accept);
@@ -515,7 +522,7 @@ void app_send_burst(uint16_t port, struct rte_mbuf **pkts, uint32_t n_pkts);
 void timer_send_checkpoint(struct rte_timer *timer, void *arg);
 struct rte_sched_port *app_init_sched_port(uint32_t portid,
                                                   uint32_t socketid);
-
+void app_free_proposer(void);
 #ifdef __cplusplus
 }  /* end extern "C" */
 #endif
