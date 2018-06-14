@@ -93,7 +93,7 @@
 #endif
 
 #ifndef APP_DEFAULT_MEMPOOL_BUFFERS
-#define APP_DEFAULT_MEMPOOL_BUFFERS   8192 * 4 * 2
+#define APP_DEFAULT_MEMPOOL_BUFFERS   8192 * 4 * 4
 #endif
 
 #ifndef APP_DEFAULT_MEMPOOL_CACHE_SIZE
@@ -267,8 +267,6 @@
 #define RTE_SCHED_PIPE_PROFILES_PER_PORT 1
 #define SCHED_PORT_QUEUE_SIZE 64
 
-#define RESUBMIT
-
 #define TIMER_RESOLUTION_CYCLES 20000000ULL /* around 10ms at 2 Ghz */
 
 #ifdef __cplusplus
@@ -390,6 +388,7 @@ struct app_lcore_params_worker {
 	uint64_t total_pkts;
 	uint64_t total_bytes;
 	uint64_t accepted_count;
+	uint64_t start_ts;
     FILE *latency_fp;
 	uint32_t buffer_count;
     char file_buffer[CHUNK_SIZE + 64];
@@ -518,7 +517,7 @@ void prepare_message(struct rte_mbuf *created_pkt, uint16_t port, uint32_t src_a
 						uint32_t dst_addr, uint8_t msgtype, uint32_t inst,
 						uint16_t rnd, uint8_t worker_id, uint16_t node_id, char* value, int size);
 void send_checkpoint_message(uint8_t worker_id, uint32_t inst);
-void app_send_burst(uint16_t port, struct rte_mbuf **pkts, uint32_t n_pkts);
+int app_send_burst(uint16_t port, struct rte_mbuf **pkts, uint32_t n_pkts);
 void timer_send_checkpoint(struct rte_timer *timer, void *arg);
 struct rte_sched_port *app_init_sched_port(uint32_t portid,
                                                   uint32_t socketid);

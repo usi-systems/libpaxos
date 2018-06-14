@@ -260,7 +260,7 @@ static inline int chosen_handler(struct paxos_hdr *paxos_hdr,
                                  struct app_lcore_params_worker *lp) {
     uint64_t previous = rte_be_to_cpu_64(paxos_hdr->igress_ts);
     uint64_t now = 0;
-    if (previous > 0) {
+    if (previous > lp->start_ts) {
         now = rte_get_timer_cycles();
         uint64_t diff = now - previous;
         lp->latency += diff;
@@ -279,7 +279,7 @@ static inline int chosen_handler(struct paxos_hdr *paxos_hdr,
     lp->nb_delivery++;
     paxos_hdr->msgtype = app.p4xos_conf.msgtype;
 
-    if (app.p4xos_conf.measure_latency && rte_be_to_cpu_32(paxos_hdr->inst) % 1000) {
+    if (app.p4xos_conf.measure_latency && rte_be_to_cpu_32(paxos_hdr->inst) & 8191) {
         if (now == 0) {
             now = rte_get_timer_cycles();
         }

@@ -1305,10 +1305,12 @@ void app_print_params(void) {
          "Multiple DBs: %u\n"
          "Max Instance: %u\n"
          "Proposer TX port: %u\n"
+         "Respond to Client: %u\n"
          "Outstanding packets: %u\n",
          app.p4xos_conf.num_acceptors, app.p4xos_conf.msgtype,
          app.p4xos_conf.node_id, app.p4xos_conf.multi_dbs,
-         app.p4xos_conf.max_inst, app.p4xos_conf.tx_port, app.p4xos_conf.osd);
+         app.p4xos_conf.max_inst, app.p4xos_conf.tx_port,
+         app.p4xos_conf.respond_to_client, app.p4xos_conf.osd);
   char str[INET_ADDRSTRLEN];
   inet_ntop(AF_INET, &(app.p4xos_conf.dst_addr), str, INET_ADDRSTRLEN);
   printf("Destination address: %s\n", str);

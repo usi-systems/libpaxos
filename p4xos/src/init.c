@@ -161,6 +161,7 @@ void app_init_proposer(void) {
         snprintf(latency_fn, FILENAME_LENGTH, "latency-partition-%u.txt", lp->worker_id);
         lp->latency_fp = fopen(latency_fn, "w");
         lp->buffer_count = 0;
+        lp->start_ts = rte_get_timer_cycles();
     }
 }
 

@@ -42,15 +42,15 @@
 #include "main.h"
 
 #ifndef APP_LCORE_IO_FLUSH
-#define APP_LCORE_IO_FLUSH 160000
+#define APP_LCORE_IO_FLUSH 1600000
 #endif
 
 #ifndef APP_LCORE_WORKER_FLUSH
-#define APP_LCORE_WORKER_FLUSH 160000
+#define APP_LCORE_WORKER_FLUSH 1600000
 #endif
 
 #ifndef APP_STATS
-#define APP_STATS 160000
+#define APP_STATS 1600000
 #endif
 
 
@@ -109,34 +109,39 @@ app_lcore_io_rx_buffer_to_send(struct app_lcore_params_io *lp, uint32_t worker,
              (void **)lp->rx.mbuf_out[worker].array, bsz,
              NULL);
     if (unlikely(ret == 0))
-     {
-        RTE_LOG(WARNING, P4XOS, "%d %s. RX failed to enqueue %u packets to Worker %u\n",
-                     __LINE__, __func__,  bsz, worker);
-        return;
-     } ;
+    {
+        uint32_t k;
+        for (k = 0; k < bsz; k++)
+            rte_pktmbuf_free(lp->rx.mbuf_out[worker].array[k]);
+        lp->rx.rings_drop[worker] += bsz;
+    };
 
     lp->rx.mbuf_out[worker].n_mbufs = 0;
     lp->rx.mbuf_out_flush[worker] = 0;
 
 #if APP_STATS
     lp->rx.rings_iters[worker]++;
-    lp->rx.rings_count[worker] += bsz;
+    if (likely(ret == 0)) {
+        lp->rx.rings_count[worker] += bsz;
+    }
     if (unlikely(lp->rx.rings_iters[worker] == APP_STATS)) {
         unsigned lcore = rte_lcore_id();
         printf("I/O RX %u out (worker %u): dropped %u, enq success rate = %.2f\n",
-                lcore, (unsigned)worker, lp->rx.rings_drop[worker],
-                ((double)lp->rx.rings_count[worker]) /
-                ((double)lp->rx.rings_iters[worker]));
-                lp->rx.rings_iters[worker] = 0;
-                lp->rx.rings_count[worker] = 0;
-                lp->rx.rings_drop[worker] = 0;
+            lcore, (unsigned)worker, lp->rx.rings_drop[worker],
+            ((double)lp->rx.rings_count[worker]) /
+            ((double)lp->rx.rings_iters[worker]));
+        lp->rx.rings_iters[worker] = 0;
+        lp->rx.rings_count[worker] = 0;
+        lp->rx.rings_drop[worker] = 0;
     }
 #endif
 }
 
-static inline void app_lcore_io_rx(struct app_lcore_params_io *lp,
-                                   uint32_t n_workers, uint32_t bsz_rd,
-                                   uint32_t bsz_wr, uint8_t pos_lb) {
+static inline void
+app_lcore_io_rx(struct app_lcore_params_io *lp,
+               uint32_t n_workers, uint32_t bsz_rd,
+               uint32_t bsz_wr, uint8_t pos_lb)
+{
     struct rte_mbuf *mbuf_1_0, *mbuf_1_1, *mbuf_2_0, *mbuf_2_1;
     uint8_t *data_1_0, *data_1_1 = NULL;
     uint32_t i;
@@ -169,8 +174,8 @@ static inline void app_lcore_io_rx(struct app_lcore_params_io *lp,
                 stats.ierrors, stats.oerrors, stats.rx_nombuf,
                 ((double)lp->rx.nic_queues_count[i]) /
                 ((double)lp->rx.nic_queues_iters[i]));
-                lp->rx.nic_queues_iters[i] = 0;
-                lp->rx.nic_queues_count[i] = 0;
+            lp->rx.nic_queues_iters[i] = 0;
+            lp->rx.nic_queues_count[i] = 0;
         }
 #endif
 
@@ -238,8 +243,9 @@ static inline void app_lcore_io_rx(struct app_lcore_params_io *lp,
     }
 }
 
-static inline void app_lcore_io_rx_flush(struct app_lcore_params_io *lp,
-                                         uint32_t n_workers) {
+static inline void
+app_lcore_io_rx_flush(struct app_lcore_params_io *lp, uint32_t n_workers)
+{
     uint32_t worker;
 
     for (worker = 0; worker < n_workers; worker++) {
@@ -254,31 +260,37 @@ static inline void app_lcore_io_rx_flush(struct app_lcore_params_io *lp,
             lp->rx.mbuf_out[worker].n_mbufs, NULL);
         if (unlikely(ret == 0))
         {
-            RTE_LOG(WARNING, P4XOS, "[%d,%s] Worker %u RX failed to enqueue %u packets\n",
-                        __LINE__, __func__, worker, lp->rx.mbuf_out[worker].n_mbufs);
-            return;
+            uint32_t k;
+			for (k = 0; k < lp->rx.mbuf_out[worker].n_mbufs; k ++) {
+				struct rte_mbuf *pkt_to_free = lp->rx.mbuf_out[worker].array[k];
+				rte_pktmbuf_free(pkt_to_free);
+			}
+            lp->rx.rings_drop[worker] += lp->rx.mbuf_out[worker].n_mbufs;
         }
+
         lp->rx.mbuf_out[worker].n_mbufs = 0;
-        lp->rx.mbuf_out_flush[worker] = 0;
+        lp->rx.mbuf_out_flush[worker] = 1;
     }
 }
 
-void app_send_burst(uint16_t port, struct rte_mbuf **pkts, uint32_t n_pkts) {
+inline int
+app_send_burst(uint16_t port, struct rte_mbuf **pkts, uint32_t n_pkts)
+{
     uint32_t sent;
-    // sent = rte_eth_tx_burst(port, 0, pkts, n_pkts);
-    // if(unlikely(sent < n_pkts)) {
-    //     RTE_LOG(WARNING, P4XOS, "Request %u Sent %u. Drop %u packets at TX\n", n_pkts, sent, n_pkts - sent);
-    //     for (; sent < n_pkts; sent++) {
-    //         rte_pktmbuf_free(pkts[sent]);
-    //     }
-    // }
-    do {
-        sent = rte_eth_tx_burst(port, 0, pkts, n_pkts);
-        n_pkts -= sent;
-    } while(n_pkts);
+    sent = rte_eth_tx_burst(port, 0, pkts, n_pkts);
+    if (unlikely(sent < n_pkts)) {
+        RTE_LOG(WARNING, P4XOS, "%s: Request %u Sent %u. Drop %u packets at TX\n",
+                __func__, n_pkts, sent, n_pkts - sent);
+        uint32_t k = sent;
+        for (; k < n_pkts; k++) {
+            rte_pktmbuf_free(pkts[k]);
+        }
+    }
+    return sent;
 }
 
-void flush_port(uint16_t port)
+inline void
+flush_port(uint16_t port)
 {
     uint32_t lcore;
     if (app_get_lcore_for_nic_tx(port, &lcore) < 0) {
@@ -289,13 +301,17 @@ void flush_port(uint16_t port)
     app_send_burst(port, lp_io->tx.mbuf_out[port].array, lp_io->tx.mbuf_out[port].n_mbufs);
 }
 
-static inline void app_lcore_io_tx(struct app_lcore_params_io *lp,
-                                   uint32_t n_workers, uint32_t bsz_rd,
-                                   uint32_t bsz_wr) {
+static inline void
+app_lcore_io_tx(
+    struct app_lcore_params_io *lp,
+    uint32_t n_workers, uint32_t bsz_rd,
+    uint32_t bsz_wr)
+{
     uint32_t worker;
 
     for (worker = 0; worker < n_workers; worker++) {
         uint32_t i;
+        uint32_t n_pkts;
 
         for (i = 0; i < lp->tx.n_nic_ports; i++) {
             uint16_t port = lp->tx.nic_ports[i];
@@ -304,14 +320,14 @@ static inline void app_lcore_io_tx(struct app_lcore_params_io *lp,
             int ret;
 
             n_mbufs = lp->tx.mbuf_out[port].n_mbufs;
-            ret = rte_ring_sc_dequeue_bulk(ring,
-                    (void **)&lp->tx.mbuf_out[port].array[n_mbufs], bsz_rd, NULL);
+            ret = rte_ring_sc_dequeue_bulk(
+                ring,
+                (void **)&lp->tx.mbuf_out[port].array[n_mbufs],
+                bsz_rd,
+                NULL);
 
             if (unlikely(ret == 0))
                 continue;
-
-            RTE_LOG(DEBUG, P4XOS, "Port %u worker %u  dequeue %u packets\n",
-                    port, worker, ret);
 
             n_mbufs += bsz_rd;
 
@@ -319,6 +335,7 @@ static inline void app_lcore_io_tx(struct app_lcore_params_io *lp,
                 lp->tx.mbuf_out[port].n_mbufs = n_mbufs;
                 continue;
             }
+
 #ifdef RATE_LIMITER
             struct rte_mbuf *pkts_tx[n_mbufs];
             uint32_t nb_eq = rte_sched_port_enqueue(lp->tx.sched_port,
@@ -331,28 +348,48 @@ static inline void app_lcore_io_tx(struct app_lcore_params_io *lp,
                 lp->tx.mbuf_out_flush[port] = 0;
                 continue;
             }
-            app_send_burst(port, lp->tx.mbuf_out[port].array, nb_deq);
-            lp->tx.mbuf_out[port].n_mbufs = 0;
-            lp->tx.mbuf_out_flush[port] = 0;
+            n_pkts = app_send_burst(port, lp->tx.mbuf_out[port].array, nb_deq);
 #else
-            app_send_burst(port, lp->tx.mbuf_out[port].array, n_mbufs);
+            n_pkts = app_send_burst(port, lp->tx.mbuf_out[port].array, n_mbufs);
+#endif
+
+#if APP_STATS
+			lp->tx.nic_ports_iters[port] ++;
+			lp->tx.nic_ports_count[port] += n_pkts;
+			if (unlikely(lp->tx.nic_ports_iters[port] == APP_STATS)) {
+				unsigned lcore = rte_lcore_id();
+
+				printf("\t\t\tI/O TX %u out (port %u): avg burst size = %.2f\n",
+					lcore,
+					port,
+					((double) lp->tx.nic_ports_count[port]) / ((double) lp->tx.nic_ports_iters[port]));
+				lp->tx.nic_ports_iters[port] = 0;
+				lp->tx.nic_ports_count[port] = 0;
+			}
+#endif
+
             lp->tx.mbuf_out[port].n_mbufs = 0;
             lp->tx.mbuf_out_flush[port] = 0;
-#endif
         }
     }
 }
 
-static inline void app_lcore_io_tx_flush(struct app_lcore_params_io *lp) {
+static inline void
+app_lcore_io_tx_flush(struct app_lcore_params_io *lp)
+{
     uint16_t port;
     uint32_t i;
+    uint32_t n_pkts;
+
     for (i = 0; i < lp->tx.n_nic_ports; i++) {
+
         port = lp->tx.nic_ports[i];
         if (likely((lp->tx.mbuf_out_flush[port] == 0) ||
                     (lp->tx.mbuf_out[port].n_mbufs == 0))) {
             lp->tx.mbuf_out_flush[port] = 1;
             continue;
         }
+
 #ifdef RATE_LIMITER
         uint32_t bsz_wr = app.burst_size_io_tx_write;
         struct rte_mbuf *pkts_tx[bsz_wr];
@@ -363,21 +400,37 @@ static inline void app_lcore_io_tx_flush(struct app_lcore_params_io *lp) {
         uint32_t nb_deq = rte_sched_port_dequeue(lp->tx.sched_port, pkts_tx, bsz_wr);
         if (unlikely(nb_deq == 0)) {
             lp->tx.mbuf_out[port].n_mbufs = 0;
-            lp->tx.mbuf_out_flush[port] = 0;
+            lp->tx.mbuf_out_flush[port] = 1;
             continue;
         }
-        app_send_burst(port, lp->tx.mbuf_out[port].array, nb_deq);
-        lp->tx.mbuf_out[port].n_mbufs = 0;
-        lp->tx.mbuf_out_flush[port] = 0;
+        n_pkts = app_send_burst(port, lp->tx.mbuf_out[port].array, nb_deq);
 #else
-        app_send_burst(port, lp->tx.mbuf_out[port].array, lp->tx.mbuf_out[port].n_mbufs);
-        lp->tx.mbuf_out[port].n_mbufs = 0;
-        lp->tx.mbuf_out_flush[port] = 0;
+        n_pkts = app_send_burst(port, lp->tx.mbuf_out[port].array, lp->tx.mbuf_out[port].n_mbufs);
 #endif
+
+#if APP_STATS
+			lp->tx.nic_ports_iters[port] ++;
+			lp->tx.nic_ports_count[port] += n_pkts;
+			if (unlikely(lp->tx.nic_ports_iters[port] == APP_STATS)) {
+				unsigned lcore = rte_lcore_id();
+
+				printf("\t\t\tI/O TX %u out (port %u): avg burst size = %.2f\n",
+					lcore,
+					port,
+					((double) lp->tx.nic_ports_count[port]) / ((double) lp->tx.nic_ports_iters[port]));
+				lp->tx.nic_ports_iters[port] = 0;
+				lp->tx.nic_ports_count[port] = 0;
+			}
+#endif
+
+        lp->tx.mbuf_out[port].n_mbufs = 0;
+        lp->tx.mbuf_out_flush[port] = 1;
     }
 }
 
-static void app_lcore_main_loop_io(void) {
+static void
+app_lcore_main_loop_io(void)
+{
     uint32_t lcore = rte_lcore_id();
     struct app_lcore_params_io *lp = &app.lcore_params[lcore].io;
     uint32_t n_workers = app_get_lcores_worker();
@@ -395,9 +448,11 @@ static void app_lcore_main_loop_io(void) {
             if (likely(lp->rx.n_nic_queues > 0)) {
                 app_lcore_io_rx_flush(lp, n_workers);
             }
+
             if (likely(lp->tx.n_nic_ports > 0)) {
                 app_lcore_io_tx_flush(lp);
             }
+
             i = 0;
         }
 
@@ -408,26 +463,33 @@ static void app_lcore_main_loop_io(void) {
         if (likely(lp->tx.n_nic_ports > 0)) {
             app_lcore_io_tx(lp, n_workers, bsz_tx_rd, bsz_tx_wr);
         }
+
         i++;
     }
 }
 
-static inline void app_lcore_worker(struct app_lcore_params_worker *lp,
-                                    uint32_t bsz_rd, uint32_t bsz_wr) {
+static inline void
+app_lcore_worker(
+    struct app_lcore_params_worker *lp,
+    uint32_t bsz_rd,
+    uint32_t bsz_wr)
+{
     uint32_t i;
 
     for (i = 0; i < lp->n_rings_in; i++) {
         struct rte_ring *ring_in = lp->rings_in[i];
         uint32_t j;
         int ret;
-        ret = rte_ring_sc_dequeue_bulk(ring_in, (void **)lp->mbuf_in.array,
-                                        bsz_rd, NULL);
+        ret = rte_ring_sc_dequeue_bulk(
+            ring_in,
+            (void **)lp->mbuf_in.array,
+            bsz_rd,
+            NULL);
 
         if (unlikely(ret == 0))
             continue;
 
-        APP_WORKER_PREFETCH1(
-                rte_pktmbuf_mtod(lp->mbuf_in.array[0], unsigned char *));
+        APP_WORKER_PREFETCH1(rte_pktmbuf_mtod(lp->mbuf_in.array[0], unsigned char *));
         APP_WORKER_PREFETCH0(lp->mbuf_in.array[1]);
 
         for (j = 0; j < bsz_rd; j++) {
@@ -475,10 +537,6 @@ static inline void app_lcore_worker(struct app_lcore_params_worker *lp,
                 continue;
             }
 
-#if APP_STATS
-
-#endif
-
             uint32_t port_mask;
             if (IS_IPV4_MCAST(ipv4_dst)) {
                 port_mask = port;
@@ -494,10 +552,19 @@ static inline void app_lcore_worker(struct app_lcore_params_worker *lp,
                             lp->mbuf_out[port].n_mbufs = pos;
                             continue;
                         }
-                        while(rte_ring_sp_enqueue_bulk(lp->rings_out[port],
+                        ret = rte_ring_sp_enqueue_bulk(lp->rings_out[port],
                                         (void **)lp->mbuf_out[port].array,
-                                        bsz_wr, NULL) == 0)
-                            ; /* empty body */
+                                        bsz_wr, NULL);
+
+                        if (unlikely(ret == 0)) {
+                            uint32_t k;
+                            for (k = 0; k < bsz_wr; k ++) {
+                                struct rte_mbuf *pkt_to_free = lp->mbuf_out[port].array[k];
+                                rte_pktmbuf_free(pkt_to_free);
+                            }
+                            lp->rings_out_count_drop[port] += bsz_wr;
+                        }
+
                         lp->mbuf_out[port].n_mbufs = 0;
                         lp->mbuf_out_flush[port] = 0;
                     }
@@ -513,12 +580,33 @@ static inline void app_lcore_worker(struct app_lcore_params_worker *lp,
                 int ret = rte_ring_sp_enqueue_bulk(lp->rings_out[port],
                                            (void **)lp->mbuf_out[port].array,
                                            bsz_wr, NULL);
-                if (unlikely(ret == 0))
-                {
-                    RTE_LOG(WARNING, P4XOS, "[%d,%s] Worker %u failed to enqueue %u packets to port %u\n",
-                            __LINE__, __func__, lp->worker_id, bsz_wr, port);
-                    return;
-                };
+
+                if (unlikely(ret == 0)) {
+                    uint32_t k;
+                    for (k = 0; k < bsz_wr; k ++) {
+                        struct rte_mbuf *pkt_to_free = lp->mbuf_out[port].array[k];
+                        rte_pktmbuf_free(pkt_to_free);
+                    }
+                    lp->rings_out_count_drop[port] += bsz_wr;
+                }
+
+#if APP_STATS
+                lp->rings_out_iters[port] ++;
+                if (ret > 0) {
+                    lp->rings_out_count[port] += bsz_wr;
+                }
+                if (lp->rings_out_iters[port] == APP_STATS) {
+                    printf("\t\tWorker %u out (NIC port %u): enq success rate = %.2f. Dropped %u\n",
+                        (unsigned) lp->worker_id,
+                        port,
+                        ((double) lp->rings_out_count[port]) / ((double) lp->rings_out_iters[port]),
+                        lp->rings_out_count_drop[port]);
+                    lp->rings_out_iters[port] = 0;
+                    lp->rings_out_count[port] = 0;
+                    lp->rings_out_count_drop[port] = 0;
+                }
+#endif
+
                 lp->mbuf_out[port].n_mbufs = 0;
                 lp->mbuf_out_flush[port] = 0;
             }
@@ -526,7 +614,9 @@ static inline void app_lcore_worker(struct app_lcore_params_worker *lp,
     }
 }
 
-static inline void app_lcore_worker_flush(struct app_lcore_params_worker *lp) {
+static inline void
+app_lcore_worker_flush(struct app_lcore_params_worker *lp)
+{
     uint32_t port;
 
     for (port = 0; port < APP_MAX_NIC_PORTS; port++) {
@@ -543,14 +633,18 @@ static inline void app_lcore_worker_flush(struct app_lcore_params_worker *lp) {
         int ret = rte_ring_sp_enqueue_bulk(lp->rings_out[port],
                                    (void **)lp->mbuf_out[port].array,
                                    lp->mbuf_out[port].n_mbufs, NULL);
-        if (unlikely(ret == 0))
-        {
-            RTE_LOG(WARNING, P4XOS, "[%d,%s] Worker %u failed to enqueue %u packets to port %u\n",
-                    __LINE__, __func__, lp->worker_id, lp->mbuf_out[port].n_mbufs, port);
-            return;
-        };
+
+        if (unlikely(ret == 0)) {
+            uint32_t k;
+			for (k = 0; k < lp->mbuf_out[port].n_mbufs; k ++) {
+				struct rte_mbuf *pkt_to_free = lp->mbuf_out[port].array[k];
+				rte_pktmbuf_free(pkt_to_free);
+            }
+            lp->rings_out_count_drop[port] += lp->mbuf_out[port].n_mbufs;
+        }
+
         lp->mbuf_out[port].n_mbufs = 0;
-        lp->mbuf_out_flush[port] = 0;
+        lp->mbuf_out_flush[port] = 1;
     }
 }
 
@@ -570,6 +664,7 @@ static void app_lcore_main_loop_worker(void) {
         }
 
         app_lcore_worker(lp, bsz_rd, bsz_wr);
+
         cur_tsc = rte_get_timer_cycles();
         diff_tsc = cur_tsc - prev_tsc;
         if (diff_tsc > TIMER_RESOLUTION_CYCLES) {

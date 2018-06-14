@@ -18,6 +18,12 @@ if (DEFINE_RATE_LIMITER)
     add_definitions(-DRATE_LIMITER)
 endif (DEFINE_RATE_LIMITER)
 
+option (DEFINE_RESUBMIT "Option enable resubmit for proposer" OFF) # Disabled by default
+if (DEFINE_RESUBMIT)
+    message("Adding RESUBMIT flag...")
+    add_definitions(-DRESUBMIT)
+endif (DEFINE_RESUBMIT)
+
 include_directories(${CMAKE_SOURCE_DIR}/paxos/include)
 include_directories(${CMAKE_SOURCE_DIR}/p4xos/include)
 
