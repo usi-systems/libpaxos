@@ -345,5 +345,5 @@ void send_checkpoint_message(uint8_t worker_id, uint32_t inst) {
     }
     lp->tx.mbuf_out[port].array[n_mbufs] = pkt;
     lp->tx.mbuf_out[port].n_mbufs++;
-    app_send_burst(port, lp->tx.mbuf_out[port].array, n_mbufs);
+    // app_send_burst(port, lp->tx.mbuf_out[port].array, n_mbufs);
 }

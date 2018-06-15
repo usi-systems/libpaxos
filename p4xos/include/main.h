@@ -93,7 +93,7 @@
 #endif
 
 #ifndef APP_DEFAULT_MEMPOOL_BUFFERS
-#define APP_DEFAULT_MEMPOOL_BUFFERS   8192 * 4 * 4
+#define APP_DEFAULT_MEMPOOL_BUFFERS   8192 * 4
 #endif
 
 #ifndef APP_DEFAULT_MEMPOOL_CACHE_SIZE
@@ -125,7 +125,7 @@
 #endif
 
 #ifndef APP_DEFAULT_NIC_RX_WTHRESH
-#define APP_DEFAULT_NIC_RX_WTHRESH  0
+#define APP_DEFAULT_NIC_RX_WTHRESH  4
 #endif
 
 #ifndef APP_DEFAULT_NIC_RX_FREE_THRESH
@@ -138,7 +138,7 @@
 
 /* NIC TX */
 #ifndef APP_DEFAULT_NIC_TX_RING_SIZE
-#define APP_DEFAULT_NIC_TX_RING_SIZE 4096
+#define APP_DEFAULT_NIC_TX_RING_SIZE 1024
 #endif
 
 /*
@@ -147,7 +147,7 @@
  * network controllers and/or network drivers.
  */
 #ifndef APP_DEFAULT_NIC_TX_PTHRESH
-#define APP_DEFAULT_NIC_TX_PTHRESH  32
+#define APP_DEFAULT_NIC_TX_PTHRESH  36
 #endif
 
 #ifndef APP_DEFAULT_NIC_TX_HTHRESH
@@ -168,11 +168,11 @@
 
 /* Software Rings */
 #ifndef APP_DEFAULT_RING_RX_SIZE
-#define APP_DEFAULT_RING_RX_SIZE 8192 * 4
+#define APP_DEFAULT_RING_RX_SIZE 1024
 #endif
 
 #ifndef APP_DEFAULT_RING_TX_SIZE
-#define APP_DEFAULT_RING_TX_SIZE 8192 * 4
+#define APP_DEFAULT_RING_TX_SIZE 1024
 #endif
 
 /* Bursts */

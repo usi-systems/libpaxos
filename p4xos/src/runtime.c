@@ -37,20 +37,21 @@
 #include <rte_random.h>
 #include <rte_ring.h>
 #include <rte_tcp.h>
+#include <rte_pause.h>
 
 #include "dpp_paxos.h"
 #include "main.h"
 
 #ifndef APP_LCORE_IO_FLUSH
-#define APP_LCORE_IO_FLUSH 1600000
+#define APP_LCORE_IO_FLUSH 2000000
 #endif
 
 #ifndef APP_LCORE_WORKER_FLUSH
-#define APP_LCORE_WORKER_FLUSH 1600000
+#define APP_LCORE_WORKER_FLUSH 2000000
 #endif
 
 #ifndef APP_STATS
-#define APP_STATS 1600000
+#define APP_STATS 2000000
 #endif
 
 
@@ -276,16 +277,24 @@ app_lcore_io_rx_flush(struct app_lcore_params_io *lp, uint32_t n_workers)
 inline int
 app_send_burst(uint16_t port, struct rte_mbuf **pkts, uint32_t n_pkts)
 {
-    uint32_t sent;
-    sent = rte_eth_tx_burst(port, 0, pkts, n_pkts);
-    if (unlikely(sent < n_pkts)) {
-        RTE_LOG(WARNING, P4XOS, "%s: Request %u Sent %u. Drop %u packets at TX\n",
-                __func__, n_pkts, sent, n_pkts - sent);
-        uint32_t k = sent;
-        for (; k < n_pkts; k++) {
-            rte_pktmbuf_free(pkts[k]);
-        }
-    }
+    uint32_t sent = 0;
+
+    // sent = rte_eth_tx_burst(port, 0, pkts, n_pkts);
+    //
+    // if (unlikely(sent < n_pkts)) {
+    //     RTE_LOG(WARNING, P4XOS, "%s: Request %u Sent %u. Drop %u packets at TX\n",
+    //             __func__, n_pkts, sent, n_pkts - sent);
+    //     uint32_t k = sent;
+    //     for (; k < n_pkts; k++) {
+    //         rte_pktmbuf_free(pkts[k]);
+    //     }
+    // }
+
+    do {
+        sent += rte_eth_tx_burst(port, 0, pkts, n_pkts);
+        rte_pause();
+    } while (sent < n_pkts);
+
     return sent;
 }
 
@@ -431,6 +440,7 @@ app_lcore_io_tx_flush(struct app_lcore_params_io *lp)
 static void
 app_lcore_main_loop_io(void)
 {
+    uint64_t prev_tsc = 0, cur_tsc, diff_tsc;
     uint32_t lcore = rte_lcore_id();
     struct app_lcore_params_io *lp = &app.lcore_params[lcore].io;
     uint32_t n_workers = app_get_lcores_worker();
@@ -444,6 +454,14 @@ app_lcore_main_loop_io(void)
     uint8_t pos_lb = app.pos_lb;
 
     while (!app.force_quit) {
+
+        cur_tsc = rte_get_timer_cycles();
+        diff_tsc = cur_tsc - prev_tsc;
+        if (diff_tsc > TIMER_RESOLUTION_CYCLES) {
+            rte_timer_manage();
+            prev_tsc = cur_tsc;
+        };
+
         if (APP_LCORE_IO_FLUSH && (unlikely(i == APP_LCORE_IO_FLUSH))) {
             if (likely(lp->rx.n_nic_queues > 0)) {
                 app_lcore_io_rx_flush(lp, n_workers);
@@ -658,6 +676,13 @@ static void app_lcore_main_loop_worker(void) {
     uint32_t bsz_wr = app.burst_size_worker_write;
 
     while (!app.force_quit) {
+        cur_tsc = rte_get_timer_cycles();
+        diff_tsc = cur_tsc - prev_tsc;
+        if (diff_tsc > TIMER_RESOLUTION_CYCLES) {
+            rte_timer_manage();
+            prev_tsc = cur_tsc;
+        }
+
         if (APP_LCORE_WORKER_FLUSH && (unlikely(i == APP_LCORE_WORKER_FLUSH))) {
             app_lcore_worker_flush(lp);
             i = 0;
@@ -665,12 +690,6 @@ static void app_lcore_main_loop_worker(void) {
 
         app_lcore_worker(lp, bsz_rd, bsz_wr);
 
-        cur_tsc = rte_get_timer_cycles();
-        diff_tsc = cur_tsc - prev_tsc;
-        if (diff_tsc > TIMER_RESOLUTION_CYCLES) {
-            rte_timer_manage();
-            prev_tsc = cur_tsc;
-        }
         i++;
     }
 }
