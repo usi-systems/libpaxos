@@ -45,6 +45,7 @@
 
 #define PREAMBLE_CRC_IPG 24
 
+#define TIMESTAMP_FREQ 1023
 /* Convert bytes to Gbit */
 inline double bytes_to_gbits(uint64_t bytes) {
   double t = bytes;
@@ -258,32 +259,40 @@ learner_new_command_handler(struct paxos_hdr *paxos_hdr,
 
 static inline int chosen_handler(struct paxos_hdr *paxos_hdr,
                                  struct app_lcore_params_worker *lp) {
-    uint64_t previous = rte_be_to_cpu_64(paxos_hdr->igress_ts);
+    uint32_t inst = rte_be_to_cpu_32(paxos_hdr->inst);
     uint64_t now = 0;
-    if (previous > lp->start_ts) {
-        now = rte_get_timer_cycles();
-        uint64_t diff = now - previous;
-        lp->latency += diff;
-        lp->nb_latency++;
-        paxos_hdr->igress_ts = rte_cpu_to_be_64(now);
-        double latency = cycles_to_ns(diff, app.hz);
-        lp->buffer_count += sprintf(&lp->file_buffer[lp->buffer_count], "%.0f\n", latency);
-        if (lp->buffer_count >= CHUNK_SIZE) {
-            fwrite(lp->file_buffer, lp->buffer_count, 1, lp->latency_fp);
-            lp->buffer_count = 0;
+    if (app.p4xos_conf.measure_latency) {
+        uint64_t previous = rte_be_to_cpu_64(paxos_hdr->igress_ts);
+        if (previous > lp->start_ts) {
+            now = rte_get_timer_cycles();
+            uint64_t diff = now - previous;
+            lp->latency += diff;
+            lp->nb_latency++;
+            paxos_hdr->igress_ts = rte_cpu_to_be_64(now);
+            double latency = cycles_to_ns(diff, app.hz);
+            lp->buffer_count += sprintf(&lp->file_buffer[lp->buffer_count], "%u %.0f\n",
+                                            app.p4xos_conf.osd, latency);
+            if (lp->buffer_count >= CHUNK_SIZE) {
+                fwrite(lp->file_buffer, lp->buffer_count, 1, lp->latency_fp);
+                lp->buffer_count = 0;
+            }
         }
     }
-    uint32_t inst = rte_be_to_cpu_32(paxos_hdr->inst);
     size_t vsize = PAXOS_VALUE_SIZE;
     lp->deliver(lp->worker_id, inst, (char *)&paxos_hdr->value, vsize, lp->deliver_arg);
     lp->nb_delivery++;
     paxos_hdr->msgtype = app.p4xos_conf.msgtype;
 
-    if (app.p4xos_conf.measure_latency && rte_be_to_cpu_32(paxos_hdr->inst) & 8191) {
-        if (now == 0) {
-            now = rte_get_timer_cycles();
+    if (app.p4xos_conf.measure_latency) {
+        if (unlikely(inst % TIMESTAMP_FREQ == 0))
+        {
+            if(likely(now == 0)) {
+                now = rte_get_timer_cycles();
+            }
+            paxos_hdr->igress_ts = rte_cpu_to_be_64(now);
+        } else {
+            paxos_hdr->igress_ts = 0;
         }
-        paxos_hdr->igress_ts = rte_cpu_to_be_64(now);
     }
 
     return SUCCESS;
