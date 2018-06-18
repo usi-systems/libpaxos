@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "paxos.h"
+#include "datastore.h"
 
 #define BILLION 1000000000
 
@@ -18,6 +19,23 @@ struct client_context {
 };
 
 void send_to_addr(int fd, struct client_context *ctx);
+
+static void
+set_request(struct request *ap, uint32_t some_value) {
+	ap->type = WRITE_REQ;
+	memcpy((char *)&ap->key, (char*)&some_value, KEYLEN);
+	memcpy((char *)&ap->value, (char*)&some_value, VALLEN);
+}
+
+static void
+receive_response(char *val, size_t size, void *arg) {
+	struct request *req = (struct request*) val;
+	req->type = WRITE_REQ;
+	req->key = req->key + 1;
+	req->value = req->value + 1;
+}
+
+
 
 int
 timespec_diff(struct timespec *result, struct timespec *end,struct timespec *start)
@@ -69,6 +87,7 @@ void on_read(evutil_socket_t fd, short event, void *arg) {
             msg.igress_ts.tv_sec = 0;
             msg.igress_ts.tv_nsec = 0;
         }
+        receive_response((char*)&msg.value, sizeof(msg.value), NULL);
         serialize_paxos_hdr(&msg);
         n = sendto(fd , &msg, sizeof(msg), 0, (struct sockaddr *)&remote, addrlen);
         if (n < 0)
@@ -95,12 +114,13 @@ void send_to_addr(int fd, struct client_context *ctx) {
     msg.msgtype = NEW_COMMAND;
     msg.worker_id = 0;
     msg.rnd = 0;
-    msg.inst =0;
+    msg.inst = 0;
     msg.log_index = 0;
     msg.vrnd = 0;
     msg.acptid = 0;
     msg.igress_ts.tv_sec = 0;
     msg.igress_ts.tv_nsec = 0;
+    set_request((struct request *)&msg.value, msg.inst + 1);
     int msg_size = sizeof msg;
     int n = sendto(fd , &msg, msg_size, 0, (struct sockaddr *)&ctx->server_addr, addr_size);
     if (n < 0) {

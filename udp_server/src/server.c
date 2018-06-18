@@ -10,6 +10,11 @@
 
 #include "paxos.h"
 
+#include "datastore.h"
+
+struct rocksdb_params rocks;
+struct rocksdb_configurations rocksdb_configurations;
+
 struct server_context {
     struct event_base *base;
     int at_second;
@@ -28,6 +33,48 @@ void on_perf(evutil_socket_t fd, short event, void *arg) {
     printf("%4d %8d\n", ctx->at_second++, ctx->message_per_second);
     ctx->message_per_second = 0;
 }
+
+static void deliver(unsigned int worker_id, unsigned int  inst,
+                     char *val,  size_t size, void *arg) {
+    if (rocks.num_workers == 1) {
+        worker_id = 0;
+    }
+
+    struct request *ap = (struct request *)val;
+    // printf("worker %u inst %d, type: %d, key %u, value %u\n", worker_id, inst, ap->type, ap->key, ap->value);
+    if (ap->type == WRITE_REQ) {
+        uint32_t key_len = KEYLEN;   // rte_be_to_cpu_32(ap->key_len);
+        uint32_t value_len = VALLEN; // rte_be_to_cpu_32(ap->value_len);
+        // printf("Key %s, Value %s\n", ap->key, ap->value);
+        // // Single PUT
+        handle_put(rocks.worker[worker_id].db, rocks.writeoptions, (const char *)&ap->key,
+                    key_len, (const char *)&ap->value, value_len);
+        rocks.worker[worker_id].write_count++;
+
+    } else if (ap->type == READ_REQ) {
+        size_t len;
+        uint32_t key_len = KEYLEN; // rte_be_to_cpu_32(ap->key_len);
+        // printf("Key %s\n", ap->key);
+        char *returned_value =
+        handle_get(rocks.worker[worker_id].db, rocks.readoptions, (const char *)&ap->key, key_len, &len);
+        if (returned_value != NULL) {
+            // printf("Key %s: return value %s\n", ap->key, returned_value);
+            memcpy((char *)&ap->value, returned_value, len);
+            free(returned_value);
+        }
+        rocks.worker[worker_id].read_count++;
+    }
+
+    rocks.worker[worker_id].delivered_count++;
+
+    if (rocksdb_configurations.enable_checkpoint) {
+        char cp_path[FILENAME_LENGTH];
+        snprintf(cp_path, FILENAME_LENGTH, "%s/checkpoints/%s-core-%u-inst-%u",
+        rocks.worker[worker_id].db_path, rocks.hostname, worker_id, inst);
+        handle_checkpoint(rocks.worker[worker_id].cp, cp_path);
+    }
+}
+
 
 void send_trim_message(evutil_socket_t fd, uint32_t inst, struct server_context *ctx) {
     struct paxos_hdr trim;
@@ -63,6 +110,7 @@ void on_read(evutil_socket_t fd, short event, void *arg) {
     deserialize_paxos_hdr(&msg);
     ctx->message_per_second++;
     int send_bytes;
+    deliver(msg.worker_id, msg.inst, (char*)&msg.value, sizeof(msg.value), &rocks);
     if (msg.inst % 16384 == 0) {
         send_trim_message(fd, msg.inst, ctx);
     }
@@ -127,6 +175,14 @@ int net_ip__is_multicast_ip(char *ip_address)
 
 int main(int argc, char *argv[])
 {
+    int ret = parse_rocksdb_configuration(argc, argv);
+    if (ret < 0) {
+      rocksdb_print_usage();
+      return -1;
+    }
+    argc -= ret;
+    argv += ret;
+
     struct server_context ctx;
     ctx.base = event_base_new();
     ctx.at_second = 0;
@@ -150,6 +206,10 @@ int main(int argc, char *argv[])
     ctx.server_addr.sin_family = AF_INET;
     memcpy((char *)&(ctx.server_addr.sin_addr.s_addr), (char *)server->h_addr, server->h_length);
     ctx.server_addr.sin_port = htons(9081);
+
+    rocks.num_workers = 1;
+    print_parameters();
+    init_rocksdb(&rocks);
 
     struct event *ev_read, *ev_perf, *ev_signal;
     ev_read = event_new(ctx.base, sock, EV_READ|EV_PERSIST, on_read, &ctx);
