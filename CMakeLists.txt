@@ -28,6 +28,7 @@ add_subdirectory(leveldb-bench)
 add_subdirectory(p4xos)
 add_subdirectory(datastore)
 add_subdirectory(dppaxos)
+add_subdirectory(udp_server)
 
 enable_testing()
 add_subdirectory(unit)
