@@ -242,6 +242,7 @@
 
 #define APP_DEFAULT_IP_SRC_ADDR "192.168.4.95"
 #define APP_DEFAULT_IP_DST_ADDR "192.168.4.98"
+#define APP_DEFAULT_IP_BACKUP_DST_ADDR "192.168.4.98"
 #define APP_DEFAULT_MESSAGE_TYPE 0x0003
 #define APP_DEFAULT_BASELINE 0
 #define APP_DEFAULT_MULTIPLE_DBS 0
@@ -275,6 +276,7 @@ extern "C" {
 
 typedef void (*deliver_cb)(unsigned int, unsigned int, char* value, size_t size, void* arg);
 typedef int (*worker_cb)(struct rte_mbuf *pkt_in, void *arg);
+typedef int (*recv_cb)(char *buffer, size_t len, uint32_t worker_id, struct sockaddr_in *from);
 
 struct p4xos_configuration {
 	uint8_t num_acceptors;
@@ -284,6 +286,7 @@ struct p4xos_configuration {
 	uint16_t node_id;
 	uint32_t src_addr;
 	uint32_t dst_addr;
+	uint32_t backup_dst_addr;
 	uint32_t osd;
 	uint32_t max_inst;
 	uint8_t inc_inst;
@@ -370,7 +373,7 @@ struct app_lcore_params_worker {
 	struct rte_lpm *lpm_table;
 	uint32_t worker_id;
 	uint32_t lcore_id;
-
+	uint16_t app_port;
 	/* Internal buffers */
 	struct app_mbuf_array mbuf_in;
 	struct app_mbuf_array mbuf_out[APP_MAX_NIC_PORTS];
@@ -398,6 +401,7 @@ struct app_lcore_params_worker {
 	deliver_cb deliver;
 	void*	deliver_arg;
 	worker_cb process_pkt;
+	recv_cb app_recvfrom;
 	uint32_t cur_inst;
 	uint32_t has_holes;
 	uint32_t artificial_drop;
@@ -522,6 +526,8 @@ void timer_send_checkpoint(struct rte_timer *timer, void *arg);
 struct rte_sched_port *app_init_sched_port(uint32_t portid,
                                                   uint32_t socketid);
 void app_free_proposer(void);
+void app_set_register_cb(uint16_t port, recv_cb cb);
+int send_backup_file(uint8_t worker_id, char* filename, struct sockaddr_in *from, struct sockaddr_in *to);
 #ifdef __cplusplus
 }  /* end extern "C" */
 #endif

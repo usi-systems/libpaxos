@@ -23,16 +23,16 @@ void send_to_addr(int fd, struct client_context *ctx);
 static void
 set_request(struct request *ap, uint32_t some_value) {
 	ap->type = WRITE_REQ;
-	memcpy((char *)&ap->key, (char*)&some_value, KEYLEN);
-	memcpy((char *)&ap->value, (char*)&some_value, VALLEN);
+	memcpy((char *)&ap->req.write.key, (char*)&some_value, KEYLEN);
+	memcpy((char *)&ap->req.write.value, (char*)&some_value, VALLEN);
 }
 
 static void
 receive_response(char *val, size_t size, void *arg) {
 	struct request *req = (struct request*) val;
 	req->type = WRITE_REQ;
-	req->key = req->key + 1;
-	req->value = req->value + 1;
+	req->req.write.key = req->req.write.key + 1;
+	req->req.write.value = req->req.write.value + 1;
 }
 
 

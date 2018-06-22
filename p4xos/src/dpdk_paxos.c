@@ -128,9 +128,9 @@ int filter_packets(struct rte_mbuf *pkt_in) {
   size_t udp_offset = ip_offset + sizeof(struct ipv4_hdr);
   struct udp_hdr *udp =
       rte_pktmbuf_mtod_offset(pkt_in, struct udp_hdr *, udp_offset);
-  if (rte_be_to_cpu_16(udp->dst_port) != P4XOS_PORT)
-    return NON_PAXOS_PACKET;
-  return SUCCESS;
+  // if (rte_be_to_cpu_16(udp->dst_port) != P4XOS_PORT)
+  //   return NON_PAXOS_PACKET;
+  return rte_be_to_cpu_16(udp->dst_port);
 }
 
 static inline void respond(struct rte_mbuf *pkt_in) {

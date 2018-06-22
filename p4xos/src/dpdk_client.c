@@ -9,6 +9,7 @@
 #include <string.h>
 #include <sys/queue.h>
 #include <sys/types.h>
+#include <math.h>
 
 #include <rte_atomic.h>
 #include <rte_branch_prediction.h>
@@ -41,14 +42,10 @@
 #include "learner.h"
 #include "main.h"
 #include "paxos.h"
+#include "net_util.h"
 
-static const struct ether_addr mac1_addr = {
-    .addr_bytes = {0x08, 0x11, 0x11, 0x11, 0x11, 0x08}};
 
-static const struct ether_addr mac2_addr = {
-    .addr_bytes = {0x08, 0x22, 0x22, 0x22, 0x22, 0x08}};
-
-static void set_ether_hdr(struct ether_hdr *eth, uint16_t ethtype,
+void set_ether_hdr(struct ether_hdr *eth, uint16_t ethtype,
                           const struct ether_addr *src,
                           const struct ether_addr *dst) {
 
@@ -57,8 +54,7 @@ static void set_ether_hdr(struct ether_hdr *eth, uint16_t ethtype,
   ether_addr_copy(dst, &eth->d_addr);
 }
 
-static void set_ipv4_hdr(struct ipv4_hdr *ip, uint8_t proto, uint32_t src,
-                         uint32_t dst) {
+void set_ipv4_hdr(struct ipv4_hdr *ip, uint8_t proto, uint32_t src, uint32_t dst) {
     ip->version_ihl = 0x45;
     ip->total_length = rte_cpu_to_be_16(
                                         sizeof(struct ipv4_hdr) +
@@ -73,7 +69,7 @@ static void set_ipv4_hdr(struct ipv4_hdr *ip, uint8_t proto, uint32_t src,
     ip->dst_addr = dst;
 }
 
-static void set_udp_hdr(struct udp_hdr *udp, uint16_t src_port,
+void set_udp_hdr(struct udp_hdr *udp, uint16_t src_port,
                         uint16_t dst_port, uint16_t dgram_len) {
     udp->src_port = rte_cpu_to_be_16(src_port);
     udp->dst_port = rte_cpu_to_be_16(dst_port);
@@ -81,7 +77,7 @@ static void set_udp_hdr(struct udp_hdr *udp, uint16_t src_port,
     udp->dgram_cksum = 0;
 }
 
-static void set_paxos_hdr(struct paxos_hdr *px, uint8_t msgtype, uint32_t inst,
+void set_paxos_hdr(struct paxos_hdr *px, uint8_t msgtype, uint32_t inst,
                           uint16_t rnd, uint8_t worker_id, uint16_t acptid,
                           char *value, int size) {
     uint64_t igress_ts = 0;
@@ -346,4 +342,123 @@ void send_checkpoint_message(uint8_t worker_id, uint32_t inst) {
     lp->tx.mbuf_out[port].array[n_mbufs] = pkt;
     lp->tx.mbuf_out[port].n_mbufs++;
     // app_send_burst(port, lp->tx.mbuf_out[port].array, n_mbufs);
+}
+
+
+static inline size_t
+get_file_size(FILE *fp)
+{
+    fseek(fp, 0L, SEEK_END);
+    size_t sz = ftell(fp);
+    fseek(fp, 0L, SEEK_SET);
+    return sz;
+}
+
+
+static void
+copy_buffer_to_pkt(struct rte_mbuf *pkt, uint16_t port, uint8_t pid, char* buffer,
+    uint32_t buffer_size, struct sockaddr_in *from, struct sockaddr_in *to)
+{
+    struct ether_hdr *eth = rte_pktmbuf_mtod_offset(pkt, struct ether_hdr *, 0);
+    eth->ether_type = rte_cpu_to_be_16(ETHER_TYPE_IPv4);
+    ether_addr_copy(&mac1_addr, &eth->s_addr);
+    ether_addr_copy(&mac2_addr, &eth->d_addr);
+
+    size_t ip_offset = sizeof(struct ether_hdr);
+    struct ipv4_hdr *ip = rte_pktmbuf_mtod_offset(pkt, struct ipv4_hdr *, ip_offset);
+
+    ip->version_ihl = 0x45;
+    ip->packet_id = rte_cpu_to_be_16(0);
+    ip->fragment_offset = rte_cpu_to_be_16(IPV4_HDR_DF_FLAG);
+    ip->time_to_live = 64;
+    ip->next_proto_id = IPPROTO_UDP;
+    ip->hdr_checksum = 0;
+    ip->src_addr = from->sin_addr.s_addr;
+    ip->dst_addr = to->sin_addr.s_addr;
+
+    size_t udp_offset = ip_offset + sizeof(struct ipv4_hdr);
+    struct udp_hdr *udp = rte_pktmbuf_mtod_offset(pkt, struct udp_hdr *, udp_offset);
+
+    udp->src_port = from->sin_port;
+    udp->dst_port = to->sin_port;
+
+    size_t payload_offset = udp_offset + sizeof(struct udp_hdr);
+    char* req = rte_pktmbuf_mtod_offset(pkt, char*, payload_offset);
+    // HARDCODE MSGTYPE
+    *req = 5;
+    // HARDCODE Partition
+    *(req + 1) = pid;
+    *(req + 2) = rte_cpu_to_be_32(buffer_size);
+    rte_memcpy(req+6, buffer, buffer_size);
+    size_t dgram_len =  sizeof(struct udp_hdr) + 6 + buffer_size;
+    printf("Buffer size %u Dgram len %zu\n", buffer_size, dgram_len);
+    set_udp_hdr(udp, 12345, 39012, dgram_len);
+    size_t pkt_size = udp_offset + dgram_len;
+    ip->total_length = rte_cpu_to_be_16(sizeof(struct ipv4_hdr) + dgram_len);
+    udp->dgram_len = rte_cpu_to_be_16(dgram_len);
+    udp->dgram_cksum = 0;
+    pkt->data_len = pkt_size;
+    pkt->pkt_len = pkt_size;
+    pkt->l2_len = sizeof(struct ether_hdr);
+    pkt->l3_len = sizeof(struct ipv4_hdr);
+    pkt->l4_len = dgram_len;
+    pkt->ol_flags = PKT_TX_IPV4 | PKT_TX_IP_CKSUM | PKT_TX_UDP_CKSUM;
+    udp->dgram_cksum = rte_ipv4_phdr_cksum(ip, pkt->ol_flags);
+}
+
+
+int send_backup_file(uint8_t worker_id, char* filename, struct sockaddr_in *from,
+    struct sockaddr_in *to)
+{
+    #define MAXBUFLEN 1024
+    uint16_t port = app.p4xos_conf.tx_port;
+
+    int ret;
+    uint32_t mbuf_idx;
+    int lcore = app_get_lcore_worker(worker_id);
+    if (lcore < 0) {
+        rte_panic("Invalid worker_id\n");
+    }
+
+    char data[MAXBUFLEN];
+    FILE *fp = fopen(filename, "r");
+    if (fp == NULL) {
+        RTE_LOG(WARNING, P4XOS, "Open file %s has errors\n", filename);
+        return -1;
+    }
+    size_t fsize = get_file_size(fp);
+    uint16_t n_pkts = ceil((double)fsize / MAXBUFLEN);
+
+
+    struct app_lcore_params_worker *lp = app_get_worker(worker_id);
+    struct rte_mbuf *pkts[n_pkts];
+    ret = rte_pktmbuf_alloc_bulk(app.lcore_params[lcore].pool, pkts, n_pkts);
+
+    if (ret < 0)
+    {
+        RTE_LOG(WARNING, P4XOS, "Not enough entries in the mempools\n");
+        return -1;
+    }
+
+    uint32_t i=0;
+    size_t data_len = fread(data, sizeof(char), MAXBUFLEN, fp);
+    while (data_len > 0)
+    {
+        copy_buffer_to_pkt(pkts[i], port, worker_id, data, data_len, from, to);
+        i++;
+        mbuf_idx = lp->mbuf_out[port].n_mbufs;
+        lp->mbuf_out[port].array[mbuf_idx++] = pkts[i];
+        lp->mbuf_out[port].n_mbufs = mbuf_idx;
+
+        data_len = fread(data, sizeof(char), MAXBUFLEN, fp);
+        if ( ferror( fp ) != 0 ) {
+            fputs("Error reading file", stderr);
+            break;
+        }
+    }
+
+    lp->mbuf_out_flush[port] = 1;
+
+    fclose(fp);
+    return 0;
 }

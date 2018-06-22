@@ -64,6 +64,15 @@ int init_rocksdb(struct rocksdb_params *lp) {
             return -1;
         }
 
+        // open Backup Engine that we will use for backing up our database
+        char DBBackupPath[256];
+        snprintf(DBBackupPath, 256, "%s/backup", rocksdb_configurations.db_paths[i]);
+        lp->worker[i].be = rocksdb_backup_engine_open(lp->options, DBBackupPath, &err);
+        if (err != NULL) {
+            fprintf(stderr, "Cannot create backup engine: %s\n", err);
+            return -1;
+        }
+
         lp->worker[i].cp = rocksdb_checkpoint_object_create(lp->worker[i].db, &err);
         if (err != NULL) {
             fprintf(stderr, "Cannot create checkpoint object: %s\n", err);

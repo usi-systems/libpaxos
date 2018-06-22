@@ -47,8 +47,8 @@ static void deliver(unsigned int worker_id, unsigned int  inst,
         uint32_t value_len = VALLEN; // rte_be_to_cpu_32(ap->value_len);
         // printf("Key %s, Value %s\n", ap->key, ap->value);
         // // Single PUT
-        handle_put(rocks.worker[worker_id].db, rocks.writeoptions, (const char *)&ap->key,
-                    key_len, (const char *)&ap->value, value_len);
+        handle_put(rocks.worker[worker_id].db, rocks.writeoptions, (const char *)&ap->req.write.key,
+                    key_len, (const char *)&ap->req.write.value, value_len);
         rocks.worker[worker_id].write_count++;
 
     } else if (ap->type == READ_REQ) {
@@ -56,10 +56,10 @@ static void deliver(unsigned int worker_id, unsigned int  inst,
         uint32_t key_len = KEYLEN; // rte_be_to_cpu_32(ap->key_len);
         // printf("Key %s\n", ap->key);
         char *returned_value =
-        handle_get(rocks.worker[worker_id].db, rocks.readoptions, (const char *)&ap->key, key_len, &len);
+        handle_get(rocks.worker[worker_id].db, rocks.readoptions, (const char *)&ap->req.write.key, key_len, &len);
         if (returned_value != NULL) {
             // printf("Key %s: return value %s\n", ap->key, returned_value);
-            memcpy((char *)&ap->value, returned_value, len);
+            memcpy((char *)&ap->req.write.value, returned_value, len);
             free(returned_value);
         }
         rocks.worker[worker_id].read_count++;

@@ -24,6 +24,7 @@
 #include <rte_ether.h>
 #include <rte_interrupts.h>
 #include <rte_ip.h>
+#include <rte_udp.h>
 #include <rte_launch.h>
 #include <rte_lcore.h>
 #include <rte_log.h>
@@ -536,11 +537,34 @@ app_lcore_worker(
                 continue;
             }
 
-            ret = lp->process_pkt(pkt, lp);
-            if (ret < 0) {
+            if (ret == P4XOS_PORT) {
+                ret = lp->process_pkt(pkt, lp);
+                if (ret < 0) {
+                    rte_pktmbuf_free(pkt);
+                    continue;
+                }
+            } else if (ret == lp->app_port) {
+                size_t udp_offset = sizeof(struct ether_hdr) + sizeof(struct ipv4_hdr);
+                struct udp_hdr *udp =
+                    rte_pktmbuf_mtod_offset(pkt, struct udp_hdr *, udp_offset);
+                size_t data_offset = udp_offset + sizeof(struct udp_hdr);
+                char* buffer = rte_pktmbuf_mtod_offset(pkt, char*, data_offset);
+                size_t len = rte_be_to_cpu_16(udp->dgram_len) - sizeof(struct udp_hdr);
+                struct sockaddr_in from;
+                from.sin_family = AF_INET;
+                from.sin_port = udp->src_port;
+                from.sin_addr.s_addr = ipv4_hdr->src_addr;
+                ret = lp->app_recvfrom(buffer, len, lp->worker_id, &from);
+                if (ret < 0) {
+                    rte_pktmbuf_free(pkt);
+                    continue;
+                }
+            } else {
                 rte_pktmbuf_free(pkt);
                 continue;
             }
+
+
 
             if (!app.p4xos_conf.respond_to_client) {
                 RTE_LOG(DEBUG, P4XOS, "Drop packets. Do not Respond\n");

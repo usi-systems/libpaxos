@@ -29,8 +29,8 @@ struct app_stats {
 static void
 set_request(struct request *ap, uint32_t some_value) {
 	ap->type = WRITE_REQ;
-	rte_memcpy((char *)&ap->key, (char*)&some_value, KEYLEN);
-	rte_memcpy((char *)&ap->value, (char*)&some_value, VALLEN);
+	rte_memcpy((char *)&ap->req.write.key, (char*)&some_value, KEYLEN);
+	rte_memcpy((char *)&ap->req.write.value, (char*)&some_value, VALLEN);
 }
 
 static void receive_response(unsigned int worker_id,
@@ -40,8 +40,8 @@ static void receive_response(unsigned int worker_id,
 	struct request *req = (struct request*) val;
 	// printf("Worker %u Received a response: %u %u %u\n", worker_id, req->type, req->key, req->value);
 	req->type = WRITE_REQ;
-	req->key = req->key + 1;
-	req->value = req->value + 1;
+	req->req.write.key = req->req.write.key + 1;
+	req->req.write.value = req->req.write.value + 1;
 }
 
 static void

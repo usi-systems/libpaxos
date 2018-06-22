@@ -18,10 +18,12 @@
 #include <rte_timer.h>
 #include <rte_udp.h>
 #include <stdint.h>
+#include <math.h>
 
 #include "dpp_paxos.h"
 #include "main.h"
 #include "datastore.h"
+#include "net_util.h"
 
 #define RTE_LOGTYPE_XCLIENT RTE_LOGTYPE_USER1
 
@@ -32,6 +34,7 @@
 #define MBUF_CACHE_SIZE 256
 
 #define CHUNK_SIZE 4096
+#define LEARNER_RECOVERY_PORT 39012
 
 #define RATE_LIMITER
 
@@ -76,9 +79,9 @@ static void destroy_client() {
 static void set_request(struct request *ap, uint32_t inst, uint8_t msg_type,
                         uint8_t key, uint16_t value) {
   ap->type = msg_type;
-  ap->key = key;
+  ap->req.write.key = key;
   if (ap->type == WRITE_REQ) {
-    ap->value = value;
+    ap->req.write.value = value;
   }
 }
 
@@ -134,9 +137,6 @@ static struct rte_mbuf *prepare_base_pkt(struct rte_mempool *mbuf_pool,
 
 static int submit_requests(struct rte_mbuf *pkt) {
   uint16_t port = app.p4xos_conf.tx_port;
-  struct ipv4_hdr *ip_hdr = rte_pktmbuf_mtod_offset(pkt, struct ipv4_hdr *,
-                                                    sizeof(struct ether_hdr));
-
   prepare_message(pkt, port, app.p4xos_conf.src_addr,
                   app.p4xos_conf.dst_addr, app.p4xos_conf.msgtype, 0, 0,
                   0, app.p4xos_conf.node_id, NULL, 0);
@@ -176,6 +176,97 @@ static int submit_requests(struct rte_mbuf *pkt) {
       rte_pktmbuf_free(pkts_tx[i]);
   }
   return nb_tx;
+}
+
+static inline size_t
+get_file_size(FILE *fp)
+{
+    fseek(fp, 0L, SEEK_END);
+    size_t sz = ftell(fp);
+    fseek(fp, 0L, SEEK_SET);
+    return sz;
+}
+
+
+static void
+copy_buffer_to_pkt(struct rte_mbuf *pkt, uint16_t port, char* buffer, uint32_t buffer_size)
+{
+    struct ether_hdr *eth = rte_pktmbuf_mtod_offset(pkt, struct ether_hdr *, 0);
+    set_ether_hdr(eth, ETHER_TYPE_IPv4, &mac1_addr, &mac2_addr);
+    size_t ip_offset = sizeof(struct ether_hdr);
+    struct ipv4_hdr *ip = rte_pktmbuf_mtod_offset(pkt, struct ipv4_hdr *, ip_offset);
+    set_ipv4_hdr(ip, IPPROTO_UDP, app.p4xos_conf.src_addr, app.p4xos_conf.dst_addr);
+    size_t udp_offset = ip_offset + sizeof(struct ipv4_hdr);
+    struct udp_hdr *udp = rte_pktmbuf_mtod_offset(pkt, struct udp_hdr *, udp_offset);
+    size_t payload_offset = udp_offset + sizeof(struct udp_hdr);
+    struct request *req = rte_pktmbuf_mtod_offset(pkt, struct request*, payload_offset);
+    // MSGTYPE
+    req->type = BACKUP_RES;
+    // Partition
+    req->req.backup_res.pid = 0;
+    req->req.backup_res.bufsize = rte_cpu_to_be_32(buffer_size);
+    rte_memcpy(req->req.backup_res.buffer, buffer, buffer_size);
+    size_t dgram_len =  sizeof(struct udp_hdr) +
+                        sizeof(req->type) +
+                        sizeof(req->req.backup_res.pid) +
+                        sizeof(req->req.backup_res.bufsize) +
+                        buffer_size;
+    printf("Buffer size %u Dgram len %zu\n", buffer_size, dgram_len);
+    set_udp_hdr(udp, 12345, LEARNER_RECOVERY_PORT, dgram_len);
+    size_t pkt_size = udp_offset + dgram_len;
+    udp->dgram_len = rte_cpu_to_be_16(dgram_len);
+    pkt->data_len = pkt_size;
+    pkt->pkt_len = pkt_size;
+    pkt->l2_len = sizeof(struct ether_hdr);
+    pkt->l3_len = sizeof(struct ipv4_hdr);
+    pkt->l4_len = dgram_len;
+    pkt->ol_flags = PKT_TX_IPV4 | PKT_TX_IP_CKSUM | PKT_TX_UDP_CKSUM;
+    udp->dgram_cksum = rte_ipv4_phdr_cksum(ip, pkt->ol_flags);
+}
+
+
+static int send_file(char* filename)
+{
+    #define MAXBUFLEN 1024
+    uint16_t port = app.p4xos_conf.tx_port;
+
+    char source[MAXBUFLEN];
+    FILE *fp = fopen(filename, "r");
+    if (fp == NULL) {
+        RTE_LOG(WARNING, XCLIENT, "Open file %s has errors\n", filename);
+        return -1;
+    }
+    size_t fsize = get_file_size(fp);
+    uint16_t n_pkts = ceil((double)fsize / MAXBUFLEN);
+    struct rte_mbuf *pkts[n_pkts];
+    if (rte_pktmbuf_alloc_bulk(client.mbuf_pool, pkts, n_pkts) < 0)
+    {
+        RTE_LOG(WARNING, XCLIENT, "Not enough entries in the mempools\n");
+        return -1;
+    }
+
+    uint32_t i=0;
+    size_t newLen = fread(source, sizeof(char), MAXBUFLEN, fp);
+    while (newLen > 0)
+    {
+        copy_buffer_to_pkt(pkts[i], port, source, newLen);
+        i++;
+        newLen = fread(source, sizeof(char), MAXBUFLEN, fp);
+        if ( ferror( fp ) != 0 ) {
+            fputs("Error reading file", stderr);
+            break;
+        }
+    }
+
+    /* Send burst of TX packets, to port X. */
+    printf("Send file %s in %u packets\n", filename, n_pkts);
+    uint16_t sent;
+    do {
+        sent = rte_eth_tx_burst(port, 0, pkts, n_pkts);
+        n_pkts -= sent;
+    } while(n_pkts);
+    fclose(fp);
+    return 0;
 }
 
 
@@ -441,7 +532,7 @@ static int lcore_rx(void *arg) {
            port);
 
   printf("\nCore %u Receiving packets. [Ctrl+C to quit]\n", rte_lcore_id());
-
+  send_file("/home/danghu/backup/private/1/000003.log");
   struct rte_mbuf *base_pkt =
       prepare_base_pkt(client.mbuf_pool, port, app.p4xos_conf.node_id, 0);
   /* Run until the application is quit or killed. */
@@ -461,9 +552,9 @@ static int lcore_rx(void *arg) {
     if (likely(nb_rx > 0)) {
         uint32_t nb_tx = packet_handler(port, pkts_rx, nb_rx);
         /* Drop received packets */
-        // uint32_t k;
-        // for (k=0; k < nb_tx; k++)
-        //     rte_pktmbuf_free(pkts_rx[k]);
+        uint32_t k;
+        for (k=0; k < nb_tx; k++)
+            rte_pktmbuf_free(pkts_rx[k]);
     }
     submit_requests(base_pkt);
   }

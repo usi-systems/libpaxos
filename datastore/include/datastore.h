@@ -30,7 +30,11 @@
 #define DEFAULT_NB_KEYS 1000000
 #define READ_REQ  1
 #define WRITE_REQ 2
+#define CHECKPOINT_REQ 3
+#define BACKUP_REQ 4
+#define BACKUP_RES 5
 #define MAX_NB_PARTITION 32
+
 
 struct rocksdb_configurations {
   uint8_t write_sync;
@@ -52,6 +56,7 @@ struct rocksdb_lcore_params {
     char *db_path;
     rocksdb_t *db;
     rocksdb_checkpoint_t *cp;
+    rocksdb_backup_engine_t *be;
     uint32_t delivered_count;
     uint32_t write_count;
     uint32_t read_count;
@@ -72,11 +77,36 @@ struct rocksdb_params {
 #define KEYLEN 4
 #define VALLEN 2
 
-struct request {
+struct read_req {
     uint32_t key;
     uint16_t value;
-    uint8_t type;
     uint8_t terminator;
+};
+
+struct write_req {
+    uint32_t key;
+    uint16_t value;
+    uint8_t terminator;
+};
+
+struct backup_req {
+    uint8_t pid; // Partition_id;
+};
+
+struct backup_res {
+    uint8_t pid; // Partition_id;
+    uint32_t bufsize;
+    char* buffer[1];
+};
+
+struct request {
+    uint8_t type;
+    union {
+        struct read_req read;
+        struct write_req write;
+        struct backup_req backup_req;
+        struct backup_res backup_res;
+    } req;
 }  __attribute__((__packed__));
 
 extern struct rocksdb_configurations rocksdb_configurations;
@@ -93,5 +123,8 @@ void handle_put(struct rocksdb_t *db, struct rocksdb_writeoptions_t *writeoption
 char* handle_get(struct rocksdb_t *db, struct rocksdb_readoptions_t *readoptions,
                 const char *key, uint32_t keylen, size_t *vallen);
 void handle_checkpoint(struct rocksdb_checkpoint_t *cp, const char *cp_path);
+void handle_backup(struct rocksdb_t *db, rocksdb_backup_engine_t *be);
 void display_rocksdb_statistics(struct rocksdb_params *lp);
+void lcore_cleanup(struct rocksdb_lcore_params *lp);
+void cleanup(struct rocksdb_params *lp);
 #endif // _DATASTORE_H_

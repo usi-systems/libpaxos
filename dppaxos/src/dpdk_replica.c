@@ -20,7 +20,8 @@
 
 struct rocksdb_params rocks;
 struct rocksdb_configurations rocksdb_configurations;
-
+struct sockaddr_in recover_ep;
+#define LEARNER_RECOVERY_PORT 39012
 
 static void baseline_deliver(unsigned int worker_id,
                              unsigned int __rte_unused inst,
@@ -52,8 +53,8 @@ static void deliver(unsigned int worker_id, unsigned int __rte_unused inst,
         uint32_t value_len = VALLEN; // rte_be_to_cpu_32(ap->value_len);
         // printf("Key %s, Value %s\n", ap->key, ap->value);
         // // Single PUT
-        handle_put(rocks->worker[worker_id].db, rocks->writeoptions, (const char *)&ap->key,
-                    key_len, (const char *)&ap->value, value_len);
+        handle_put(rocks->worker[worker_id].db, rocks->writeoptions, (const char *)&ap->req.write.key,
+                    key_len, (const char *)&ap->req.write.value, value_len);
         rocks->worker[worker_id].write_count++;
 
     } else if (ap->type == READ_REQ) {
@@ -61,13 +62,15 @@ static void deliver(unsigned int worker_id, unsigned int __rte_unused inst,
         uint32_t key_len = KEYLEN; // rte_be_to_cpu_32(ap->key_len);
         // printf("Key %s\n", ap->key);
         char *returned_value =
-        handle_get(rocks->worker[worker_id].db, rocks->readoptions, (const char *)&ap->key, key_len, &len);
+        handle_get(rocks->worker[worker_id].db, rocks->readoptions, (const char *)&ap->req.read.key, key_len, &len);
         if (returned_value != NULL) {
             // printf("Key %s: return value %s\n", ap->key, returned_value);
-            rte_memcpy((char *)&ap->value, returned_value, len);
+            rte_memcpy((char *)&ap->req.read.value, returned_value, len);
             free(returned_value);
         }
         rocks->worker[worker_id].read_count++;
+    } else if (ap->type == BACKUP_REQ) {
+        handle_backup(rocks->worker[worker_id].db, rocks->worker[worker_id].be);
     }
 
     rocks->worker[worker_id].delivered_count++;
@@ -126,6 +129,38 @@ static void stat_cb(__rte_unused struct rte_timer *timer,
 }
 
 
+int recovery_cb(char *buffer, size_t len, uint32_t worker_id, struct sockaddr_in *from)
+{
+    struct request *ap = (struct request*)buffer;
+    printf("Request type %u\n", ap->type);
+    if (ap->type == BACKUP_REQ) {
+        handle_backup(rocks.worker[worker_id].db, rocks.worker[worker_id].be);
+        char filename[] = "/tmp/backup.tar";
+        char cmd[256];
+        snprintf(cmd, 256, "tar cvf %s %s/backup", filename, rocksdb_configurations.db_paths[worker_id]);
+        int ret = system(cmd);
+        if (ret < 0) {
+            printf("Cannot create tar file for backup\n");
+            return -1;
+        }
+        send_backup_file(worker_id, filename, &recover_ep, from);
+        return 0;
+    }
+    else if (ap->type == BACKUP_RES) {
+        uint32_t buffer_size = rte_be_to_cpu_32(ap->req.backup_res.bufsize);
+
+        char filename[] = "/tmp/backup.tar";
+        FILE *fp = fopen(filename,"ab");
+        if (fp) {
+            fwrite(ap->req.backup_res.buffer, buffer_size, 1, fp);
+            printf("Write %u bytes to file %s\n", buffer_size, filename);
+        }
+        fclose(fp);
+        return -1;
+    }
+    return 0;
+}
+
 static void
 int_handler(int sig_num)
 {
@@ -182,6 +217,10 @@ int main(int argc, char **argv) {
   app_set_worker_callback(replica_handler);
   app_set_stat_callback(stat_cb, &rocks);
 
+  recover_ep.sin_family = AF_INET;
+  recover_ep.sin_port = htons(LEARNER_RECOVERY_PORT);
+  recover_ep.sin_addr.s_addr = app.p4xos_conf.src_addr;
+  app_set_register_cb(LEARNER_RECOVERY_PORT, recovery_cb);
   uint32_t i;
   uint32_t n_workers = app_get_lcores_worker();
 
@@ -199,6 +238,6 @@ int main(int argc, char **argv) {
       return -1;
     }
   }
-
+  cleanup(&rocks);
   return 0;
 }

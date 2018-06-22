@@ -33,11 +33,42 @@ void handle_checkpoint(struct rocksdb_checkpoint_t *cp, const char *cp_path) {
 }
 
 
+void handle_backup(struct rocksdb_t *db, rocksdb_backup_engine_t *be) {
+    char *err = NULL;
+    // create new backup in a directory specified by DBBackupPath
+    rocksdb_backup_engine_create_new_backup(be, db, &err);
+    if (err != NULL) {
+        fprintf(stderr, "Backup Error: %s\n", err);
+    }
+}
+
+
 void display_rocksdb_statistics(struct rocksdb_params *lp)
 {
     if (rocksdb_configurations.enable_statistics) {
         char *stats = rocksdb_options_statistics_get_string(lp->options);
         printf("\n\n%s\n", stats);
         free(stats);
+    }
+}
+
+void lcore_cleanup(struct rocksdb_lcore_params *lp)
+{
+    rocksdb_checkpoint_object_destroy(lp->cp);
+    rocksdb_backup_engine_close(lp->be);
+    rocksdb_close(lp->db);
+}
+
+void cleanup(struct rocksdb_params *lp)
+{
+    // cleanup
+    printf("Successfully Clean up\n");
+
+    rocksdb_writeoptions_destroy(lp->writeoptions);
+    rocksdb_readoptions_destroy(lp->readoptions);
+    rocksdb_options_destroy(lp->options);
+    unsigned i = 0;
+    for (; i < lp->num_workers; i++) {
+        lcore_cleanup(&lp->worker[i]);
     }
 }

@@ -762,3 +762,19 @@ struct rte_sched_port *app_init_sched_port(uint32_t portid,
   }
   return port;
 }
+
+void
+app_set_register_cb(uint16_t port, recv_cb event_cb)
+{
+    uint32_t lcore;
+
+    for (lcore = 0; lcore < APP_MAX_LCORES; lcore++) {
+        struct app_lcore_params_worker *lp = &app.lcore_params[lcore].worker;
+
+        if (app.lcore_params[lcore].type != e_APP_LCORE_WORKER) {
+            continue;
+        }
+            lp->app_port = port;
+            lp->app_recvfrom = event_cb;
+        }
+}

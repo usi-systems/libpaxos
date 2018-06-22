@@ -907,6 +907,7 @@ int app_parse_args(int argc, char **argv) {
   if (dst_addr == 0) {
     parse_arg_ip_address(APP_DEFAULT_IP_DST_ADDR, &(app.p4xos_conf.dst_addr));
   }
+  parse_arg_ip_address(APP_DEFAULT_IP_BACKUP_DST_ADDR, &(app.p4xos_conf.backup_dst_addr));
 
   if (msgtype == 0) {
     app.p4xos_conf.msgtype = APP_DEFAULT_MESSAGE_TYPE;
