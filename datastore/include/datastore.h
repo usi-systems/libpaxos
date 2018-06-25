@@ -23,6 +23,7 @@
 #define DEFAULT_DISABLE_CHECKPOINT 0
 #define DEFAULT_DISABLE_STATISTICS 0
 #define DEFAULT_RM_EXISTED_DB 0
+#define DEFAULT_SYNC_DB 0
 #define DEFAULT_MEM_BUDGET 512 * 1024 * 1024
 #define DEFAULT_LOG_SIZE_FLUSH 4 * 1024 * 1024
 #define DEFAULT_WRITE_BUFFER_SIZE 4 * 1024 * 1024
@@ -38,11 +39,13 @@ struct rocksdb_configurations {
   uint8_t enable_checkpoint;
   uint8_t enable_statistics;
   uint8_t rm_existed_db;
+  uint8_t sync_db;
   uint32_t mem_budget;
   uint32_t flush_size;
   uint32_t partition_count;
   uint32_t nb_keys;
   char* db_paths[MAX_NB_PARTITION];
+  char* replica_hostname;
 };
 
 struct rocksdb_lcore_params {

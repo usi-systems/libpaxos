@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "datastore.h"
 
@@ -37,6 +38,20 @@ int init_rocksdb(struct rocksdb_params *lp) {
             ret = system(cmd);
             if (ret < 0) {
                 printf("Cannot remove db dir\n");
+                return -1;
+            }
+        }
+
+        if (rocksdb_configurations.sync_db) {
+            char cmd[256];
+            char* hostname = strtok(rocksdb_configurations.replica_hostname, "\n");
+            snprintf(cmd, 256, "exec rsync -azr --delete %s:%s %s",
+            hostname,
+            rocksdb_configurations.db_paths[i], rocksdb_configurations.db_paths[i]);
+            printf("%s\n", cmd);
+            ret = system(cmd);
+            if (ret < 0) {
+                printf("Cannot sync db dir\n");
                 return -1;
             }
         }

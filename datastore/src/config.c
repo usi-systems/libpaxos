@@ -87,6 +87,12 @@ void populate_configuration(char *config_file, struct rocksdb_configurations *co
                     conf->rm_existed_db = atoi(token);
                 }
             }
+            else if (strcmp(token, "sync_db") == 0) {
+                token = strtok(NULL, delim);
+                if (conf->sync_db == DEFAULT_SYNC_DB) {
+                    conf->sync_db = atoi(token);
+                }
+            }
             else if (strcmp(token, "enable_checkpoint") == 0) {
                 token = strtok(NULL, delim);
                 if (conf->enable_checkpoint == DEFAULT_DISABLE_CHECKPOINT) {
@@ -116,6 +122,13 @@ void populate_configuration(char *config_file, struct rocksdb_configurations *co
                 while(token != NULL && strlen(token) > 0) {
                     conf->db_paths[conf->partition_count] = strdup(token);
                     conf->partition_count++;
+                    token = strtok(NULL, delim);
+                }
+            }
+            else if (strcmp(token, "replica_hostname") == 0) {
+                token = strtok(NULL, delim);
+                if (token != NULL && strlen(token) > 0) {
+                    conf->replica_hostname = strdup(token);
                     token = strtok(NULL, delim);
                 }
             }
@@ -213,6 +226,10 @@ void free_rocksdb_configurations(struct rocksdb_configurations *conf) {
     unsigned i;
     for (i = 0; i < conf->partition_count; i++)
         free(conf->db_paths[i]);
+
+    if (conf->replica_hostname) {
+        free(conf->replica_hostname);
+    }
 }
 
 
@@ -222,14 +239,19 @@ void print_parameters(void) {
         "disable_wal: %u\n"
         "use-fsync: %u\n"
         "enable_checkpoint: %u\n"
+        "rm_existed_db: %u\n"
+        "sync_db: %u\n"
         "enable-statistics: %u\n"
         "mem_budget: %u\n"
         "nb_keys: %u\n"
-        "flush_size: %u\n",
+        "flush_size: %u\n"
+        "replica_hostname: %s\n",
         rocksdb_configurations.write_sync, rocksdb_configurations.disable_wal,
         rocksdb_configurations.use_fsync, rocksdb_configurations.enable_checkpoint,
+        rocksdb_configurations.rm_existed_db, rocksdb_configurations.sync_db,
         rocksdb_configurations.enable_statistics, rocksdb_configurations.mem_budget,
-        rocksdb_configurations.nb_keys, rocksdb_configurations.flush_size);
+        rocksdb_configurations.nb_keys, rocksdb_configurations.flush_size,
+        rocksdb_configurations.replica_hostname);
 
     unsigned i;
     for (i = 0; i < rocksdb_configurations.partition_count; i++)
