@@ -32,6 +32,7 @@
 #include <rte_sched.h>
 
 #include "paxos.h"
+#include "dpp_paxos.h"
 /* Logical cores */
 #ifndef APP_MAX_SOCKETS
 #define APP_MAX_SOCKETS 2
@@ -230,37 +231,6 @@
 #error "APP_DEFAULT_IO_RX_LB_POS is too big"
 #endif
 
-/* Paxos logic */
-#ifndef APP_DEFAULT_NUM_ACCEPTORS
-#define APP_DEFAULT_NUM_ACCEPTORS 1
-#endif
-#if (APP_DEFAULT_NUM_ACCEPTORS >= 7)
-#error "APP_DEFAULT_NUM_ACCEPTORS is too big"
-#endif
-
-#define P4XOS_PORT 0x2379
-
-#define APP_DEFAULT_IP_SRC_ADDR "192.168.4.95"
-#define APP_DEFAULT_IP_DST_ADDR "192.168.4.98"
-#define APP_DEFAULT_IP_BACKUP_DST_ADDR "192.168.4.98"
-#define APP_DEFAULT_MESSAGE_TYPE 0x0003
-#define APP_DEFAULT_BASELINE 0
-#define APP_DEFAULT_MULTIPLE_DBS 0
-#define APP_DEFAULT_RESET_INST 0
-#define APP_DEFAULT_INCREASE_INST 0
-#define APP_DEFAULT_RUN_PREPARE 0
-#define APP_DEFAULT_TX_PORT 0
-#define APP_DEFAULT_NODE_ID 0
-#define APP_DEFAULT_CHECKPOINT_INTERVAL 0
-#define APP_DEFAULT_SEND_RESPONSE 0
-#define APP_DEFAULT_TS_INTERVAL 4
-#define APP_DEFAULT_DROP 0
-#define APP_DEFAULT_MEASURE_LATENCY 0
-#define APP_DEFAULT_OUTSTANDING	8
-#define APP_DEFAULT_MAX_INST	24000000
-#define APP_DEFAULT_SENDING_RATE 10000
-#define FILENAME_LENGTH 128
-#define CHUNK_SIZE 4096
 
 #define MAX_SCHED_SUBPORTS 1
 #define MAX_SCHED_PIPES 1
@@ -278,28 +248,6 @@ typedef void (*deliver_cb)(unsigned int, unsigned int, char* value, size_t size,
 typedef int (*worker_cb)(struct rte_mbuf *pkt_in, void *arg);
 typedef int (*recv_cb)(char *buffer, size_t len, uint32_t worker_id, struct sockaddr_in *from);
 
-struct p4xos_configuration {
-	uint8_t num_acceptors;
-	uint8_t multi_dbs;
-	uint8_t msgtype;
-	uint16_t tx_port;
-	uint16_t node_id;
-	uint32_t src_addr;
-	uint32_t dst_addr;
-	uint32_t backup_dst_addr;
-	uint32_t osd;
-	uint32_t max_inst;
-	uint8_t inc_inst;
-	uint8_t reset_inst;
-	uint8_t baseline;
-	uint8_t drop;
-	uint8_t measure_latency;
-	uint8_t run_prepare;
-	uint8_t respond_to_client;
-	uint32_t checkpoint_interval;
-	uint32_t ts_interval;
-	uint32_t rate;
-};
 
 struct app_mbuf_array {
 	struct rte_mbuf *array[APP_MBUF_ARRAY_SIZE];
@@ -493,7 +441,8 @@ void app_print_params(void);
 void submit(uint8_t worker_id, char* value, int size);
 void submit_bulk(uint8_t worker_id, uint32_t nb_pkts,
     struct app_lcore_params_worker *lp, char *value, int size);
-void submit_bulk_priority(uint8_t worker_id, uint32_t nb_pkts, char *value, int size);
+void submit_bulk_priority(uint8_t worker_id, uint32_t nb_pkts, char *value,
+	int size);
 void flush_port(uint16_t port);
 void app_set_deliver_callback(deliver_cb, void *arg);
 void app_set_worker_callback(worker_cb);
@@ -514,12 +463,11 @@ void proposer_resubmit(struct rte_timer *timer, void *arg);
 void reset_leader_instance(uint32_t worker_id);
 double bytes_to_gbits(uint64_t bytes);
 double cycles_to_ns(uint64_t cycles, uint64_t hz);
-void send_prepare(struct app_lcore_params_worker *lp, uint32_t inst, uint32_t prepare_size, char* value, int size);
-void fill_holes(struct app_lcore_params_worker *lp, uint32_t inst, uint32_t prepare_size, char* value, int size);
+void send_prepare(struct app_lcore_params_worker *lp, uint32_t inst,
+					uint32_t prepare_size, char* value, int size);
+void fill_holes(struct app_lcore_params_worker *lp, uint32_t inst,
+					uint32_t prepare_size, char* value, int size);
 void send_accept(struct app_lcore_params_worker *lp, paxos_accept* accept);
-void prepare_message(struct rte_mbuf *created_pkt, uint16_t port, uint32_t src_addr,
-						uint32_t dst_addr, uint8_t msgtype, uint32_t inst,
-						uint16_t rnd, uint8_t worker_id, uint16_t node_id, char* value, int size);
 void send_checkpoint_message(uint8_t worker_id, uint32_t inst);
 int app_send_burst(uint16_t port, struct rte_mbuf **pkts, uint32_t n_pkts);
 void timer_send_checkpoint(struct rte_timer *timer, void *arg);
@@ -527,7 +475,11 @@ struct rte_sched_port *app_init_sched_port(uint32_t portid,
                                                   uint32_t socketid);
 void app_free_proposer(void);
 void app_set_register_cb(uint16_t port, recv_cb cb);
-int send_backup_file(uint8_t worker_id, char* filename, struct sockaddr_in *from, struct sockaddr_in *to);
+void prepare_paxos_message(struct rte_mbuf *created_pkt, uint16_t port,
+                        struct sockaddr_in* src, struct sockaddr_in* dst,
+                        uint8_t msgtype, uint32_t inst, uint16_t rnd,
+                        uint8_t worker_id, uint16_t node_id, char* value, int size);
+int net_sendto(uint8_t worker_id, char* buf, size_t len, struct sockaddr_in *to);
 #ifdef __cplusplus
 }  /* end extern "C" */
 #endif

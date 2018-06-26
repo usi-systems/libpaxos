@@ -123,8 +123,8 @@ static struct rte_mbuf *prepare_base_pkt(struct rte_mempool *mbuf_pool,
   uint16_t value = 2345;
   set_request(&ap, 0, msg_type, 1, value);
 
-  prepare_message(base_pkt, port, app.p4xos_conf.src_addr,
-                  app.p4xos_conf.dst_addr, app.p4xos_conf.msgtype, 0, 0,
+  prepare_paxos_message(base_pkt, port, &app.p4xos_conf.mine,
+                  &app.p4xos_conf.paxos_leader, app.p4xos_conf.msgtype, 0, 0,
                   worker_id, app.p4xos_conf.node_id, (char *)&ap,
                   sizeof(struct request));
 
@@ -137,8 +137,8 @@ static struct rte_mbuf *prepare_base_pkt(struct rte_mempool *mbuf_pool,
 
 static int submit_requests(struct rte_mbuf *pkt) {
   uint16_t port = app.p4xos_conf.tx_port;
-  prepare_message(pkt, port, app.p4xos_conf.src_addr,
-                  app.p4xos_conf.dst_addr, app.p4xos_conf.msgtype, 0, 0,
+  prepare_paxos_message(pkt, port, &app.p4xos_conf.mine,
+                  &app.p4xos_conf.paxos_leader, app.p4xos_conf.msgtype, 0, 0,
                   0, app.p4xos_conf.node_id, NULL, 0);
 
   client.tx_iter_count++;
@@ -192,10 +192,8 @@ static void
 copy_buffer_to_pkt(struct rte_mbuf *pkt, uint16_t port, char* buffer, uint32_t buffer_size)
 {
     struct ether_hdr *eth = rte_pktmbuf_mtod_offset(pkt, struct ether_hdr *, 0);
-    set_ether_hdr(eth, ETHER_TYPE_IPv4, &mac1_addr, &mac2_addr);
     size_t ip_offset = sizeof(struct ether_hdr);
     struct ipv4_hdr *ip = rte_pktmbuf_mtod_offset(pkt, struct ipv4_hdr *, ip_offset);
-    set_ipv4_hdr(ip, IPPROTO_UDP, app.p4xos_conf.src_addr, app.p4xos_conf.dst_addr);
     size_t udp_offset = ip_offset + sizeof(struct ipv4_hdr);
     struct udp_hdr *udp = rte_pktmbuf_mtod_offset(pkt, struct udp_hdr *, udp_offset);
     size_t payload_offset = udp_offset + sizeof(struct udp_hdr);
@@ -214,6 +212,13 @@ copy_buffer_to_pkt(struct rte_mbuf *pkt, uint16_t port, char* buffer, uint32_t b
     printf("Buffer size %u Dgram len %zu\n", buffer_size, dgram_len);
     set_udp_hdr(udp, 12345, LEARNER_RECOVERY_PORT, dgram_len);
     size_t pkt_size = udp_offset + dgram_len;
+
+    set_ipv4_hdr(ip, IPPROTO_UDP, app.p4xos_conf.mine.sin_addr.s_addr,
+                    app.p4xos_conf.primary_replica.sin_addr.s_addr, pkt_size);
+    struct ether_addr addr;
+    rte_eth_macaddr_get(port, &addr);
+    set_ether_hdr(eth, ETHER_TYPE_IPv4, &addr, &mac2_addr);
+
     udp->dgram_len = rte_cpu_to_be_16(dgram_len);
     pkt->data_len = pkt_size;
     pkt->pkt_len = pkt_size;
@@ -267,34 +272,6 @@ static int send_file(char* filename)
     } while(n_pkts);
     fclose(fp);
     return 0;
-}
-
-
-static void reset_instance(struct rte_mempool *mbuf_pool, uint32_t n_workers) {
-  int ret;
-  uint16_t port = app.p4xos_conf.tx_port;
-
-  struct rte_mbuf *prepare_pkts[n_workers];
-  ret = rte_pktmbuf_alloc_bulk(mbuf_pool, prepare_pkts, n_workers);
-
-  if (ret < 0) {
-    RTE_LOG(DEBUG, XCLIENT, "Not enough entries in the mempools for RESET\n");
-    return;
-  }
-
-  uint32_t i;
-  for (i = 0; i < n_workers; i++) {
-    prepare_message(prepare_pkts[i], port, app.p4xos_conf.src_addr,
-                    app.p4xos_conf.dst_addr, PAXOS_RESET, 0, 0, i,
-                    app.p4xos_conf.node_id, NULL, 0);
-  }
-
-  uint32_t buf;
-  buf = rte_eth_tx_burst(port, 0, prepare_pkts, n_workers);
-  if (unlikely(buf < n_workers)) {
-    for (; buf < n_workers; buf++)
-      rte_pktmbuf_free(prepare_pkts[buf]);
-  }
 }
 
 static const struct rte_eth_conf port_conf_default = {

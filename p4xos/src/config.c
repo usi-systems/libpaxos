@@ -616,20 +616,32 @@ static int parse_arg_uint32(const char *arg, uint32_t *out_number) {
   return 0;
 }
 
-static int parse_arg_ip_address(const char *arg, uint32_t *addr) {
-  if (strnlen(arg, APP_ARG_NUMERICAL_SIZE_CHARS + 1) ==
-      APP_ARG_NUMERICAL_SIZE_CHARS + 1) {
-    return -1;
-  }
-
-  int ret;
-  ret = inet_pton(AF_INET, arg, addr);
-
-  if (ret == 0 || ret < 0) {
-    return -1;
-  }
-
-  return 0;
+static int
+parse_arg_ip_address(const char *arg, struct sockaddr_in *addr)
+{
+    int ret;
+    char* ip_and_port = strdup(arg);
+    const char delim[2] = ":";
+    char* token = strtok(ip_and_port, delim);
+    addr->sin_family = AF_INET;
+    if (token != NULL) {
+        ret = inet_pton(AF_INET, token, &addr->sin_addr);
+        if (ret == 0 || ret < 0) {
+            return -1;
+        }
+    }
+    token = strtok(NULL, delim);
+    if (token != NULL) {
+        uint32_t x;
+        char* endpt;
+        errno = 0;
+        x = strtoul(token, &endpt, 10);
+        if (errno != 0 || endpt == arg || *endpt != '\0') {
+          return -2;
+        }
+        addr->sin_port = htons(x);
+    }
+    return 0;
 }
 
 /* Parse the argument given in the command line of the application */
@@ -848,7 +860,7 @@ int app_parse_args(int argc, char **argv) {
       }
       if (!strcmp(lgopts[option_index].name, "src")) {
         src_addr = 1;
-        ret = parse_arg_ip_address(optarg, &(app.p4xos_conf.src_addr));
+        ret = parse_arg_ip_address(optarg, &(app.p4xos_conf.mine));
         if (ret) {
           printf("Incorrect value for --src argument (%d)\n", ret);
           return -1;
@@ -856,7 +868,7 @@ int app_parse_args(int argc, char **argv) {
       }
       if (!strcmp(lgopts[option_index].name, "dst")) {
         dst_addr = 1;
-        ret = parse_arg_ip_address(optarg, &(app.p4xos_conf.dst_addr));
+        ret = parse_arg_ip_address(optarg, &(app.p4xos_conf.paxos_leader));
         if (ret) {
           printf("Incorrect value for --dst argument (%d)\n", ret);
           return -1;
@@ -901,13 +913,13 @@ int app_parse_args(int argc, char **argv) {
   }
 
   if (src_addr == 0) {
-    parse_arg_ip_address(APP_DEFAULT_IP_SRC_ADDR, &(app.p4xos_conf.src_addr));
+    parse_arg_ip_address(APP_DEFAULT_IP_SRC_ADDR, &(app.p4xos_conf.mine));
   }
 
   if (dst_addr == 0) {
-    parse_arg_ip_address(APP_DEFAULT_IP_DST_ADDR, &(app.p4xos_conf.dst_addr));
+    parse_arg_ip_address(APP_DEFAULT_IP_DST_ADDR, &(app.p4xos_conf.paxos_leader));
   }
-  parse_arg_ip_address(APP_DEFAULT_IP_BACKUP_DST_ADDR, &(app.p4xos_conf.backup_dst_addr));
+  parse_arg_ip_address(APP_DEFAULT_IP_BACKUP_DST_ADDR, &(app.p4xos_conf.primary_replica));
 
   if (msgtype == 0) {
     app.p4xos_conf.msgtype = APP_DEFAULT_MESSAGE_TYPE;
@@ -1313,8 +1325,8 @@ void app_print_params(void) {
          app.p4xos_conf.max_inst, app.p4xos_conf.tx_port,
          app.p4xos_conf.respond_to_client, app.p4xos_conf.osd);
   char str[INET_ADDRSTRLEN];
-  inet_ntop(AF_INET, &(app.p4xos_conf.dst_addr), str, INET_ADDRSTRLEN);
-  printf("Destination address: %s\n", str);
-  inet_ntop(AF_INET, &(app.p4xos_conf.src_addr), str, INET_ADDRSTRLEN);
-  printf("Source address: %s\n", str);
+  inet_ntop(AF_INET, &(app.p4xos_conf.paxos_leader.sin_addr), str, INET_ADDRSTRLEN);
+  printf("Destination address: %s:%d\n", str, ntohs(app.p4xos_conf.paxos_leader.sin_port));
+  inet_ntop(AF_INET, &(app.p4xos_conf.mine.sin_addr), str, INET_ADDRSTRLEN);
+  printf("Source address: %s:%d\n", str, ntohs(app.p4xos_conf.mine.sin_port));
 }

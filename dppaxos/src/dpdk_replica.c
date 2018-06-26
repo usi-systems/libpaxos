@@ -20,8 +20,6 @@
 
 struct rocksdb_params rocks;
 struct rocksdb_configurations rocksdb_configurations;
-struct sockaddr_in recover_ep;
-#define LEARNER_RECOVERY_PORT 39012
 
 static void baseline_deliver(unsigned int worker_id,
                              unsigned int __rte_unused inst,
@@ -129,6 +127,16 @@ static void stat_cb(__rte_unused struct rte_timer *timer,
 }
 
 
+static inline size_t
+get_file_size(FILE *fp)
+{
+    fseek(fp, 0L, SEEK_END);
+    size_t sz = ftell(fp);
+    fseek(fp, 0L, SEEK_SET);
+    return sz;
+}
+
+
 int recovery_cb(char *buffer, size_t len, uint32_t worker_id, struct sockaddr_in *from)
 {
     struct request *ap = (struct request*)buffer;
@@ -143,7 +151,21 @@ int recovery_cb(char *buffer, size_t len, uint32_t worker_id, struct sockaddr_in
             printf("Cannot create tar file for backup\n");
             return -1;
         }
-        send_backup_file(worker_id, filename, &recover_ep, from);
+        #define MAXBUFLEN 1024
+        char data[MAXBUFLEN];
+        FILE *fp = fopen(filename, "r");
+        if (fp == NULL) {
+            RTE_LOG(WARNING, P4XOS, "Open file %s has errors\n", filename);
+            return -1;
+        }
+        size_t data_len = fread(data, sizeof(char), MAXBUFLEN, fp);
+        while (data_len > 0)
+        {
+            net_sendto(worker_id, data, data_len, &app.p4xos_conf.primary_replica);
+            data_len = fread(data, sizeof(char), MAXBUFLEN, fp);
+        }
+        fclose(fp);
+
         return 0;
     }
     else if (ap->type == BACKUP_RES) {
@@ -217,10 +239,7 @@ int main(int argc, char **argv) {
   app_set_worker_callback(replica_handler);
   app_set_stat_callback(stat_cb, &rocks);
 
-  recover_ep.sin_family = AF_INET;
-  recover_ep.sin_port = htons(LEARNER_RECOVERY_PORT);
-  recover_ep.sin_addr.s_addr = app.p4xos_conf.src_addr;
-  app_set_register_cb(LEARNER_RECOVERY_PORT, recovery_cb);
+  app_set_register_cb(app.p4xos_conf.primary_replica.sin_port, recovery_cb);
   uint32_t i;
   uint32_t n_workers = app_get_lcores_worker();
 

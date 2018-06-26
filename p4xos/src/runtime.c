@@ -537,7 +537,7 @@ app_lcore_worker(
                 continue;
             }
 
-            if (ret == P4XOS_PORT) {
+            if (ret == app.p4xos_conf.paxos_leader.sin_port) {
                 ret = lp->process_pkt(pkt, lp);
                 if (ret < 0) {
                     rte_pktmbuf_free(pkt);
