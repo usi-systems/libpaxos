@@ -49,6 +49,7 @@ struct gap
 	paxos_value* highest_accepted_value;
 	uint8_t acceptor_bitmap;
 	int majority;
+	int reached_majority;
 };
 KHASH_MAP_INIT_INT(gap, struct gap*);
 
@@ -65,7 +66,7 @@ struct learner
 
 static struct instance* learner_get_instance(struct learner* l, iid_t iid);
 static struct instance* learner_get_current_instance(struct learner* l);
-static struct instance* learner_get_instance_or_create(struct learner* l, 
+static struct instance* learner_get_instance_or_create(struct learner* l,
 	iid_t iid);
 static void learner_delete_instance(struct learner* l, struct instance* inst);
 static struct instance* instance_new(int acceptors);
@@ -80,6 +81,7 @@ static struct gap* gap_new(iid_t iid, int acceptors);
 static struct gap* get_gap_or_create(struct learner* l, iid_t iid);
 static struct gap* learner_new_gap(struct learner* l, iid_t iid);
 static struct gap* learner_get_gap(struct learner* l, iid_t iid);
+static void learner_delete_gap(struct learner* l, struct gap* gap);
 static void gap_free(struct gap* gap);
 static void gap_reset(struct gap* gap);
 static int update_gap(struct gap* gap, paxos_promise* promise);
@@ -125,23 +127,23 @@ learner_set_instance_id(struct learner* l, iid_t iid)
 
 void
 learner_receive_accepted(struct learner* l, paxos_accepted* ack)
-{	
+{
 	if (l->late_start) {
 		l->late_start = 0;
 		l->current_iid = ack->iid;
 	}
-	
+
 	if (ack->iid < l->current_iid) {
 		paxos_log_debug("Dropped paxos_accepted for iid %u. Already delivered.",
 			ack->iid);
 		return;
 	}
-	
+
 	struct instance* inst;
 	inst = learner_get_instance_or_create(l, ack->iid);
-	
+
 	instance_update(inst, ack, l->acceptors);
-	
+
 	if (instance_has_quorum(inst, l->acceptors)
 		&& (inst->iid > l->highest_iid_closed))
 		l->highest_iid_closed = inst->iid;
@@ -168,6 +170,9 @@ learner_deliver_next(struct learner* l, paxos_accepted* out)
 	memcpy(out, inst->final_value, sizeof(paxos_accepted));
 	paxos_value_copy(&out->value, &inst->final_value->value);
 	learner_delete_instance(l, inst);
+	struct gap* gap = learner_get_gap(l, inst->iid);
+	if (gap != NULL)
+		learner_delete_gap(l, gap);
 	l->current_iid++;
 	return 1;
 }
@@ -200,7 +205,7 @@ learner_receive_promise(struct learner* l, paxos_promise* promise,
 	paxos_log_debug("promise for iid %u.", promise->iid);
 
 	struct gap* gap = learner_get_gap(l, promise->iid);
-	if (gap == NULL)
+	if (gap == NULL || gap->reached_majority)
 		return 0;
 	int reached_majority = update_gap(gap, promise);
 	if (!reached_majority)
@@ -233,7 +238,12 @@ update_gap(struct gap* gap, paxos_promise* promise)
 static int
 is_majority_promised(struct gap* gap)
 {
-	return __builtin_popcount(gap->acceptor_bitmap) >= gap->majority;
+	int ret = __builtin_popcount(gap->acceptor_bitmap) >= gap->majority;
+	if (ret) {
+		gap->reached_majority = 1;
+		return 1;
+	}
+	return 0;
 }
 
 static void
@@ -329,6 +339,16 @@ gap_free(struct gap* gap)
 	free(gap);
 }
 
+static void
+learner_delete_gap(struct learner* l, struct gap* gap)
+{
+	khiter_t k;
+	k = kh_get_gap(l->gaps, gap->iid);
+	if (k != kh_end(l->gaps))
+		kh_del_gap(l->gaps, k);
+	gap_free(gap);
+}
+
 static struct instance*
 learner_get_instance(struct learner* l, iid_t iid)
 {
@@ -394,19 +414,19 @@ instance_free(struct instance* inst, int acceptors)
 
 static void
 instance_update(struct instance* inst, paxos_accepted* accepted, int acceptors)
-{	
+{
 	if (inst->iid == 0) {
 		paxos_log_debug("Received first message for iid: %u", accepted->iid);
 		inst->iid = accepted->iid;
 		inst->last_update_ballot = accepted->ballot;
 	}
-	
+
 	if (instance_has_quorum(inst, acceptors)) {
 		paxos_log_debug("Dropped paxos_accepted iid %u. Already closed.",
 			accepted->iid);
 		return;
 	}
-	
+
 	if (accepted->aid > acceptors - 1) {
 		paxos_log_debug("Invalid acceptor id: %d", accepted->aid);
 		return;
@@ -417,16 +437,16 @@ instance_update(struct instance* inst, paxos_accepted* accepted, int acceptors)
 			"Previous ballot is newer or equal.", accepted->iid);
 		return;
 	}
-	
+
 	instance_add_accept(inst, accepted);
 }
 
-/* 
-	Checks if a given instance is closed, that is if a quorum of acceptor 
-	accepted the same value ballot pair. 
+/*
+	Checks if a given instance is closed, that is if a quorum of acceptor
+	accepted the same value ballot pair.
 	Returns 1 if the instance is closed, 0 otherwise.
 */
-static int 
+static int
 instance_has_quorum(struct instance* inst, int acceptors)
 {
 	paxos_accepted* curr_ack;
@@ -434,13 +454,13 @@ instance_has_quorum(struct instance* inst, int acceptors)
 
 	if (inst->final_value != NULL)
 		return 1;
-	
+
 	for (i = 0; i < acceptors; i++) {
 		curr_ack = inst->acks[i];
-	
+
 		// Skip over missing acceptor acks
 		if (curr_ack == NULL) continue;
-		
+
 		// Count the ones "agreeing" with the last added
 		if (curr_ack->ballot == inst->last_update_ballot) {
 			count++;
@@ -457,7 +477,7 @@ instance_has_quorum(struct instance* inst, int acceptors)
 }
 
 /*
-	Adds the given paxos_accepted to the given instance, 
+	Adds the given paxos_accepted to the given instance,
 	replacing the previous paxos_accepted, if any.
 */
 static void
@@ -490,6 +510,6 @@ paxos_value_copy(paxos_value* dst, paxos_value* src)
 	dst->paxos_value_len = len;
 	if (src->paxos_value_val != NULL) {
 		dst->paxos_value_val = malloc(len);
-		memcpy(dst->paxos_value_val, src->paxos_value_val, len);	
+		memcpy(dst->paxos_value_val, src->paxos_value_val, len);
 	}
 }
