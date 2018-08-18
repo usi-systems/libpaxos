@@ -321,6 +321,7 @@ struct app_lcore_params_worker {
 	struct rte_lpm *lpm_table;
 	uint32_t worker_id;
 	uint32_t lcore_id;
+	uint32_t highest_chosen_inst;
 	uint16_t app_port;
 	/* Internal buffers */
 	struct app_mbuf_array mbuf_in;

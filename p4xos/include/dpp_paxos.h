@@ -91,6 +91,7 @@ struct p4xos_configuration {
 	uint8_t msgtype;
 	uint16_t tx_port;
 	uint16_t node_id;
+	struct sockaddr_in client;
 	struct sockaddr_in mine;
 	struct sockaddr_in paxos_leader;
 	struct sockaddr_in primary_replica;
