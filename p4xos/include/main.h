@@ -238,7 +238,10 @@
 #define RTE_SCHED_PIPE_PROFILES_PER_PORT 1
 #define SCHED_PORT_QUEUE_SIZE 64
 
-#define TIMER_RESOLUTION_CYCLES 20000000ULL /* around 10ms at 2 Ghz */
+#define TIMER_RESOLUTION_CYCLES 16000000ULL /* around 10ms at 1.6 Ghz */
+
+#define STAT_PERIOD 1		/* get stat every 1/STAT_PERIOD (s) */
+#define RESUBMIT_TIMEOUT 1 /* Client resubmit every 1/RESUBMIT_TIMEOUT (s) */
 
 #ifdef __cplusplus
 extern "C" {
@@ -355,6 +358,7 @@ struct app_lcore_params_worker {
 	uint32_t has_holes;
 	uint32_t artificial_drop;
 	uint32_t max_inst;
+	uint64_t last_timestamp;
 	struct rte_timer stat_timer;
 	struct rte_timer deliver_timer;
 	struct rte_timer check_hole_timer;

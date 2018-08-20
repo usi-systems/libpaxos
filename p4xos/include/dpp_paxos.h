@@ -14,6 +14,7 @@
 #define APP_DEFAULT_IP_SRC_ADDR "192.168.4.95:48153"
 #define APP_DEFAULT_IP_DST_ADDR "192.168.4.98:9081"
 #define APP_DEFAULT_IP_BACKUP_DST_ADDR "192.168.4.98:9082"
+#define APP_DEFAULT_IP_ACCEPTOR_ADDR "224.0.0.103:9081"
 #define APP_DEFAULT_MESSAGE_TYPE 0x0003
 #define APP_DEFAULT_BASELINE 0
 #define APP_DEFAULT_MULTIPLE_DBS 0
@@ -48,10 +49,7 @@
 #define NEW_COMMAND        0x08
 #define FAST_ACCEPT        0x09
 #define CHECKPOINT         0x0A
-#define LEARNER_PREPARE    0x20
-#define LEARNER_ACCEPT     0x21
 #define LEARNER_CHECKPOINT 0x22
-#define LEARNER_NEW_COMMAND 0x23
 
 
 #ifdef __cplusplus
@@ -95,6 +93,7 @@ struct p4xos_configuration {
 	struct sockaddr_in mine;
 	struct sockaddr_in paxos_leader;
 	struct sockaddr_in primary_replica;
+	struct sockaddr_in acceptor_addr;
 	uint32_t osd;
 	uint32_t max_inst;
 	uint8_t inc_inst;

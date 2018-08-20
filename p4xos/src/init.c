@@ -625,7 +625,7 @@ void app_set_stat_callback(rte_timer_cb_t stat_callback, void *arg) {
     }
 
     rte_timer_init(&lp->stat_timer);
-    ret = rte_timer_reset(&lp->stat_timer, app.hz/40, PERIODICAL, lcore,
+    ret = rte_timer_reset(&lp->stat_timer, app.hz/STAT_PERIOD, PERIODICAL, lcore,
                           stat_callback, arg);
     if (ret < 0) {
       printf("timer is in the RUNNING state\n");
