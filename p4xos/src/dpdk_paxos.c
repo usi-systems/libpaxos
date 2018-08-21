@@ -175,8 +175,8 @@ static inline int accept_handler(struct paxos_hdr *paxos_hdr,
                                 .aid = rte_be_to_cpu_16(paxos_hdr->acptid),
                                 .value = {vsize, (char *)&paxos_hdr->value}};
   paxos_message out;
-  RTE_LOG(DEBUG, P4XOS, "Worker %u Receive Accept instance %u ballot %u\n", lp->worker_id,
-          accept.iid, accept.ballot);
+  RTE_LOG(DEBUG, P4XOS, "Worker %u Receive Accept ballot %u instance %u\n", lp->worker_id,
+          accept.ballot, accept.iid);
 
   if (acceptor_receive_accept(lp->acceptor, &accept, &out) != 0) {
     paxos_hdr->msgtype = out.type;
@@ -229,87 +229,44 @@ static inline int promise_handler(struct paxos_hdr *paxos_hdr,
     }
 }
 
-// static inline int promise_handler(struct paxos_hdr *paxos_hdr,
-//                                   struct app_lcore_params_worker *lp) {
-//     uint16_t acceptor_id = rte_be_to_cpu_16(paxos_hdr->acptid);
-//     uint16_t ballot = rte_be_to_cpu_16(paxos_hdr->rnd);
-//     uint32_t inst = rte_be_to_cpu_32(paxos_hdr->inst);
-//     uint32_t idx = inst & (NUM_INSTANCES - 1);
-//     RTE_LOG(DEBUG, P4XOS, "Worker %u, log_index %u, Received Promise instance "
-//                           "%u, aid %u, ballot %u\n",
-//             lp->worker_id, rte_be_to_cpu_16(paxos_hdr->log_index), inst,
-//             acceptor_id, ballot);
-//
-//     if (reach_majority(&promise_quorums[idx], acceptor_id))
-//     {
-//         paxos_hdr->msgtype = PAXOS_ACCEPT;
-//         return SUCCESS;
-//     }
-//     else
-//         return NO_MAJORITY;
-// }
-
 static inline int accepted_handler(struct paxos_hdr *paxos_hdr,
                                    struct app_lcore_params_worker *lp) {
-  int ret = 0;
-  // Artificial DROP packet
-  if (lp->artificial_drop) {
-    if (rand() % 1299827 == 0)
-      return DROP_ORIGINAL_PACKET;
-  }
-  int vsize = PAXOS_VALUE_SIZE; // rte_be_to_cpu_32(paxos_hdr->value_len);
-  uint32_t inst = rte_be_to_cpu_32(paxos_hdr->inst);
-  if (inst > lp->cur_inst) {
-    lp->cur_inst = inst;
-  }
-  struct paxos_accepted ack = {.iid = rte_be_to_cpu_32(paxos_hdr->inst),
+    int ret = 0;
+    // Artificial DROP packet
+    if (lp->artificial_drop) {
+        if (rand() % 1299827 == 0)
+        return DROP_ORIGINAL_PACKET;
+    }
+    int vsize = PAXOS_VALUE_SIZE; // rte_be_to_cpu_32(paxos_hdr->value_len);
+    uint32_t inst = rte_be_to_cpu_32(paxos_hdr->inst);
+    if (inst > lp->cur_inst) {
+        lp->cur_inst = inst;
+    }
+    struct paxos_accepted ack = {.iid = rte_be_to_cpu_32(paxos_hdr->inst),
                                .ballot = rte_be_to_cpu_16(paxos_hdr->rnd),
-                               .value_ballot =
-                                   rte_be_to_cpu_16(paxos_hdr->vrnd),
+                               .value_ballot = rte_be_to_cpu_16(paxos_hdr->vrnd),
                                .aid = rte_be_to_cpu_16(paxos_hdr->acptid),
                                .value = {vsize, (char *)&paxos_hdr->value}};
-  RTE_LOG(DEBUG, P4XOS, "Worker %u, log_index %u, Received Accepted instance "
+    RTE_LOG(DEBUG, P4XOS, "Worker %u, log_index %u, Received Accepted instance "
                         "%u, aid %u, ballot %u\n",
           lp->worker_id, rte_be_to_cpu_16(paxos_hdr->log_index), ack.iid,
           ack.aid, ack.ballot);
-  learner_receive_accepted(lp->learner, &ack);
-  paxos_accepted out;
-  ret = learner_deliver_next(lp->learner, &out);
-  if (ret) {
-    lp->deliver(lp->worker_id, out.iid, out.value.paxos_value_val,
-                out.value.paxos_value_len, lp->deliver_arg);
-    paxos_hdr->msgtype = PAXOS_CHOSEN;
-    paxos_accepted_destroy(&out);
-  } else {
-    return NO_MAJORITY;
-  }
-  return SUCCESS;
-}
-
-/*
-static inline int accepted_handler(struct paxos_hdr *paxos_hdr,
-                                   struct app_lcore_params_worker *lp) {
-
-    uint16_t acceptor_id = rte_be_to_cpu_16(paxos_hdr->acptid);
-    uint16_t ballot = rte_be_to_cpu_16(paxos_hdr->rnd);
-    uint32_t inst = rte_be_to_cpu_32(paxos_hdr->inst);
-    uint32_t idx = inst & (NUM_INSTANCES - 1);
-    int vsize = PAXOS_VALUE_SIZE;
-    RTE_LOG(DEBUG, P4XOS, "Worker %u, log_index %u, Received Accepted instance "
-                          "%u, aid %u, ballot %u\n",
-            lp->worker_id, rte_be_to_cpu_16(paxos_hdr->log_index), inst,
-            acceptor_id, ballot);
-    if (reach_majority(&accept_quorums[idx], acceptor_id))
-    {
+    learner_receive_accepted(lp->learner, &ack);
+    paxos_accepted out;
+    ret = learner_deliver_next(lp->learner, &out);
+    if (ret) {
+        /* Leader does not deliver accepted messages */
+        // lp->deliver(lp->worker_id, out.iid, out.value.paxos_value_val,
+        //             out.value.paxos_value_len, lp->deliver_arg);
         paxos_hdr->msgtype = PAXOS_CHOSEN;
-        lp->deliver(lp->worker_id, inst, (char*)paxos_hdr->value,
-                   vsize, lp->deliver_arg);
-        return SUCCESS;
+        paxos_accepted_destroy(&out);
+    } else {
+        return NO_MAJORITY;
     }
-    else
-       return NO_MAJORITY;
+    return SUCCESS;
 }
-*/
+
+
 static inline int
 learner_new_command_handler(struct paxos_hdr *paxos_hdr,
                             struct app_lcore_params_worker *lp) {
@@ -328,6 +285,8 @@ static inline int chosen_handler(struct paxos_hdr *paxos_hdr,
                                  struct app_lcore_params_worker *lp) {
     uint32_t inst = rte_be_to_cpu_32(paxos_hdr->inst);
     uint64_t now = 0;
+    RTE_LOG(DEBUG, P4XOS, "Received Chosen instance %u\n", inst);
+
     if (app.p4xos_conf.measure_latency) {
         uint64_t previous = rte_be_to_cpu_64(paxos_hdr->igress_ts);
         if (previous > lp->start_ts) {
@@ -366,7 +325,8 @@ static inline int chosen_handler(struct paxos_hdr *paxos_hdr,
 }
 
 void print_paxos_hdr(struct paxos_hdr *paxos_hdr) {
-    printf("msgtype %u worker_id %u round %u inst %u log_index %u vrnd %u acptid %u reserved %u value %s reserved2 %u igress_ts %"PRIu64"\n",
+    printf("msgtype %u worker_id %u round %u inst %u log_index %u vrnd %u \
+            acptid %u reserved %u value %s reserved2 %u igress_ts %"PRIu64"\n",
                 paxos_hdr->msgtype,
                 paxos_hdr->worker_id,
                 rte_be_to_cpu_16(paxos_hdr->rnd),
@@ -428,120 +388,31 @@ int proposer_handler(struct rte_mbuf *pkt_in, void *arg) {
 
     respond(pkt_in);
 #ifdef RESUBMIT
-    int ret;
-    ret = rte_timer_reset(&lp->recv_timer[lp->lcore_id], app.hz/RESUBMIT_TIMEOUT, SINGLE, lp->lcore_id,
-                        proposer_resubmit, lp);
-    if (ret < 0) {
-        RTE_LOG(INFO, P4XOS, "Worker %u Timer is in the RUNNING or CONFIG state\n", lp->worker_id);
-    }
+    rte_timer_reset(&lp->recv_timer[lp->lcore_id], app.hz/RESUBMIT_TIMEOUT,
+            SINGLE, lp->lcore_id, proposer_resubmit, lp);
 #endif
     return SUCCESS;
 }
 
-int leader_handler(struct rte_mbuf *pkt_in, void *arg) {
-    struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
-    stats(pkt_in, lp);
-    size_t paxos_offset = get_paxos_offset();
-    struct paxos_hdr *paxos_hdr =
-            rte_pktmbuf_mtod_offset(pkt_in, struct paxos_hdr *, paxos_offset);
-    uint8_t msgtype = paxos_hdr->msgtype;
-
-    switch (msgtype) {
-        case NEW_COMMAND: {
-            new_command_handler(paxos_hdr, lp);
-            break;
-        }
-        default: {
-            RTE_LOG(DEBUG, P4XOS, "No handler for %u\n", msgtype);
-            return NO_HANDLER;
-        }
-    }
-
-    respond(pkt_in);
-    return SUCCESS;
-}
-
-int acceptor_handler(struct rte_mbuf *pkt_in, void *arg) {
-    struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
-    stats(pkt_in, lp);
-    size_t paxos_offset = get_paxos_offset();
-    struct paxos_hdr *paxos_hdr =
-            rte_pktmbuf_mtod_offset(pkt_in, struct paxos_hdr *, paxos_offset);
-    uint8_t msgtype = paxos_hdr->msgtype;
-
-    switch (msgtype) {
-        case PAXOS_PREPARE: {
-            prepare_handler(paxos_hdr, lp);
-            break;
-        }
-        case PAXOS_ACCEPT: {
-            accept_handler(paxos_hdr, lp);
-            break;
-        }
-        default: {
-            RTE_LOG(DEBUG, P4XOS, "No handler for %u\n", msgtype);
-            return NO_HANDLER;
-        }
-    }
-
-    respond(pkt_in);
-    return SUCCESS;
-}
-
-int learner_handler(struct rte_mbuf *pkt_in, void *arg) {
-    struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
-    stats(pkt_in, lp);
-    size_t paxos_offset = get_paxos_offset();
-    struct paxos_hdr *paxos_hdr =
-      rte_pktmbuf_mtod_offset(pkt_in, struct paxos_hdr *, paxos_offset);
-    uint8_t msgtype = paxos_hdr->msgtype;
-
-    switch (msgtype) {
-        case PAXOS_PROMISE: {
-            prepare_handler(paxos_hdr, lp);
-            break;
-        }
-        case PAXOS_ACCEPTED: {
-            accepted_handler(paxos_hdr, lp);
-            break;
-        }
-        default: {
-            RTE_LOG(DEBUG, P4XOS, "No handler for %u\n", msgtype);
-            return NO_HANDLER;
-        }
-    }
-
-    respond(pkt_in);
-    return SUCCESS;
-}
 
 void proposer_resubmit(struct rte_timer *timer, void *arg) {
     struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
-    int ret;
     uint16_t port = app.p4xos_conf.tx_port;
     uint32_t n_mbufs = app.p4xos_conf.osd - lp->mbuf_out[port].n_mbufs;
-
     submit_bulk(lp->worker_id, n_mbufs, lp, NULL, 0);
     RTE_LOG(INFO, P4XOS, "Worker %u Timeout. Resumit %u packets\n",
         lp->worker_id, app.p4xos_conf.osd);
-    ret = rte_timer_reset(&lp->recv_timer[lp->lcore_id], app.hz/RESUBMIT_TIMEOUT, SINGLE, lp->lcore_id,
-       proposer_resubmit, lp);
-    if (ret < 0) {
-         printf("Worker %u timer is in the RUNNING state\n", lp->worker_id);
-    }
+    rte_timer_reset(&lp->recv_timer[lp->lcore_id], app.hz/RESUBMIT_TIMEOUT, SINGLE,
+        lp->lcore_id, proposer_resubmit, lp);
 }
 
 void timer_send_checkpoint(struct rte_timer *timer, void *arg) {
     struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
-    int ret;
     RTE_LOG(DEBUG, P4XOS, "Worker %u timeout. Sent checkpoint instance %u\n",
         lp->worker_id, lp->highest_chosen_inst);
     send_checkpoint_message(lp->worker_id, lp->highest_chosen_inst);
-    ret = rte_timer_reset(&lp->recv_timer[lp->lcore_id], app.hz, SINGLE, lp->lcore_id,
+    rte_timer_reset(&lp->recv_timer[lp->lcore_id], app.hz, SINGLE, lp->lcore_id,
        timer_send_checkpoint, lp);
-    if (ret < 0) {
-        printf("Worker %u timer is in the RUNNING state\n", lp->worker_id);
-    }
 }
 
 
@@ -616,7 +487,8 @@ static inline int handle_paxos_messages(struct rte_mbuf *pkt_in,
         case NEW_COMMAND: {
             app.p4xos_conf.client.sin_addr.s_addr = ip->src_addr;
             ret = learner_new_command_handler(paxos_hdr, lp);
-            set_ip_addr(ip, app.p4xos_conf.mine.sin_addr.s_addr, app.p4xos_conf.acceptor_addr.sin_addr.s_addr);
+            set_ip_addr(ip, app.p4xos_conf.mine.sin_addr.s_addr,
+                app.p4xos_conf.acceptor_addr.sin_addr.s_addr);
         break;
         }
         case PAXOS_PREPARE: {
@@ -631,17 +503,24 @@ static inline int handle_paxos_messages(struct rte_mbuf *pkt_in,
         }
         case PAXOS_PROMISE: {
             ret = promise_handler(paxos_hdr, lp);
-            set_ip_addr(ip, app.p4xos_conf.mine.sin_addr.s_addr, app.p4xos_conf.acceptor_addr.sin_addr.s_addr);
+            set_ip_addr(ip, app.p4xos_conf.mine.sin_addr.s_addr,
+                app.p4xos_conf.acceptor_addr.sin_addr.s_addr);
         break;
         }
         case PAXOS_ACCEPTED: {
             ret = accepted_handler(paxos_hdr, lp);
-            set_ip_addr(ip, app.p4xos_conf.mine.sin_addr.s_addr, app.p4xos_conf.client.sin_addr.s_addr);
+            set_ip_addr(ip, app.p4xos_conf.mine.sin_addr.s_addr,
+                app.p4xos_conf.learner_addr.sin_addr.s_addr);
         break;
         }
         case PAXOS_CHOSEN: {
             ret = learner_chosen_handler(paxos_hdr, lp);
-            set_ip_addr(ip, app.p4xos_conf.mine.sin_addr.s_addr, app.p4xos_conf.client.sin_addr.s_addr);
+            if (!app.p4xos_conf.respond_to_client) {
+                rte_pktmbuf_free(pkt_in);
+                return DROP_ORIGINAL_PACKET;
+            }
+            set_ip_addr(ip, app.p4xos_conf.mine.sin_addr.s_addr,
+                app.p4xos_conf.client.sin_addr.s_addr);
         break;
         }
         default: {
@@ -748,7 +627,8 @@ void send_prepare(struct app_lcore_params_worker *lp, uint32_t inst,
     for (i = 0; i < prepare_size; i++) {
         paxos_prepare out;
         learner_prepare(lp->learner, &out, inst + i);
-        RTE_LOG(DEBUG, P4XOS, "Worker %u Send Prepare instance %u ballot %u\n", lp->worker_id, out.iid, out.ballot);
+        RTE_LOG(DEBUG, P4XOS, "Worker %u Send Prepare instance %u ballot %u\n",
+                lp->worker_id, out.iid, out.ballot);
         prepare_paxos_message(pkts[i], port, &app.p4xos_conf.mine,
             &app.p4xos_conf.acceptor_addr, PAXOS_PREPARE, out.iid,
             out.ballot, lp->worker_id, app.p4xos_conf.node_id, value, size);
@@ -806,7 +686,8 @@ void send_accept(struct app_lcore_params_worker *lp, paxos_accept *accept) {
         value = lp->default_value;
         size = lp->default_value_len;
     }
-    RTE_LOG(DEBUG, P4XOS, "Worker %u Send Accept inst %u ballot %u\n", lp->worker_id, accept->iid, accept->ballot);
+    RTE_LOG(DEBUG, P4XOS, "Worker %u Send Accept inst %u ballot %u\n",
+        lp->worker_id, accept->iid, accept->ballot);
     prepare_paxos_message(pkt, port, &app.p4xos_conf.mine,
                     &app.p4xos_conf.acceptor_addr, PAXOS_ACCEPT, accept->iid,
                     accept->ballot, lp->worker_id, app.p4xos_conf.node_id, value,

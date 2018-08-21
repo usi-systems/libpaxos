@@ -564,14 +564,6 @@ app_lcore_worker(
                 continue;
             }
 
-
-
-            if (!app.p4xos_conf.respond_to_client) {
-                RTE_LOG(DEBUG, P4XOS, "Drop packets. Do not Respond\n");
-                rte_pktmbuf_free(pkt);
-                continue;
-            }
-
             ipv4_dst = rte_be_to_cpu_32(ipv4_hdr->dst_addr);
 
             if (unlikely(rte_lpm_lookup(lp->lpm_table, ipv4_dst, &port) != 0)) {

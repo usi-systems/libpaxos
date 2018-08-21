@@ -65,7 +65,7 @@ main(int argc, char **argv)
 	app_init();
 	app_init_leader();
 	app_print_params();
-	app_set_worker_callback(leader_handler);
+	app_set_worker_callback(replica_handler);
 	app_set_stat_callback(stat_cb, NULL);
 	/* Launch per-lcore init on every lcore */
 	rte_eal_mp_remote_launch(app_lcore_main_loop, NULL, CALL_MASTER);

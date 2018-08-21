@@ -110,6 +110,8 @@ static const char usage[] =
     "               (default value is %s)			                         \n"
     "    --acc-addr \"IP\" : acceptor multicast IP address                   \n"
     "                (default value is %s)                                   \n"
+    "    --learner-addr \"IP\" : learner multicast IP address                \n"
+    "                (default value is %s)                                   \n"
     "    --pri \"IP\" : leader IP address                                    \n"
     "                (default value is %s)                                   \n"
     "    --dst \"IP\" : destination IP address proposers use to generate     \n"
@@ -130,7 +132,7 @@ void app_print_usage(void) {
       APP_DEFAULT_CHECKPOINT_INTERVAL, APP_DEFAULT_TS_INTERVAL,
       APP_DEFAULT_OUTSTANDING, APP_DEFAULT_MAX_INST, APP_DEFAULT_SENDING_RATE,
       APP_DEFAULT_IP_SRC_ADDR, APP_DEFAULT_IP_SRC_ADDR, APP_DEFAULT_IP_ACCEPTOR_ADDR,
-      APP_DEFAULT_IP_DST_ADDR, APP_DEFAULT_IP_BACKUP_DST_ADDR
+      APP_DEFAULT_IP_LEARNER_ADDR, APP_DEFAULT_IP_DST_ADDR, APP_DEFAULT_IP_BACKUP_DST_ADDR
     );
 }
 
@@ -670,7 +672,7 @@ int app_parse_args(int argc, char **argv) {
       {"max", 1, 0, 0},         {"rate", 1, 0, 0},
       {"src", 1, 0, 0},         {"dst", 1, 0, 0},
       {"cliaddr", 1, 0, 0},     {"pri", 1, 0, 0},
-      {"acc-addr", 1, 0, 0},
+      {"acc-addr", 1, 0, 0},    {"learner-addr", 1, 0, 0},
       {"cp-interval", 1, 0, 0}, {"ts-interval", 1, 0, 0},
       {NULL, 0, 0, 0}};
   uint32_t arg_w = 0;
@@ -686,6 +688,7 @@ int app_parse_args(int argc, char **argv) {
   uint32_t cli_addr = 0;
   uint32_t pri_addr = 0;
   uint32_t acc_addr = 0;
+  uint32_t learner_addr = 0;
   uint32_t arg_max_inst = 0;
   uint32_t arg_rate = 0;
   uint16_t tx_port = 0;
@@ -909,6 +912,14 @@ int app_parse_args(int argc, char **argv) {
           return -1;
         }
       }
+      if (!strcmp(lgopts[option_index].name, "learner-addr")) {
+        learner_addr = 1;
+        ret = parse_arg_ip_address(optarg, &(app.p4xos_conf.learner_addr));
+        if (ret) {
+          printf("Incorrect value for --learner-addr argument (%d)\n", ret);
+          return -1;
+        }
+      }
       break;
 
     default:
@@ -965,6 +976,10 @@ int app_parse_args(int argc, char **argv) {
 
   if (acc_addr == 0) {
       parse_arg_ip_address(APP_DEFAULT_IP_ACCEPTOR_ADDR, &(app.p4xos_conf.acceptor_addr));
+  }
+
+  if (learner_addr == 0) {
+      parse_arg_ip_address(APP_DEFAULT_IP_LEARNER_ADDR, &(app.p4xos_conf.learner_addr));
   }
 
   if (msgtype == 0) {
@@ -1372,9 +1387,11 @@ void app_print_params(void) {
          app.p4xos_conf.respond_to_client, app.p4xos_conf.osd);
   char str[INET_ADDRSTRLEN];
   inet_ntop(AF_INET, &(app.p4xos_conf.paxos_leader.sin_addr), str, INET_ADDRSTRLEN);
-  printf("Destination address: %s:%d\n", str, ntohs(app.p4xos_conf.paxos_leader.sin_port));
+  printf("Leader address: %s:%d\n", str, ntohs(app.p4xos_conf.paxos_leader.sin_port));
   inet_ntop(AF_INET, &(app.p4xos_conf.acceptor_addr.sin_addr), str, INET_ADDRSTRLEN);
   printf("Acceptor address: %s:%d\n", str, ntohs(app.p4xos_conf.acceptor_addr.sin_port));
+  inet_ntop(AF_INET, &(app.p4xos_conf.learner_addr.sin_addr), str, INET_ADDRSTRLEN);
+  printf("Learner address: %s:%d\n", str, ntohs(app.p4xos_conf.learner_addr.sin_port));
   inet_ntop(AF_INET, &(app.p4xos_conf.mine.sin_addr), str, INET_ADDRSTRLEN);
   printf("Source address: %s:%d\n", str, ntohs(app.p4xos_conf.mine.sin_port));
   inet_ntop(AF_INET, &(app.p4xos_conf.client.sin_addr), str, INET_ADDRSTRLEN);
