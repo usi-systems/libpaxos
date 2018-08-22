@@ -242,6 +242,7 @@
 
 #define STAT_PERIOD 1		/* get stat every 1/STAT_PERIOD (s) */
 #define RESUBMIT_TIMEOUT 1 /* Client resubmit every 1/RESUBMIT_TIMEOUT (s) */
+#define LEADER_CHECK_TIMEOUT 5 /* Client check closed prepare/accept every 1/LEADER_CHECK_TIMEOUT (s) */
 
 #ifdef __cplusplus
 extern "C" {
@@ -314,6 +315,7 @@ struct app_lcore_params_io {
 	} tx;
 };
 
+
 struct app_lcore_params_worker {
 	/* Rings */
 	struct rte_ring *rings_in[APP_MAX_IO_LCORES];
@@ -365,6 +367,11 @@ struct app_lcore_params_worker {
 	struct rte_timer recv_timer[APP_MAX_LCORES];
 	char* default_value;
 	uint32_t default_value_len;
+
+	struct proposer *proposer;
+	struct rte_timer preexecute_timer;
+	struct rte_timer prepare_timer;
+	struct rte_timer accept_timer;
 };
 
 struct app_lcore_params {
@@ -485,6 +492,10 @@ void prepare_paxos_message(struct rte_mbuf *created_pkt, uint16_t port,
                         uint8_t msgtype, uint32_t inst, uint16_t rnd,
                         uint8_t worker_id, uint16_t node_id, char* value, int size);
 int net_sendto(uint8_t worker_id, char* buf, size_t len, struct sockaddr_in *to);
+void proposer_preexecute(struct app_lcore_params_worker *lp);
+void pre_execute_prepare(__rte_unused struct rte_timer *timer, void *arg);
+void send_to_acceptor(struct app_lcore_params_worker *lp, struct paxos_message *pm);
+
 #ifdef __cplusplus
 }  /* end extern "C" */
 #endif

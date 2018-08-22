@@ -90,6 +90,7 @@ static const char usage[] =
     "    --run_prepare : Run prepare phase in learner recovery               \n"
     "				(default value is %u)                                    \n"
     "    --drop : Artificial drop packets (default value is %u)              \n"
+    "    --leader : set node as Paxos leader (default value is %u)           \n"
     "    --resp : Send response to client (default value is %u)              \n"
     "    --latency : Enable measure latency (default value is %u)            \n"
     "    --port [PORT]: TX port Proposers use initially (default value is %u)\n"
@@ -103,7 +104,8 @@ static const char usage[] =
     "               (default value is %u)                                    \n"
     "    --max NUM : Stop learner after delivered this instance              \n"
     "               (default value is %u)                                    \n"
-    "    --rate Mbps : Set client sending rate (default valueis %u)          \n"
+    "    --rate Mbps : Set client sending rate (default value is %u)         \n"
+    "    --window NUM : Pre-execute Prepare instances (default value is %u)  \n"
     "    --cliaddr \"IP\" : Client IP address                                \n"
     "               (default value is %s)			                         \n"
     "    --src \"IP\" : source IP address proposers use to generate packets  \n"
@@ -124,13 +126,14 @@ void app_print_usage(void) {
       APP_DEFAULT_BURST_SIZE_IO_RX_READ, APP_DEFAULT_BURST_SIZE_IO_RX_WRITE,
       APP_DEFAULT_BURST_SIZE_WORKER_READ, APP_DEFAULT_BURST_SIZE_WORKER_WRITE,
       APP_DEFAULT_BURST_SIZE_IO_TX_READ, APP_DEFAULT_BURST_SIZE_IO_TX_WRITE,
-      APP_DEFAULT_IO_RX_LB_POS, APP_DEFAULT_MESSAGE_TYPE, APP_DEFAULT_BASELINE,
-      APP_DEFAULT_MULTIPLE_DBS, APP_DEFAULT_RESET_INST, APP_DEFAULT_INCREASE_INST,
-      APP_DEFAULT_RUN_PREPARE, APP_DEFAULT_DROP, APP_DEFAULT_SEND_RESPONSE,
-      APP_DEFAULT_MEASURE_LATENCY,
+      APP_DEFAULT_IO_RX_LB_POS, APP_DEFAULT_MESSAGE_TYPE, APP_DEFAULT_FALSE,
+      APP_DEFAULT_FALSE, APP_DEFAULT_FALSE, APP_DEFAULT_FALSE,
+      APP_DEFAULT_FALSE, APP_DEFAULT_FALSE, APP_DEFAULT_FALSE,
+      APP_DEFAULT_FALSE, APP_DEFAULT_FALSE,
       APP_DEFAULT_TX_PORT, APP_DEFAULT_NUM_ACCEPTORS, APP_DEFAULT_NODE_ID,
       APP_DEFAULT_CHECKPOINT_INTERVAL, APP_DEFAULT_TS_INTERVAL,
       APP_DEFAULT_OUTSTANDING, APP_DEFAULT_MAX_INST, APP_DEFAULT_SENDING_RATE,
+      APP_PREEXEC_WINDOW,
       APP_DEFAULT_IP_SRC_ADDR, APP_DEFAULT_IP_SRC_ADDR, APP_DEFAULT_IP_ACCEPTOR_ADDR,
       APP_DEFAULT_IP_LEARNER_ADDR, APP_DEFAULT_IP_DST_ADDR, APP_DEFAULT_IP_BACKUP_DST_ADDR
     );
@@ -669,6 +672,7 @@ int app_parse_args(int argc, char **argv) {
       {"inc-inst", 0, 0, 0},    {"run-prepare", 0, 0, 0},
       {"drop", 0, 0, 0},        {"osd", 1, 0, 0},
       {"resp", 0, 0, 0},        {"latency", 0, 0, 0},
+      {"leader", 0, 0, 0},      {"window", 1, 0, 0},
       {"max", 1, 0, 0},         {"rate", 1, 0, 0},
       {"src", 1, 0, 0},         {"dst", 1, 0, 0},
       {"cliaddr", 1, 0, 0},     {"pri", 1, 0, 0},
@@ -691,6 +695,7 @@ int app_parse_args(int argc, char **argv) {
   uint32_t learner_addr = 0;
   uint32_t arg_max_inst = 0;
   uint32_t arg_rate = 0;
+  uint32_t arg_window = 0;
   uint16_t tx_port = 0;
   uint16_t osd = 0;
   uint16_t node_id = 0;
@@ -703,6 +708,7 @@ int app_parse_args(int argc, char **argv) {
   uint8_t arg_drop = 0;
   uint8_t arg_resp = 0;
   uint8_t arg_latency = 0;
+  uint8_t arg_leader = 0;
   uint8_t arg_checkpoint_interval = 0;
   uint8_t arg_ts_interval = 0;
   argvopt = argv;
@@ -832,11 +838,23 @@ int app_parse_args(int argc, char **argv) {
         arg_latency = 1;
         app.p4xos_conf.measure_latency = 1;
       }
+      if (!strcmp(lgopts[option_index].name, "leader")) {
+        arg_leader = 1;
+        app.p4xos_conf.leader = 1;
+      }
       if (!strcmp(lgopts[option_index].name, "osd")) {
         osd = 1;
         ret = parse_arg_uint32(optarg, &(app.p4xos_conf.osd));
         if (ret) {
           printf("Incorrect value for --osd argument (%d)\n", ret);
+          return -1;
+        }
+      }
+      if (!strcmp(lgopts[option_index].name, "window")) {
+        arg_window = 1;
+        ret = parse_arg_uint32(optarg, &(app.p4xos_conf.preexec_window));
+        if (ret) {
+          printf("Incorrect value for --window argument (%d)\n", ret);
           return -1;
         }
       }
@@ -999,19 +1017,19 @@ int app_parse_args(int argc, char **argv) {
   }
 
   if (arg_baseline == 0) {
-    app.p4xos_conf.baseline = APP_DEFAULT_BASELINE;
+    app.p4xos_conf.baseline = APP_DEFAULT_FALSE;
   }
 
   if (arg_multi_dbs == 0) {
-    app.p4xos_conf.multi_dbs = APP_DEFAULT_MULTIPLE_DBS;
+    app.p4xos_conf.multi_dbs = APP_DEFAULT_FALSE;
   }
 
   if (arg_reset_inst == 0) {
-    app.p4xos_conf.reset_inst = APP_DEFAULT_RESET_INST;
+    app.p4xos_conf.reset_inst = APP_DEFAULT_FALSE;
   }
 
   if (arg_inc_inst == 0) {
-    app.p4xos_conf.inc_inst = APP_DEFAULT_INCREASE_INST;
+    app.p4xos_conf.inc_inst = APP_DEFAULT_FALSE;
   }
 
   if (arg_checkpoint_interval == 0) {
@@ -1023,19 +1041,23 @@ int app_parse_args(int argc, char **argv) {
   }
 
   if (arg_drop == 0) {
-    app.p4xos_conf.drop = APP_DEFAULT_DROP;
+    app.p4xos_conf.drop = APP_DEFAULT_FALSE;
   }
 
   if (arg_resp == 0) {
-    app.p4xos_conf.respond_to_client = APP_DEFAULT_SEND_RESPONSE;
+    app.p4xos_conf.respond_to_client = APP_DEFAULT_FALSE;
   }
 
   if (arg_latency == 0) {
-    app.p4xos_conf.measure_latency = APP_DEFAULT_MEASURE_LATENCY;
+    app.p4xos_conf.measure_latency = APP_DEFAULT_FALSE;
   }
 
   if (arg_run_prepare == 0) {
-    app.p4xos_conf.run_prepare = APP_DEFAULT_RUN_PREPARE;
+    app.p4xos_conf.run_prepare = APP_DEFAULT_FALSE;
+  }
+
+  if (arg_leader == 0) {
+    app.p4xos_conf.leader = APP_DEFAULT_FALSE;
   }
 
   if (arg_max_inst == 0) {
@@ -1044,6 +1066,10 @@ int app_parse_args(int argc, char **argv) {
 
   if (arg_rate == 0) {
     app.p4xos_conf.rate = APP_DEFAULT_SENDING_RATE;
+  }
+
+  if (arg_window == 0) {
+      app.p4xos_conf.preexec_window = APP_PREEXEC_WINDOW;
   }
 
   /* Check cross-consistency of arguments */
@@ -1377,12 +1403,14 @@ void app_print_params(void) {
          "Message type: %u\n"
          "Acceptor ID: %u\n"
          "Multiple DBs: %u\n"
+         "Is leader: %u\n"
          "Max Instance: %u\n"
          "Proposer TX port: %u\n"
          "Respond to Client: %u\n"
          "Outstanding packets: %u\n",
          app.p4xos_conf.num_acceptors, app.p4xos_conf.msgtype,
          app.p4xos_conf.node_id, app.p4xos_conf.multi_dbs,
+         app.p4xos_conf.leader,
          app.p4xos_conf.max_inst, app.p4xos_conf.tx_port,
          app.p4xos_conf.respond_to_client, app.p4xos_conf.osd);
   char str[INET_ADDRSTRLEN];

@@ -63,14 +63,14 @@ acceptor_new(int id)
 }
 
 void
-acceptor_free(struct acceptor* a) 
+acceptor_free(struct acceptor* a)
 {
 	storage_close(&a->store);
 	free(a);
 }
 
 int
-acceptor_receive_prepare(struct acceptor* a, 
+acceptor_receive_prepare(struct acceptor* a,
 	paxos_prepare* req, paxos_message* out)
 {
 	paxos_accepted acc;

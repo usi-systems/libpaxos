@@ -274,12 +274,7 @@ static int send_file(char* filename)
     return 0;
 }
 
-static const struct rte_eth_conf port_conf_default = {
-    .rxmode =
-        {
-            .max_rx_pkt_len = ETHER_MAX_LEN, .ignore_offload_bitfield = 1,
-        },
-};
+static const struct rte_eth_conf port_conf_default;
 
 static int paxos_handler(uint16_t in_port, struct rte_mbuf *pkt_in) {
   int ret = filter_packets(pkt_in);
@@ -444,9 +439,12 @@ static inline int port_init(uint16_t port, struct rte_mempool *mbuf_pool) {
     return -1;
 
   rte_eth_dev_info_get(port, &dev_info);
-  if (dev_info.tx_offload_capa & DEV_TX_OFFLOAD_MBUF_FAST_FREE)
-    port_conf.txmode.offloads |= DEV_TX_OFFLOAD_MBUF_FAST_FREE;
+  if (dev_info.tx_offload_capa & DEV_TX_OFFLOAD_MBUF_FAST_FREE) {
+      port_conf.txmode.offloads |= DEV_TX_OFFLOAD_MBUF_FAST_FREE;
+  }
 
+  port_conf.rx_adv_conf.rss_conf.rss_hf &=
+                        dev_info.flow_type_rss_offloads;
   /* Configure the Ethernet device. */
   retval = rte_eth_dev_configure(port, rx_rings, tx_rings, &port_conf);
   if (retval != 0)
@@ -465,7 +463,6 @@ static inline int port_init(uint16_t port, struct rte_mempool *mbuf_pool) {
   }
 
   txconf = dev_info.default_txconf;
-  txconf.txq_flags = ETH_TXQ_FLAGS_IGNORE;
   txconf.offloads = port_conf.txmode.offloads;
   /* Allocate and set up 1 TX queue per Ethernet port. */
   for (q = 0; q < tx_rings; q++) {

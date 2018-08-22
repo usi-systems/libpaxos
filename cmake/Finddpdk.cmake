@@ -13,7 +13,7 @@ find_path(DPDK_INCLUDE_DIR rte_config.h
 set(components
     acl bbdev bitratestats bpf bus_dpaa bus_fslmc bus_ifpga bus_pci bus_vdev cfgfile cmdline
     common_octeontx compressdev cryptodev distributor eal efd ethdev eventdev
-    flow_classify gro gso hash ifcvf_vdpa ip_frag jobstats kni kvargs latencystats
+    flow_classify gro gso hash ip_frag jobstats kni kvargs latencystats
     lpm mbuf member mempool mempool_bucket mempool_dpaa2 mempool_dpaa mempool_octeontx
     mempool_ring mempool_stack meter metrics net pci pdump pipeline pmd_af_packet
     pmd_ark pmd_avf pmd_avp pmd_axgbe pmd_bbdev_null pmd_bnxt pmd_bond pmd_crypto_scheduler

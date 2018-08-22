@@ -102,3 +102,51 @@ void set_paxos_hdr(struct paxos_hdr *px, uint8_t msgtype, uint32_t inst,
     px->reserved2 = 0;
     px->igress_ts = rte_cpu_to_be_64(igress_ts);
 }
+
+
+int filter_packets(struct rte_mbuf *pkt_in) {
+  struct ether_hdr *eth = rte_pktmbuf_mtod_offset(pkt_in, struct ether_hdr *, 0);
+  size_t ip_offset = sizeof(struct ether_hdr);
+
+  if (rte_be_to_cpu_16(eth->ether_type) != ETHER_TYPE_IPv4) {
+      return NON_ETHERNET_PACKET;
+  }
+
+  struct ipv4_hdr *ip = rte_pktmbuf_mtod_offset(pkt_in, struct ipv4_hdr *, ip_offset);
+
+  if (ip->next_proto_id != IPPROTO_UDP)
+    return NON_UDP_PACKET;
+
+  size_t udp_offset = ip_offset + sizeof(struct ipv4_hdr);
+  struct udp_hdr *udp = rte_pktmbuf_mtod_offset(pkt_in, struct udp_hdr *, udp_offset);
+
+  return udp->dst_port;
+}
+
+
+/* Convert bytes to Gbit */
+double bytes_to_gbits(uint64_t bytes) {
+    double t = bytes;
+    t *= (double)8;
+    t /= 1000 * 1000 * 1000;
+    return t;
+}
+
+
+void prepare_hw_checksum(struct rte_mbuf *pkt_in, size_t data_size) {
+  size_t ip_offset = sizeof(struct ether_hdr);
+  struct ipv4_hdr *ip =
+      rte_pktmbuf_mtod_offset(pkt_in, struct ipv4_hdr *, ip_offset);
+  size_t udp_offset = ip_offset + sizeof(struct ipv4_hdr);
+  struct udp_hdr *udp =
+      rte_pktmbuf_mtod_offset(pkt_in, struct udp_hdr *, udp_offset);
+  udp->dgram_len = rte_cpu_to_be_16(sizeof(struct udp_hdr) + data_size);
+  pkt_in->l2_len = sizeof(struct ether_hdr);
+  pkt_in->l3_len = sizeof(struct ipv4_hdr);
+  pkt_in->l4_len = sizeof(struct udp_hdr) + data_size;
+  size_t pkt_size = pkt_in->l2_len + pkt_in->l3_len + pkt_in->l4_len;
+  pkt_in->data_len = pkt_size;
+  pkt_in->pkt_len = pkt_size;
+  pkt_in->ol_flags = PKT_TX_IPV4 | PKT_TX_IP_CKSUM | PKT_TX_UDP_CKSUM;
+  udp->dgram_cksum = rte_ipv4_phdr_cksum(ip, pkt_in->ol_flags);
+}

@@ -42,6 +42,7 @@
 
 #include "acceptor.h"
 #include "learner.h"
+#include "proposer.h"
 #include "main.h"
 
 static void app_assign_worker_ids(void) {
@@ -89,47 +90,61 @@ void app_init_acceptor(void) {
 }
 
 void app_init_learner(void) {
-  uint32_t lcore;
-  rte_timer_subsystem_init();
-  /* fetch default timer frequency. */
-  app.hz = rte_get_timer_hz();
-  /* Create a learner for each worker */
-  for (lcore = 0; lcore < APP_MAX_LCORES; lcore++) {
-    struct app_lcore_params_worker *lp = &app.lcore_params[lcore].worker;
+    int ret;
+    uint32_t lcore;
+    rte_timer_subsystem_init();
+    /* fetch default timer frequency. */
+    app.hz = rte_get_timer_hz();
+    /* Create a learner for each worker */
+    for (lcore = 0; lcore < APP_MAX_LCORES; lcore++) {
+        struct app_lcore_params_worker *lp = &app.lcore_params[lcore].worker;
 
-    if (app.lcore_params[lcore].type != e_APP_LCORE_WORKER) {
-      continue;
+        if (app.lcore_params[lcore].type != e_APP_LCORE_WORKER) {
+            continue;
+        }
+        lp->lcore_id = lcore;
+        lp->learner = learner_new(app.p4xos_conf.num_acceptors);
+        learner_set_instance_id(lp->learner, 0);
+        lp->cur_inst = 0;
+        lp->artificial_drop = app.p4xos_conf.drop;
+        uint64_t freq = app.hz;
+
+        rte_timer_init(&lp->recv_timer[lp->lcore_id]);
+
+        // rte_timer_init(&lp->deliver_timer);
+        //
+        // ret = rte_timer_reset(&lp->deliver_timer, freq, PERIODICAL, lcore,
+        //                    learner_call_deliver, lp);
+        // if (ret < 0) {
+        //      printf("timer is in the RUNNING state\n");
+        // }
+        //
+        // rte_timer_init(&lp->check_hole_timer);
+        // ret = rte_timer_reset(&lp->check_hole_timer, freq, PERIODICAL, lcore,
+        //                       learner_check_holes, lp);
+        // if (ret < 0) {
+        //     printf("timer is in the RUNNING state\n");
+        // }
+
+        // ret = rte_timer_reset(&lp->recv_timer[lp->lcore_id], app.hz*3, SINGLE,
+        //                         lp->lcore_id, get_chosen, lp);
+        // if (ret < 0) {
+        //     printf("Worker %u timer is in the RUNNING state\n", lcore);
+        // }
+
+        if (app.p4xos_conf.leader) {
+            lp->proposer = proposer_new(lcore, app.p4xos_conf.num_acceptors);
+            rte_timer_init(&lp->preexecute_timer);
+            ret = rte_timer_reset(&lp->preexecute_timer, freq, SINGLE, lcore,
+                                    pre_execute_prepare, lp);
+            if (ret < 0) {
+                printf("timer is in the RUNNING state\n");
+            }
+
+            rte_timer_init(&lp->prepare_timer);
+            rte_timer_init(&lp->accept_timer);
+        }
     }
-    lp->lcore_id = lcore;
-    lp->learner = learner_new(app.p4xos_conf.num_acceptors);
-    learner_set_instance_id(lp->learner, 0);
-    lp->cur_inst = 0;
-    lp->artificial_drop = app.p4xos_conf.drop;
-    // uint64_t freq = app.hz;
-
-    // rte_timer_init(&lp->deliver_timer);
-    //
-    // ret = rte_timer_reset(&lp->deliver_timer, freq, PERIODICAL, lcore,
-    //    learner_call_deliver, lp);
-    // if (ret < 0) {
-    //  printf("timer is in the RUNNING state\n");
-    // }
-
-    // rte_timer_init(&lp->check_hole_timer);
-    // ret = rte_timer_reset(&lp->check_hole_timer, freq, PERIODICAL, lcore,
-    //                       learner_check_holes, lp);
-    // if (ret < 0) {
-    //   printf("timer is in the RUNNING state\n");
-    // }
-
-    rte_timer_init(&lp->recv_timer[lp->lcore_id]);
-
-    // ret = rte_timer_reset(&lp->recv_timer[lp->lcore_id], app.hz*3, SINGLE, lp->lcore_id,
-    //    get_chosen, lp);
-    // if (ret < 0) {
-    //  printf("Worker %u timer is in the RUNNING state\n", lcore);
-    // }
-  }
 }
 
 void app_init_proposer(void) {
@@ -480,7 +495,6 @@ static void app_init_nics(void) {
     static struct rte_eth_conf local_port_conf;
     local_port_conf.rxmode.mq_mode = ETH_MQ_RX_RSS;
     local_port_conf.rxmode.split_hdr_size = 0;
-    local_port_conf.rxmode.ignore_offload_bitfield = 1;
     local_port_conf.rxmode.offloads =
         (DEV_RX_OFFLOAD_CHECKSUM | DEV_RX_OFFLOAD_CRC_STRIP);
     local_port_conf.rx_adv_conf.rss_conf.rss_key = NULL;
@@ -499,8 +513,11 @@ static void app_init_nics(void) {
     /* Init port */
     printf("Initializing NIC port %u ...\n", port);
     rte_eth_dev_info_get(port, &dev_info);
-    if (dev_info.tx_offload_capa & DEV_TX_OFFLOAD_MBUF_FAST_FREE)
-      local_port_conf.txmode.offloads |= DEV_TX_OFFLOAD_MBUF_FAST_FREE;
+    if (dev_info.tx_offload_capa & DEV_TX_OFFLOAD_MBUF_FAST_FREE) {
+        local_port_conf.txmode.offloads |= DEV_TX_OFFLOAD_MBUF_FAST_FREE;
+    }
+    local_port_conf.rx_adv_conf.rss_conf.rss_hf &=
+                          dev_info.flow_type_rss_offloads;
     ret = rte_eth_dev_configure(port, (uint8_t)n_rx_queues,
                                 (uint8_t)n_tx_queues, &local_port_conf);
     if (ret < 0) {
@@ -541,7 +558,6 @@ static void app_init_nics(void) {
     }
 
     txq_conf = dev_info.default_txconf;
-    txq_conf.txq_flags = ETH_TXQ_FLAGS_IGNORE;
     txq_conf.offloads = local_port_conf.txmode.offloads;
     /* Init TX queues */
     if (app.nic_tx_port_mask[port] == 1) {

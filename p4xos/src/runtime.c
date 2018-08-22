@@ -12,6 +12,7 @@
 #include <string.h>
 #include <sys/queue.h>
 #include <sys/types.h>
+#include <arpa/inet.h>
 
 #include <rte_atomic.h>
 #include <rte_branch_prediction.h>
@@ -563,6 +564,13 @@ app_lcore_worker(
                 rte_pktmbuf_free(pkt);
                 continue;
             }
+
+            char src[INET_ADDRSTRLEN];
+            char dst[INET_ADDRSTRLEN];
+            inet_ntop(AF_INET, &(ipv4_hdr->src_addr), src, INET_ADDRSTRLEN);
+            inet_ntop(AF_INET, &(ipv4_hdr->dst_addr), dst, INET_ADDRSTRLEN);
+            RTE_LOG(DEBUG, P4XOS, "Out %s => %s\n", src, dst);
+
 
             ipv4_dst = rte_be_to_cpu_32(ipv4_hdr->dst_addr);
 
