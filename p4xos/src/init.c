@@ -162,13 +162,10 @@ void app_init_proposer(void) {
         lp->lcore_id = lcore;
         lp->request_id = 0;
 #ifdef RESUBMIT
-        int ret;
         printf("Worker %u init timer\n", lp->worker_id);
-        rte_timer_init(&lp->recv_timer);
-        ret = rte_timer_reset(&lp->recv_timer, app.hz*5, SINGLE,
-                                lp->lcore_id, proposer_resubmit, lp);
-        if (ret < 0) {
-            printf("Worker %u timer is in the RUNNING state\n", lp->worker_id);
+        int k;
+        for (k=0; k < MAX_N_CONCURRENT_REQUEST; k++) {
+            rte_timer_init(&lp->request_timer[k]);
         }
 #endif
         /* Init Latency file */
@@ -193,6 +190,11 @@ void app_free_proposer(void) {
         }
         if (lp->latency_fp) {
             fclose(lp->latency_fp);
+        }
+        int k;
+        for (k=0; k < MAX_N_CONCURRENT_REQUEST; k++)
+        {
+            free_resubmit_params(lp->resubmit_params[k]);
         }
     }
 }

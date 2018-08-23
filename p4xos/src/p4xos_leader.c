@@ -220,6 +220,8 @@ int replica_handler(struct rte_mbuf *pkt_in, void *arg) {
     struct paxos_hdr *paxos_hdr =
       rte_pktmbuf_mtod_offset(pkt_in, struct paxos_hdr *, paxos_offset);
 
+    print_paxos_hdr(paxos_hdr);
+
     uint8_t msgtype = paxos_hdr->msgtype;
     switch (msgtype) {
     case PAXOS_RESET: {

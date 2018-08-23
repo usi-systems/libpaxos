@@ -89,8 +89,8 @@ size_t get_paxos_offset(void) {
 
 
 void print_paxos_hdr(struct paxos_hdr *paxos_hdr) {
-    printf("msgtype %u worker_id %u round %u inst %u log_index %u vrnd %u \
-            acptid %u reserved %u value %s reserved2 %u igress_ts %"PRIu64"\n",
+    RTE_LOG(DEBUG, P4XOS, "msgtype %u worker_id %u round %u inst %u log_index %u vrnd %u"
+            "acptid %u reserved %u value %s request_id %u igress_ts %"PRIu64"\n",
                 paxos_hdr->msgtype,
                 paxos_hdr->worker_id,
                 rte_be_to_cpu_16(paxos_hdr->rnd),
@@ -132,38 +132,6 @@ void submit(uint8_t worker_id, char *value, int size) {
     lp->mbuf_out[port].n_mbufs++;
 }
 
-void submit_bulk(uint8_t worker_id, uint32_t nb_pkts,
-    struct app_lcore_params_worker *lp, char *value, int size) {
-    int ret;
-    uint32_t mbuf_idx;
-    uint16_t port = app.p4xos_conf.tx_port;
-    int lcore = app_get_lcore_worker(worker_id);
-    if (lcore < 0) {
-        rte_panic("Invalid worker_id\n");
-    }
-
-    struct rte_mbuf *pkts[nb_pkts];
-    ret = rte_pktmbuf_alloc_bulk(app.lcore_params[lcore].pool, pkts, nb_pkts);
-
-    if (ret < 0) {
-        RTE_LOG(INFO, USER1, "Not enough entries in the mempools\n");
-        return;
-    }
-
-    uint32_t i;
-    for (i = 0; i < nb_pkts; i++) {
-        uint32_t request_id = lp->request_id + i;
-        prepare_paxos_message(pkts[i], port, &app.p4xos_conf.mine,
-                        &app.p4xos_conf.paxos_leader,
-                        app.p4xos_conf.msgtype, 0, 0, worker_id,
-                        app.p4xos_conf.node_id, request_id, value, size);
-        value += size;
-        mbuf_idx = lp->mbuf_out[port].n_mbufs;
-        lp->mbuf_out[port].array[mbuf_idx++] = pkts[i];
-        lp->mbuf_out[port].n_mbufs = mbuf_idx;
-    }
-    lp->mbuf_out_flush[port] = 1;
-}
 
 
 static void

@@ -37,11 +37,12 @@ static void receive_response(unsigned int worker_id,
                              unsigned int __rte_unused inst,
                              __rte_unused char *val, __rte_unused size_t size,
                              __rte_unused void *arg) {
-	struct request *req = (struct request*) val;
+	// struct request *req = (struct request*) val;
 	// printf("Worker %u Received a response: %u %u %u\n", worker_id, req->type, req->key, req->value);
-	req->type = WRITE_REQ;
-	req->req.write.key = req->req.write.key + 1;
-	req->req.write.value = req->req.write.value + 1;
+	// req->type = WRITE_REQ;
+	// req->req.write.key = req->req.write.key + 1;
+	// req->req.write.value = req->req.write.value + 1;
+	// printf("Worker %u Received a response: %s %zu\n", worker_id, val, size);
 }
 
 static void
@@ -153,13 +154,16 @@ main(int argc, char **argv)
 	}
 	uint32_t worker_id = 0;
 
+	char value[][PAXOS_VALUE_SIZE] = {"Brianzd", "Shadowe", "Iphone7", "Mercury"};
+
 	for (lcore = 0; lcore < APP_MAX_LCORES; lcore ++) {
 		struct app_lcore_params_worker *lp = &app.lcore_params[lcore].worker;
 
 		if (app.lcore_params[lcore].type != e_APP_LCORE_WORKER) {
 			continue;
 		}
-		submit_bulk(worker_id, app.p4xos_conf.osd, lp, (char*)req, sizeof(struct request));
+		// submit_bulk(worker_id, app.p4xos_conf.osd, lp, (char*)req, sizeof(struct request));
+		submit_bulk(worker_id, app.p4xos_conf.osd, lp, value[worker_id], sizeof(value[worker_id]));
 		worker_id++;
 		if (worker_id == n_workers)
 			break;

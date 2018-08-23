@@ -243,6 +243,7 @@
 #define STAT_PERIOD 1		/* get stat every 1/STAT_PERIOD (s) */
 #define RESUBMIT_TIMEOUT 1 /* Client resubmit every 1/RESUBMIT_TIMEOUT (s) */
 #define LEADER_CHECK_TIMEOUT 5 /* Client check closed prepare/accept every 1/LEADER_CHECK_TIMEOUT (s) */
+#define MAX_N_CONCURRENT_REQUEST 8
 
 #ifdef __cplusplus
 extern "C" {
@@ -315,6 +316,14 @@ struct app_lcore_params_io {
 	} tx;
 };
 
+struct app_lcore_params_worker;
+
+struct resubmit_parm {
+	uint32_t request_id;
+	struct app_lcore_params_worker *lp;
+	char *value;
+	int vsize;
+};
 
 struct app_lcore_params_worker {
 	/* Rings */
@@ -365,6 +374,7 @@ struct app_lcore_params_worker {
 	struct rte_timer deliver_timer;
 	struct rte_timer check_hole_timer;
 	struct rte_timer recv_timer;
+	struct rte_timer request_timer[MAX_N_CONCURRENT_REQUEST];
 	char* default_value;
 	uint32_t default_value_len;
 
@@ -373,6 +383,7 @@ struct app_lcore_params_worker {
 	struct rte_timer prepare_timer;
 	struct rte_timer accept_timer;
 	uint32_t request_id;
+	struct resubmit_parm *resubmit_params[MAX_N_CONCURRENT_REQUEST];
 };
 
 struct app_lcore_params {
@@ -498,6 +509,7 @@ void proposer_preexecute(struct app_lcore_params_worker *lp);
 void pre_execute_prepare(__rte_unused struct rte_timer *timer, void *arg);
 void send_to_acceptor(struct app_lcore_params_worker *lp, struct paxos_message *pm);
 void paxos_stats(struct rte_mbuf *pkt_in, struct app_lcore_params_worker *lp);
+void free_resubmit_params(struct resubmit_parm *parm);
 
 #ifdef __cplusplus
 }  /* end extern "C" */

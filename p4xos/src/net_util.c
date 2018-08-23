@@ -89,17 +89,17 @@ void set_paxos_hdr(struct paxos_hdr *px, uint8_t msgtype, uint32_t inst,
                           uint32_t request_id, char *value, int size) {
     uint64_t igress_ts = 0;
     px->msgtype = msgtype;
+    px->worker_id = worker_id;
     px->inst = rte_cpu_to_be_32(inst);
     px->rnd = rte_cpu_to_be_16(rnd);
     px->vrnd = rte_cpu_to_be_16(0);
     px->acptid = rte_cpu_to_be_16(acptid);
-    px->worker_id = worker_id;
-    px->request_id = rte_cpu_to_be_32(request_id);
+    px->reserved = 0;
     char *pval = (char *) &px->value;
     if (size > 0 && value != NULL) {
         rte_memcpy(pval, value, size);
     }
-    px->reserved = 0;
+    px->request_id = rte_cpu_to_be_32(request_id);
     px->igress_ts = rte_cpu_to_be_64(igress_ts);
 }
 
