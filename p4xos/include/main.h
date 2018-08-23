@@ -364,7 +364,7 @@ struct app_lcore_params_worker {
 	struct rte_timer stat_timer;
 	struct rte_timer deliver_timer;
 	struct rte_timer check_hole_timer;
-	struct rte_timer recv_timer[APP_MAX_LCORES];
+	struct rte_timer recv_timer;
 	char* default_value;
 	uint32_t default_value_len;
 

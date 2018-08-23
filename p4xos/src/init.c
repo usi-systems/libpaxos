@@ -109,7 +109,7 @@ void app_init_learner(void) {
         lp->artificial_drop = app.p4xos_conf.drop;
         uint64_t freq = app.hz;
 
-        rte_timer_init(&lp->recv_timer[lp->lcore_id]);
+        rte_timer_init(&lp->recv_timer);
 
         // rte_timer_init(&lp->deliver_timer);
         //
@@ -164,8 +164,8 @@ void app_init_proposer(void) {
 #ifdef RESUBMIT
         int ret;
         printf("Worker %u init timer\n", lp->worker_id);
-        rte_timer_init(&lp->recv_timer[lp->lcore_id]);
-        ret = rte_timer_reset(&lp->recv_timer[lp->lcore_id], app.hz*5, SINGLE,
+        rte_timer_init(&lp->recv_timer);
+        ret = rte_timer_reset(&lp->recv_timer, app.hz*5, SINGLE,
                                 lp->lcore_id, proposer_resubmit, lp);
         if (ret < 0) {
             printf("Worker %u timer is in the RUNNING state\n", lp->worker_id);

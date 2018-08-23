@@ -72,17 +72,16 @@ static void set_ip_addr(struct ipv4_hdr *ip, uint32_t src, uint32_t dst) {
 
 
 static inline void respond(struct rte_mbuf *pkt_in) {
-  size_t ip_offset = sizeof(struct ether_hdr);
-  struct ipv4_hdr *ip =
-      rte_pktmbuf_mtod_offset(pkt_in, struct ipv4_hdr *, ip_offset);
-  char src[INET_ADDRSTRLEN];
-  char dst[INET_ADDRSTRLEN];
-  inet_ntop(AF_INET, &(ip->src_addr), src, INET_ADDRSTRLEN);
-  inet_ntop(AF_INET, &(ip->dst_addr), dst, INET_ADDRSTRLEN);
-  RTE_LOG(DEBUG, P4XOS, "%s => %s\n", src, dst);
-  set_ip_addr(ip, app.p4xos_conf.mine.sin_addr.s_addr, ip->src_addr);
-  size_t data_size = sizeof(struct paxos_hdr);
-  prepare_hw_checksum(pkt_in, data_size);
+    size_t ip_offset = sizeof(struct ether_hdr);
+    struct ipv4_hdr *ip = rte_pktmbuf_mtod_offset(pkt_in, struct ipv4_hdr *, ip_offset);
+    char src[INET_ADDRSTRLEN];
+    char dst[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &(ip->src_addr), src, INET_ADDRSTRLEN);
+    inet_ntop(AF_INET, &(ip->dst_addr), dst, INET_ADDRSTRLEN);
+    RTE_LOG(DEBUG, P4XOS, "%s => %s\n", src, dst);
+    set_ip_addr(ip, app.p4xos_conf.mine.sin_addr.s_addr, ip->src_addr);
+    size_t data_size = sizeof(struct paxos_hdr);
+    prepare_hw_checksum(pkt_in, data_size);
 }
 
 
@@ -185,7 +184,6 @@ static inline int promise_handler(struct paxos_hdr *paxos_hdr,
 
 static inline int accepted_handler(struct paxos_hdr *paxos_hdr,
                                    struct app_lcore_params_worker *lp) {
-    int ret;
     int vsize = PAXOS_VALUE_SIZE;
     struct paxos_accepted ack = {.iid = rte_be_to_cpu_32(paxos_hdr->inst),
                                .ballot = rte_be_to_cpu_16(paxos_hdr->rnd),
@@ -311,11 +309,12 @@ static inline int learner_chosen_handler(struct paxos_hdr *paxos_hdr,
         lp->highest_chosen_inst = inst;
     }
 
-    RTE_LOG(DEBUG, P4XOS, "Worker %u, Chosen instance %u\n",
-            lp->worker_id, inst);
-    lp->deliver(lp->worker_id, inst, (char *)&paxos_hdr->value,
-                vsize, lp->deliver_arg);
-
+    RTE_LOG(DEBUG, P4XOS, "Worker %u, Chosen instance %u\n", lp->worker_id, inst);
+    lp->deliver(lp->worker_id, inst, (char *)&paxos_hdr->value, vsize, lp->deliver_arg);
+    if (app.p4xos_conf.leader)
+    {
+        return proposer_prepare_allocated(lp, paxos_hdr);
+    }
     return SUCCESS;
 }
 
@@ -349,6 +348,9 @@ static inline void stats(struct rte_mbuf *pkt_in,
 int proposer_handler(struct rte_mbuf *pkt_in, void *arg) {
     struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
     stats(pkt_in, lp);
+    size_t ip_offset = sizeof(struct ether_hdr);
+    struct ipv4_hdr *ip =
+    rte_pktmbuf_mtod_offset(pkt_in, struct ipv4_hdr *, ip_offset);
     size_t paxos_offset = get_paxos_offset();
     struct paxos_hdr *paxos_hdr =
             rte_pktmbuf_mtod_offset(pkt_in, struct paxos_hdr *, paxos_offset);
@@ -357,6 +359,8 @@ int proposer_handler(struct rte_mbuf *pkt_in, void *arg) {
     switch (msgtype) {
         case PAXOS_CHOSEN: {
         chosen_handler(paxos_hdr, lp);
+        set_ip_addr(ip, app.p4xos_conf.mine.sin_addr.s_addr,
+            app.p4xos_conf.paxos_leader.sin_addr.s_addr);
         break;
     }
     default:
@@ -364,9 +368,10 @@ int proposer_handler(struct rte_mbuf *pkt_in, void *arg) {
         return NO_HANDLER;
     }
 
-    respond(pkt_in);
+    size_t data_size = sizeof(struct paxos_hdr);
+    prepare_hw_checksum(pkt_in, data_size);
 #ifdef RESUBMIT
-    rte_timer_reset(&lp->recv_timer[lp->lcore_id], app.hz/RESUBMIT_TIMEOUT,
+    rte_timer_reset(&lp->recv_timer, app.hz/RESUBMIT_TIMEOUT,
             SINGLE, lp->lcore_id, proposer_resubmit, lp);
 #endif
     return SUCCESS;
@@ -380,7 +385,7 @@ void proposer_resubmit(struct rte_timer *timer, void *arg) {
     submit_bulk(lp->worker_id, n_mbufs, lp, NULL, 0);
     RTE_LOG(INFO, P4XOS, "Worker %u Timeout. Resumit %u packets\n",
         lp->worker_id, app.p4xos_conf.osd);
-    rte_timer_reset(&lp->recv_timer[lp->lcore_id], app.hz/RESUBMIT_TIMEOUT, SINGLE,
+    rte_timer_reset(&lp->recv_timer, app.hz/RESUBMIT_TIMEOUT, SINGLE,
         lp->lcore_id, proposer_resubmit, lp);
 }
 
@@ -389,7 +394,10 @@ void timer_send_checkpoint(struct rte_timer *timer, void *arg) {
     RTE_LOG(DEBUG, P4XOS, "Worker %u timeout. Sent checkpoint instance %u\n",
         lp->worker_id, lp->highest_chosen_inst);
     send_checkpoint_message(lp->worker_id, lp->highest_chosen_inst);
-    rte_timer_reset(&lp->recv_timer[lp->lcore_id], app.hz, SINGLE, lp->lcore_id,
+    if (app.p4xos_conf.leader) {
+        proposer_preexecute(lp);
+    }
+    rte_timer_reset(&lp->recv_timer, app.hz, SINGLE, lp->lcore_id,
        timer_send_checkpoint, lp);
 }
 
@@ -506,11 +514,16 @@ int replica_handler(struct rte_mbuf *pkt_in, void *arg) {
         }
         case PAXOS_CHOSEN: {
             ret = learner_chosen_handler(paxos_hdr, lp);
-            if (!app.p4xos_conf.respond_to_client) {
-                return DROP_ORIGINAL_PACKET;
+            if (app.p4xos_conf.leader) {
+                set_ip_addr(ip, app.p4xos_conf.mine.sin_addr.s_addr,
+                    app.p4xos_conf.acceptor_addr.sin_addr.s_addr);
+            } else {
+                if (!app.p4xos_conf.respond_to_client) {
+                    return DROP_ORIGINAL_PACKET;
+                }
+                set_ip_addr(ip, app.p4xos_conf.mine.sin_addr.s_addr,
+                    app.p4xos_conf.client.sin_addr.s_addr);
             }
-            set_ip_addr(ip, app.p4xos_conf.mine.sin_addr.s_addr,
-                app.p4xos_conf.client.sin_addr.s_addr);
         break;
         }
         case LEARNER_CHECKPOINT: {
@@ -527,7 +540,7 @@ int replica_handler(struct rte_mbuf *pkt_in, void *arg) {
     }
     size_t data_size = sizeof(struct paxos_hdr);
     prepare_hw_checksum(pkt_in, data_size);
-    rte_timer_reset(&lp->recv_timer[lp->lcore_id], app.hz, SINGLE, lp->lcore_id,
+    rte_timer_reset(&lp->recv_timer, app.hz, SINGLE, lp->lcore_id,
                     timer_send_checkpoint, lp);
     return ret;
 }
