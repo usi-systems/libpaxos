@@ -495,6 +495,7 @@ int net_sendto(uint8_t worker_id, char* buf, size_t len, struct sockaddr_in *to)
 void proposer_preexecute(struct app_lcore_params_worker *lp);
 void pre_execute_prepare(__rte_unused struct rte_timer *timer, void *arg);
 void send_to_acceptor(struct app_lcore_params_worker *lp, struct paxos_message *pm);
+void paxos_stats(struct rte_mbuf *pkt_in, struct app_lcore_params_worker *lp);
 
 #ifdef __cplusplus
 }  /* end extern "C" */

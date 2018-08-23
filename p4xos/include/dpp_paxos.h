@@ -114,8 +114,8 @@ void prepare_hw_checksum(struct rte_mbuf *pkt_in, size_t data_size);
 void set_paxos_hdr(struct paxos_hdr *px, uint8_t msgtype, uint32_t inst,
                           uint16_t rnd, uint8_t worker_id, uint16_t acptid,
                           char *value, int size);
-
-
+int prepare_handler(struct paxos_hdr *paxos_hdr, void *arg);
+int accept_handler(struct paxos_hdr *paxos_hdr, void *arg);
 #ifdef __cplusplus
 }  /* end extern "C" */
 #endif
