@@ -139,7 +139,7 @@ void reset_leader_instance(uint32_t worker_id) {
     if (pkt != NULL) {
         prepare_paxos_message(pkt, port, &app.p4xos_conf.mine,
                         &app.p4xos_conf.paxos_leader, PAXOS_RESET, 0, 0, worker_id,
-                        app.p4xos_conf.node_id, NULL, 0);
+                        app.p4xos_conf.node_id, 0, NULL, 0);
     }
     lp->mbuf_out[port].array[mbuf_idx] = pkt;
     lp->mbuf_out[port].n_mbufs++;
@@ -170,7 +170,7 @@ void send_prepare(struct app_lcore_params_worker *lp, uint32_t inst,
                 lp->worker_id, out.iid, out.ballot);
         prepare_paxos_message(pkts[i], port, &app.p4xos_conf.mine,
             &app.p4xos_conf.acceptor_addr, PAXOS_PREPARE, out.iid,
-            out.ballot, lp->worker_id, app.p4xos_conf.node_id, value, size);
+            out.ballot, lp->worker_id, app.p4xos_conf.node_id, 0, value, size);
 
         mbuf_idx = lp->mbuf_out[port].n_mbufs;
         lp->mbuf_out[port].array[mbuf_idx++] = pkts[i];
@@ -199,7 +199,7 @@ void fill_holes(struct app_lcore_params_worker *lp, uint32_t inst,
     for (i = 0; i < prepare_size; i++) {
         prepare_paxos_message(pkts[i], port, &app.p4xos_conf.mine,
                         &app.p4xos_conf.paxos_leader, PAXOS_ACCEPT, inst + i, 0,
-                        lp->worker_id, app.p4xos_conf.node_id, value, size);
+                        lp->worker_id, app.p4xos_conf.node_id, 0, value, size);
 
         mbuf_idx = lp->mbuf_out[port].n_mbufs;
         lp->mbuf_out[port].array[mbuf_idx++] = pkts[i];
@@ -229,7 +229,7 @@ void send_accept(struct app_lcore_params_worker *lp, paxos_accept *accept) {
         lp->worker_id, accept->iid, accept->ballot);
     prepare_paxos_message(pkt, port, &app.p4xos_conf.mine,
                     &app.p4xos_conf.acceptor_addr, PAXOS_ACCEPT, accept->iid,
-                    accept->ballot, lp->worker_id, app.p4xos_conf.node_id, value,
+                    accept->ballot, lp->worker_id, app.p4xos_conf.node_id, 0, value,
                     size);
 
     uint32_t mbuf_idx = lp->mbuf_out[port].n_mbufs;
@@ -253,7 +253,7 @@ void send_checkpoint_message(uint8_t worker_id, uint32_t inst) {
         prepare_paxos_message(pkt, port, &app.p4xos_conf.mine,
                         &app.p4xos_conf.acceptor_addr,
                         LEARNER_CHECKPOINT, inst, 0, worker_id,
-                        app.p4xos_conf.node_id, NULL, 0);
+                        app.p4xos_conf.node_id, 0, NULL, 0);
     }
     lp->tx.mbuf_out[port].array[n_mbufs] = pkt;
     lp->tx.mbuf_out[port].n_mbufs++;

@@ -332,7 +332,7 @@ void proposer_preexecute(struct app_lcore_params_worker *lp)
         prepare_paxos_message(pkts[i], port, &app.p4xos_conf.mine,
                         &app.p4xos_conf.acceptor_addr,
                         PAXOS_PREPARE, pr.iid, pr.ballot, lp->worker_id,
-                        app.p4xos_conf.node_id, NULL, 0);
+                        app.p4xos_conf.node_id, 0, NULL, 0);
         lp->mbuf_out[port].array[mbuf_idx++] = pkts[i];
         lp->mbuf_out[port].n_mbufs = mbuf_idx;
     }
@@ -381,7 +381,7 @@ void send_to_acceptor(struct app_lcore_params_worker *lp, struct paxos_message *
         prepare_paxos_message(pkt, port, &app.p4xos_conf.mine,
                         &app.p4xos_conf.acceptor_addr, msgtype, pm->u.accept.iid,
                         pm->u.accept.ballot, lp->worker_id, app.p4xos_conf.node_id,
-                        pm->u.accept.value.paxos_value_val, pm->u.accept.value.paxos_value_len);
+                        0, pm->u.accept.value.paxos_value_val, pm->u.accept.value.paxos_value_len);
         lp->mbuf_out[port].array[mbuf_idx] = pkt;
         lp->mbuf_out[port].n_mbufs++;
     }

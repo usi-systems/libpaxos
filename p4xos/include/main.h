@@ -372,6 +372,7 @@ struct app_lcore_params_worker {
 	struct rte_timer preexecute_timer;
 	struct rte_timer prepare_timer;
 	struct rte_timer accept_timer;
+	uint32_t request_id;
 };
 
 struct app_lcore_params {
@@ -490,7 +491,8 @@ void app_set_register_cb(uint16_t port, recv_cb cb);
 void prepare_paxos_message(struct rte_mbuf *created_pkt, uint16_t port,
                         struct sockaddr_in* src, struct sockaddr_in* dst,
                         uint8_t msgtype, uint32_t inst, uint16_t rnd,
-                        uint8_t worker_id, uint16_t node_id, char* value, int size);
+                        uint8_t worker_id, uint16_t node_id, uint32_t request_id,
+						char* value, int size);
 int net_sendto(uint8_t worker_id, char* buf, size_t len, struct sockaddr_in *to);
 void proposer_preexecute(struct app_lcore_params_worker *lp);
 void pre_execute_prepare(__rte_unused struct rte_timer *timer, void *arg);
