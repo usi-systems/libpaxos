@@ -29,8 +29,8 @@ struct app_stats {
 static void
 set_request(struct request *ap, uint32_t some_value) {
 	ap->type = WRITE_REQ;
-	rte_memcpy((char *)&ap->req.write.key, (char*)&some_value, KEYLEN);
-	rte_memcpy((char *)&ap->req.write.value, (char*)&some_value, VALLEN);
+	rte_memcpy((char *)&ap->key, (char*)&some_value, KEYLEN);
+	rte_memcpy((char *)&ap->value, (char*)&some_value, VALLEN);
 }
 
 static void receive_response(unsigned int worker_id,
@@ -154,7 +154,7 @@ main(int argc, char **argv)
 	}
 	uint32_t worker_id = 0;
 
-	char value[][PAXOS_VALUE_SIZE] = {"Brianzd", "Shadowe", "Iphone7", "Mercury"};
+	// char value[][PAXOS_VALUE_SIZE] = {"Brianzd", "Shadowe", "Iphone7", "Mercury"};
 
 	for (lcore = 0; lcore < APP_MAX_LCORES; lcore ++) {
 		struct app_lcore_params_worker *lp = &app.lcore_params[lcore].worker;
@@ -162,8 +162,8 @@ main(int argc, char **argv)
 		if (app.lcore_params[lcore].type != e_APP_LCORE_WORKER) {
 			continue;
 		}
-		// submit_bulk(worker_id, app.p4xos_conf.osd, lp, (char*)req, sizeof(struct request));
-		submit_bulk(worker_id, app.p4xos_conf.osd, lp, value[worker_id], sizeof(value[worker_id]));
+		submit_bulk(worker_id, app.p4xos_conf.osd, lp, (char*)req, sizeof(struct request));
+		// submit_bulk(worker_id, app.p4xos_conf.osd, lp, value[worker_id], sizeof(value[worker_id]));
 		worker_id++;
 		if (worker_id == n_workers)
 			break;

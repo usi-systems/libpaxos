@@ -77,17 +77,6 @@ struct rocksdb_params {
 #define KEYLEN 4
 #define VALLEN 2
 
-struct read_req {
-    uint32_t key;
-    uint16_t value;
-    uint8_t terminator;
-};
-
-struct write_req {
-    uint32_t key;
-    uint16_t value;
-    uint8_t terminator;
-};
 
 struct backup_req {
     uint8_t pid; // Partition_id;
@@ -101,12 +90,9 @@ struct backup_res {
 
 struct request {
     uint8_t type;
-    union {
-        struct read_req read;
-        struct write_req write;
-        struct backup_req backup_req;
-        struct backup_res backup_res;
-    } req;
+    uint32_t key;
+    uint16_t value;
+    uint8_t terminator;
 }  __attribute__((__packed__));
 
 extern struct rocksdb_configurations rocksdb_configurations;

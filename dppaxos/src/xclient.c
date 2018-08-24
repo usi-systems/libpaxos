@@ -79,9 +79,9 @@ static void destroy_client() {
 static void set_request(struct request *ap, uint32_t inst, uint8_t msg_type,
                         uint8_t key, uint16_t value) {
   ap->type = msg_type;
-  ap->req.write.key = key;
+  ap->key = key;
   if (ap->type == WRITE_REQ) {
-    ap->req.write.value = value;
+    ap->value = value;
   }
 }
 
@@ -187,7 +187,7 @@ get_file_size(FILE *fp)
     return sz;
 }
 
-
+/*
 static void
 copy_buffer_to_pkt(struct rte_mbuf *pkt, uint16_t port, char* buffer, uint32_t buffer_size)
 {
@@ -228,8 +228,8 @@ copy_buffer_to_pkt(struct rte_mbuf *pkt, uint16_t port, char* buffer, uint32_t b
     pkt->ol_flags = PKT_TX_IPV4 | PKT_TX_IP_CKSUM | PKT_TX_UDP_CKSUM;
     udp->dgram_cksum = rte_ipv4_phdr_cksum(ip, pkt->ol_flags);
 }
-
-
+*/
+/*
 static int send_file(char* filename)
 {
     #define MAXBUFLEN 1024
@@ -263,7 +263,6 @@ static int send_file(char* filename)
         }
     }
 
-    /* Send burst of TX packets, to port X. */
     printf("Send file %s in %u packets\n", filename, n_pkts);
     uint16_t sent;
     do {
@@ -273,6 +272,7 @@ static int send_file(char* filename)
     fclose(fp);
     return 0;
 }
+*/
 
 static const struct rte_eth_conf port_conf_default;
 
@@ -506,7 +506,6 @@ static int lcore_rx(void *arg) {
            port);
 
   printf("\nCore %u Receiving packets. [Ctrl+C to quit]\n", rte_lcore_id());
-  send_file("/home/danghu/backup/private/1/000003.log");
   struct rte_mbuf *base_pkt =
       prepare_base_pkt(client.mbuf_pool, port, app.p4xos_conf.node_id, 0);
   /* Run until the application is quit or killed. */

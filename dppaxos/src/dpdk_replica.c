@@ -51,8 +51,8 @@ static void deliver(unsigned int worker_id, unsigned int __rte_unused inst,
         uint32_t value_len = VALLEN; // rte_be_to_cpu_32(ap->value_len);
         // printf("Key %s, Value %s\n", ap->key, ap->value);
         // // Single PUT
-        handle_put(rocks->worker[worker_id].db, rocks->writeoptions, (const char *)&ap->req.write.key,
-                    key_len, (const char *)&ap->req.write.value, value_len);
+        handle_put(rocks->worker[worker_id].db, rocks->writeoptions, (const char *)&ap->key,
+                    key_len, (const char *)&ap->value, value_len);
         rocks->worker[worker_id].write_count++;
 
     } else if (ap->type == READ_REQ) {
@@ -60,10 +60,10 @@ static void deliver(unsigned int worker_id, unsigned int __rte_unused inst,
         uint32_t key_len = KEYLEN; // rte_be_to_cpu_32(ap->key_len);
         // printf("Key %s\n", ap->key);
         char *returned_value =
-        handle_get(rocks->worker[worker_id].db, rocks->readoptions, (const char *)&ap->req.read.key, key_len, &len);
+        handle_get(rocks->worker[worker_id].db, rocks->readoptions, (const char *)&ap->key, key_len, &len);
         if (returned_value != NULL) {
             // printf("Key %s: return value %s\n", ap->key, returned_value);
-            rte_memcpy((char *)&ap->req.read.value, returned_value, len);
+            rte_memcpy((char *)&ap->value, returned_value, len);
             free(returned_value);
         }
         rocks->worker[worker_id].read_count++;
@@ -168,18 +168,18 @@ int recovery_cb(char *buffer, size_t len, uint32_t worker_id, struct sockaddr_in
 
         return 0;
     }
-    else if (ap->type == BACKUP_RES) {
-        uint32_t buffer_size = rte_be_to_cpu_32(ap->req.backup_res.bufsize);
-
-        char filename[] = "/tmp/backup.tar";
-        FILE *fp = fopen(filename,"ab");
-        if (fp) {
-            fwrite(ap->req.backup_res.buffer, buffer_size, 1, fp);
-            printf("Write %u bytes to file %s\n", buffer_size, filename);
-        }
-        fclose(fp);
-        return -1;
-    }
+    // else if (ap->type == BACKUP_RES) {
+    //     uint32_t buffer_size = rte_be_to_cpu_32(ap->req.backup_res.bufsize);
+    //
+    //     char filename[] = "/tmp/backup.tar";
+    //     FILE *fp = fopen(filename,"ab");
+    //     if (fp) {
+    //         fwrite(ap->req.backup_res.buffer, buffer_size, 1, fp);
+    //         printf("Write %u bytes to file %s\n", buffer_size, filename);
+    //     }
+    //     fclose(fp);
+    //     return -1;
+    // }
     return 0;
 }
 
