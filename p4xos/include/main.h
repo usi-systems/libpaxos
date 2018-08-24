@@ -320,6 +320,7 @@ struct app_lcore_params_worker;
 
 struct resubmit_parm {
 	uint32_t request_id;
+	uint64_t igress_ts;
 	struct app_lcore_params_worker *lp;
 	char *value;
 	int vsize;
@@ -503,7 +504,7 @@ void prepare_paxos_message(struct rte_mbuf *created_pkt, uint16_t port,
                         struct sockaddr_in* src, struct sockaddr_in* dst,
                         uint8_t msgtype, uint32_t inst, uint16_t rnd,
                         uint8_t worker_id, uint16_t node_id, uint32_t request_id,
-						char* value, int size);
+						uint64_t igress_ts, char* value, int size);
 int net_sendto(uint8_t worker_id, char* buf, size_t len, struct sockaddr_in *to);
 void proposer_preexecute(struct app_lcore_params_worker *lp);
 void pre_execute_prepare(__rte_unused struct rte_timer *timer, void *arg);

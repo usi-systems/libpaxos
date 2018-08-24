@@ -125,7 +125,7 @@ static struct rte_mbuf *prepare_base_pkt(struct rte_mempool *mbuf_pool,
 
   prepare_paxos_message(base_pkt, port, &app.p4xos_conf.mine,
                   &app.p4xos_conf.paxos_leader, app.p4xos_conf.msgtype, 0, 0,
-                  worker_id, app.p4xos_conf.node_id, 0, (char *)&ap,
+                  worker_id, app.p4xos_conf.node_id, 0, 0, (char *)&ap,
                   sizeof(struct request));
 
   if (get_igress) {
@@ -139,7 +139,7 @@ static int submit_requests(struct rte_mbuf *pkt) {
   uint16_t port = app.p4xos_conf.tx_port;
   prepare_paxos_message(pkt, port, &app.p4xos_conf.mine,
                   &app.p4xos_conf.paxos_leader, app.p4xos_conf.msgtype, 0, 0,
-                  0, app.p4xos_conf.node_id, 0, NULL, 0);
+                  0, app.p4xos_conf.node_id, 0, 0, NULL, 0);
 
   client.tx_iter_count++;
 

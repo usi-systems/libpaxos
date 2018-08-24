@@ -86,8 +86,7 @@ void set_udp_hdr_sockaddr_in(struct udp_hdr *udp, struct sockaddr_in *src,
 
 void set_paxos_hdr(struct paxos_hdr *px, uint8_t msgtype, uint32_t inst,
                           uint16_t rnd, uint8_t worker_id, uint16_t acptid,
-                          uint32_t request_id, char *value, int size) {
-    uint64_t igress_ts = 0;
+                          uint32_t request_id, uint64_t igress_ts, char *value, int size) {
     px->msgtype = msgtype;
     px->worker_id = worker_id;
     px->inst = rte_cpu_to_be_32(inst);
@@ -155,7 +154,7 @@ void prepare_hw_checksum(struct rte_mbuf *pkt_in, size_t data_size) {
 void prepare_paxos_message(struct rte_mbuf *created_pkt, uint16_t port,
                      struct sockaddr_in* src, struct sockaddr_in* dst, uint8_t msgtype,
                      uint32_t inst, uint16_t rnd, uint8_t worker_id,
-                     uint16_t node_id, uint32_t request_id, char *value, int size) {
+                     uint16_t node_id, uint32_t request_id, uint64_t igress_ts, char *value, int size) {
 
     struct ether_hdr *eth =
                     rte_pktmbuf_mtod_offset(created_pkt, struct ether_hdr *, 0);
@@ -175,7 +174,7 @@ void prepare_paxos_message(struct rte_mbuf *created_pkt, uint16_t port,
     struct paxos_hdr *px =
         rte_pktmbuf_mtod_offset(created_pkt, struct paxos_hdr *, paxos_offset);
 
-    set_paxos_hdr(px, msgtype, inst, rnd, worker_id, node_id, request_id, value, size);
+    set_paxos_hdr(px, msgtype, inst, rnd, worker_id, node_id, request_id, igress_ts, value, size);
 
     size_t data_size = sizeof(struct paxos_hdr);
     size_t l4_len = sizeof(struct udp_hdr) + data_size;

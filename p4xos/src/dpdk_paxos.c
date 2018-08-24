@@ -48,7 +48,6 @@
 
 #define PREAMBLE_CRC_IPG 24
 
-
 int proposer_prepare_allocated(struct app_lcore_params_worker *lp,
                                 struct paxos_hdr *out);
 void check_prepare_timeouts(__rte_unused struct rte_timer *timer, void *arg);
@@ -127,7 +126,7 @@ void submit(uint8_t worker_id, char *value, int size) {
         prepare_paxos_message(pkt, port, &app.p4xos_conf.mine,
                         &app.p4xos_conf.paxos_leader,
                         app.p4xos_conf.msgtype, lp->cur_inst++, 0, worker_id,
-                        app.p4xos_conf.node_id, lp->request_id, value, size);
+                        app.p4xos_conf.node_id, lp->request_id, 0, value, size);
     }
     lp->mbuf_out[port].n_mbufs++;
 }

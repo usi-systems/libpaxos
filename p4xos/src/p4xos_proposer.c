@@ -47,13 +47,19 @@
 #include "paxos.h"
 #include "net_util.h"
 
-#define PREAMBLE_CRC_IPG 24
 
-void resubmit_request(struct app_lcore_params_worker *lp, uint32_t request_id, char *value, int size);
+void resubmit_request(struct resubmit_parm *parm);
+
+static int get_timer_idex(uint32_t request_id)
+{
+    return request_id % app.p4xos_conf.osd;
+}
 
 static inline int proposer_chosen_handler(struct paxos_hdr *paxos_hdr,
                                  struct app_lcore_params_worker *lp) {
     uint32_t inst = rte_be_to_cpu_32(paxos_hdr->inst);
+    uint32_t request_id = rte_be_to_cpu_32(paxos_hdr->request_id);
+    uint32_t new_request_id = request_id + app.p4xos_conf.osd;
     uint64_t now = 0;
 
     if (app.p4xos_conf.measure_latency) {
@@ -63,7 +69,6 @@ static inline int proposer_chosen_handler(struct paxos_hdr *paxos_hdr,
             uint64_t diff = now - previous;
             lp->latency += diff;
             lp->nb_latency++;
-            paxos_hdr->igress_ts = rte_cpu_to_be_64(now);
             double latency = cycles_to_ns(diff, app.hz);
             lp->buffer_count += sprintf(&lp->file_buffer[lp->buffer_count], "%u %.0f\n",
                                             app.p4xos_conf.osd, latency);
@@ -76,12 +81,13 @@ static inline int proposer_chosen_handler(struct paxos_hdr *paxos_hdr,
     size_t vsize = PAXOS_VALUE_SIZE;
     lp->deliver(lp->worker_id, inst, (char *)&paxos_hdr->value, vsize, lp->deliver_arg);
     lp->nb_delivery++;
+    /* New Request */
     paxos_hdr->msgtype = app.p4xos_conf.msgtype;
-
+    paxos_hdr->request_id = rte_cpu_to_be_32(new_request_id);
     if (app.p4xos_conf.measure_latency) {
         if (unlikely(inst % app.p4xos_conf.ts_interval == 0))
         {
-            if(likely(now == 0)) {
+            if (likely(now == 0)) {
                 now = rte_get_timer_cycles();
             }
             paxos_hdr->igress_ts = rte_cpu_to_be_64(now);
@@ -90,13 +96,17 @@ static inline int proposer_chosen_handler(struct paxos_hdr *paxos_hdr,
         }
     }
 
+#ifdef RESUBMIT
+    uint32_t idx = get_timer_idex(request_id);
+    lp->resubmit_params[idx]->igress_ts = now;
+    lp->resubmit_params[idx]->request_id = new_request_id;
+    rte_timer_reset(&lp->request_timer[idx], app.hz/RESUBMIT_TIMEOUT,
+        SINGLE, lp->lcore_id, proposer_resubmit, lp->resubmit_params[idx]);
+#endif
+
     return SUCCESS;
 }
 
-static int get_timer_idex(uint32_t request_id)
-{
-    return request_id % app.p4xos_conf.osd;
-}
 
 int proposer_handler(struct rte_mbuf *pkt_in, void *arg) {
     struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
@@ -110,20 +120,12 @@ int proposer_handler(struct rte_mbuf *pkt_in, void *arg) {
 
     print_paxos_hdr(paxos_hdr);
     uint8_t msgtype = paxos_hdr->msgtype;
-    uint32_t request_id = rte_be_to_cpu_32(paxos_hdr->request_id);
 
     switch (msgtype) {
         case PAXOS_CHOSEN: {
         proposer_chosen_handler(paxos_hdr, lp);
-        paxos_hdr->request_id = rte_cpu_to_be_32(request_id + app.p4xos_conf.osd);
         set_ip_addr(ip, app.p4xos_conf.mine.sin_addr.s_addr,
             app.p4xos_conf.paxos_leader.sin_addr.s_addr);
-
-#ifdef RESUBMIT
-        uint32_t idx = get_timer_idex(request_id);
-        rte_timer_reset(&lp->request_timer[idx], app.hz/RESUBMIT_TIMEOUT,
-                        SINGLE, lp->lcore_id, proposer_resubmit, lp->resubmit_params[idx]);
-#endif
         break;
     }
     default:
@@ -139,17 +141,17 @@ int proposer_handler(struct rte_mbuf *pkt_in, void *arg) {
 
 void proposer_resubmit(struct rte_timer *timer, void *arg) {
     struct resubmit_parm *parm = (struct resubmit_parm *)arg;
-    resubmit_request(parm->lp, parm->request_id, parm->value, parm->vsize);
+    resubmit_request(parm);
     RTE_LOG(INFO, P4XOS, "Worker %u Resubmit Request %u\n",
             parm->lp->worker_id, parm->request_id);
     rte_timer_reset(timer, app.hz/RESUBMIT_TIMEOUT, SINGLE,
         parm->lp->lcore_id, proposer_resubmit, parm);
 }
 
-void resubmit_request(struct app_lcore_params_worker *lp, uint32_t request_id, char *value, int size) {
+void resubmit_request(struct resubmit_parm *parm) {
     uint32_t mbuf_idx;
     uint16_t port = app.p4xos_conf.tx_port;
-    int lcore = app_get_lcore_worker(lp->worker_id);
+    int lcore = app_get_lcore_worker(parm->lp->worker_id);
     if (lcore < 0) {
         rte_panic("Invalid worker_id\n");
     }
@@ -158,16 +160,18 @@ void resubmit_request(struct app_lcore_params_worker *lp, uint32_t request_id, c
 
     prepare_paxos_message(pkt, port, &app.p4xos_conf.mine,
                     &app.p4xos_conf.paxos_leader,
-                    app.p4xos_conf.msgtype, 0, 0, lp->worker_id,
-                    app.p4xos_conf.node_id, request_id, value, size);
+                    app.p4xos_conf.msgtype, 0, 0, parm->lp->worker_id,
+                    app.p4xos_conf.node_id, parm->request_id, parm->igress_ts,
+                    parm->value, parm->vsize);
 
-    mbuf_idx = lp->mbuf_out[port].n_mbufs;
-    lp->mbuf_out[port].array[mbuf_idx++] = pkt;
-    lp->mbuf_out[port].n_mbufs = mbuf_idx;
+    mbuf_idx = parm->lp->mbuf_out[port].n_mbufs;
+    parm->lp->mbuf_out[port].array[mbuf_idx++] = pkt;
+    parm->lp->mbuf_out[port].n_mbufs = mbuf_idx;
 
-    uint32_t idx = request_id % MAX_N_CONCURRENT_REQUEST;
-    rte_timer_reset(&lp->request_timer[idx], app.hz/RESUBMIT_TIMEOUT,
-                    SINGLE, lp->lcore_id, proposer_resubmit, lp);
+
+    uint32_t idx = get_timer_idex(parm->request_id);
+    rte_timer_reset(&parm->lp->request_timer[idx], app.hz/RESUBMIT_TIMEOUT,
+                    SINGLE, parm->lp->lcore_id, proposer_resubmit, parm);
 }
 
 
@@ -192,10 +196,11 @@ void submit_bulk(uint8_t worker_id, uint32_t nb_pkts,
     uint32_t i;
     for (i = 0; i < nb_pkts; i++) {
         uint32_t request_id = lp->request_id + i;
+        uint64_t igress_ts = rte_get_timer_cycles();
         prepare_paxos_message(pkts[i], port, &app.p4xos_conf.mine,
                         &app.p4xos_conf.paxos_leader,
                         app.p4xos_conf.msgtype, 0, 0, worker_id,
-                        app.p4xos_conf.node_id, request_id, value, size);
+                        app.p4xos_conf.node_id, request_id, igress_ts, value, size);
 
         mbuf_idx = lp->mbuf_out[port].n_mbufs;
         lp->mbuf_out[port].array[mbuf_idx++] = pkts[i];
@@ -210,6 +215,7 @@ void submit_bulk(uint8_t worker_id, uint32_t nb_pkts,
         parm->lp = lp;
         parm->value = value;
         parm->vsize = size;
+        parm->igress_ts = igress_ts;
         uint32_t idx = get_timer_idex(request_id);
         lp->resubmit_params[idx] = parm;
         rte_timer_reset(&lp->request_timer[idx], app.hz/RESUBMIT_TIMEOUT,
