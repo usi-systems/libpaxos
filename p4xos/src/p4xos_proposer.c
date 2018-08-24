@@ -85,7 +85,7 @@ static inline int proposer_chosen_handler(struct paxos_hdr *paxos_hdr,
     paxos_hdr->msgtype = app.p4xos_conf.msgtype;
     paxos_hdr->request_id = rte_cpu_to_be_32(new_request_id);
     if (app.p4xos_conf.measure_latency) {
-        if (unlikely(inst % app.p4xos_conf.ts_interval == 0))
+        if (unlikely(request_id % app.p4xos_conf.ts_interval == 0))
         {
             if (likely(now == 0)) {
                 now = rte_get_timer_cycles();

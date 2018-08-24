@@ -160,7 +160,7 @@ void app_init_proposer(void) {
             continue;
         }
         lp->lcore_id = lcore;
-        lp->request_id = 0;
+        lp->request_id = 1;
 #ifdef RESUBMIT
         printf("Worker %u init timer\n", lp->worker_id);
         int k;

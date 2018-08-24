@@ -47,9 +47,8 @@
 #include "net_util.h"
 
 
-static inline int learner_checkpoint_handler(struct paxos_hdr *paxos_hdr,
-                                         struct app_lcore_params_worker *lp) {
-
+int learner_checkpoint_handler(struct paxos_hdr *paxos_hdr, void *arg) {
+    struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
     uint32_t inst = rte_be_to_cpu_32(paxos_hdr->inst);
     RTE_LOG(DEBUG, P4XOS, "Worker %u, Checkpoint instance %u\n",
             lp->worker_id, inst);

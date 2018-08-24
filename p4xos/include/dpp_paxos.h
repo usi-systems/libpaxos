@@ -116,6 +116,9 @@ void set_paxos_hdr(struct paxos_hdr *px, uint8_t msgtype, uint32_t inst,
                           uint32_t request_id, uint64_t igress_ts, char *value, int size);
 int prepare_handler(struct paxos_hdr *paxos_hdr, void *arg);
 int accept_handler(struct paxos_hdr *paxos_hdr, void *arg);
+int learner_checkpoint_handler(struct paxos_hdr *paxos_hdr, void *arg);
+
+
 #ifdef __cplusplus
 }  /* end extern "C" */
 #endif

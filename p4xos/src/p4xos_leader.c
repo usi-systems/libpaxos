@@ -114,10 +114,17 @@ static inline int accepted_handler(struct paxos_hdr *paxos_hdr,
     RTE_LOG(DEBUG, P4XOS, "Worker %u, Received Accepted instance %u, ballot %u, aid %u\n",
                   lp->worker_id, ack.iid, ack.ballot, ack.aid);
 
-/*
+
+    if (app.p4xos_conf.leader) {
+        proposer_receive_accepted(lp->proposer, &ack);
+    }
+
     learner_receive_accepted(lp->learner, &ack);
     paxos_accepted deliver;
-    if ((ret = learner_deliver_next(lp->learner, &deliver))) {
+    if (learner_deliver_next(lp->learner, &deliver)) {
+        lp->deliver(lp->worker_id, deliver.iid, deliver.value.paxos_value_val,
+                deliver.value.paxos_value_len, lp->deliver_arg);
+
         RTE_LOG(DEBUG, P4XOS, "Worker %u, Delivers instance "
                           "%u,  ballot %u\n", lp->worker_id, deliver.iid, deliver.ballot);
         paxos_hdr->msgtype = PAXOS_CHOSEN;
@@ -126,21 +133,7 @@ static inline int accepted_handler(struct paxos_hdr *paxos_hdr,
         if (deliver.value.paxos_value_len)
             rte_memcpy(&paxos_hdr->value, deliver.value.paxos_value_val, PAXOS_VALUE_SIZE);
         paxos_accepted_destroy(&deliver);
-        ret = SUCCESS;
-    }
-*/
-
-    if (app.p4xos_conf.leader) {
-        if (proposer_receive_accepted(lp->proposer, &ack) == 2) {
-            RTE_LOG(DEBUG, P4XOS, "Worker %u, Chosen instance %u,  ballot %u\n",
-                    lp->worker_id, ack.iid, ack.ballot);
-            paxos_hdr->msgtype = PAXOS_CHOSEN;
-            paxos_hdr->inst = rte_cpu_to_be_32(ack.iid);
-            paxos_hdr->rnd = rte_cpu_to_be_16(ack.ballot);
-            if (ack.value.paxos_value_len)
-                rte_memcpy(&paxos_hdr->value, ack.value.paxos_value_val, PAXOS_VALUE_SIZE);
-            return SUCCESS;
-        }
+        return SUCCESS;
     }
 
     return TO_DROP;
@@ -177,26 +170,6 @@ static inline int learner_chosen_handler(struct paxos_hdr *paxos_hdr,
         return proposer_prepare_allocated(lp, paxos_hdr);
     }
     return SUCCESS;
-}
-
-static inline int learner_checkpoint_handler(struct paxos_hdr *paxos_hdr,
-                                         struct app_lcore_params_worker *lp) {
-
-    uint32_t inst = rte_be_to_cpu_32(paxos_hdr->inst);
-    RTE_LOG(DEBUG, P4XOS, "Worker %u, Checkpoint instance %u\n",
-            lp->worker_id, inst);
-
-    if (lp->proposer) {
-        struct paxos_acceptor_state acc_state = { .trim_iid = inst };
-        proposer_receive_acceptor_state(lp->proposer, &acc_state);
-    }
-
-    if (lp->acceptor) {
-        paxos_trim trim = { .iid = inst };
-        acceptor_receive_trim(lp->acceptor, &trim);
-    }
-
-    return DROP_ORIGINAL_PACKET;
 }
 
 
@@ -246,7 +219,8 @@ int replica_handler(struct rte_mbuf *pkt_in, void *arg) {
         case PAXOS_ACCEPT: {
             ret = accept_handler(paxos_hdr, lp);
             if (ret == SUCCESS) {
-                set_ip_addr(ip, app.p4xos_conf.mine.sin_addr.s_addr, ip->src_addr);
+                set_ip_addr(ip, app.p4xos_conf.mine.sin_addr.s_addr,
+                            app.p4xos_conf.learner_addr.sin_addr.s_addr);
             }
         break;
         }
@@ -260,10 +234,11 @@ int replica_handler(struct rte_mbuf *pkt_in, void *arg) {
         }
         case PAXOS_ACCEPTED: {
             ret = accepted_handler(paxos_hdr, lp);
-            if (ret == SUCCESS) {
-                set_ip_addr(ip, app.p4xos_conf.mine.sin_addr.s_addr,
-                    app.p4xos_conf.learner_addr.sin_addr.s_addr);
+            if (!app.p4xos_conf.respond_to_client) {
+                return DROP_ORIGINAL_PACKET;
             }
+            set_ip_addr(ip, app.p4xos_conf.mine.sin_addr.s_addr,
+                app.p4xos_conf.client.sin_addr.s_addr);
         break;
         }
         case PAXOS_CHOSEN: {
@@ -347,10 +322,6 @@ void proposer_preexecute(struct app_lcore_params_worker *lp)
 
 int proposer_prepare_allocated(struct app_lcore_params_worker *lp, struct paxos_hdr *out)
 {
-    int nb_pkts = app.p4xos_conf.preexec_window - proposer_prepared_count(lp->proposer);
-    if (nb_pkts <= 0)
-        return DROP_ORIGINAL_PACKET;
-
     paxos_prepare pr;
     proposer_prepare(lp->proposer, &pr);
     out->msgtype = PAXOS_PREPARE;
