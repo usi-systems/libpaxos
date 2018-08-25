@@ -99,6 +99,11 @@ static inline int promise_handler(struct paxos_hdr *paxos_hdr,
         paxos_hdr->rnd = rte_cpu_to_be_16(pa.u.prepare.ballot);
         return SUCCESS;
     }
+
+    if (lp->has_holes)
+    {
+        learner_check_holes(lp);
+    }
     return try_accept(lp, paxos_hdr);
 }
 
@@ -145,6 +150,8 @@ new_command_handler(struct paxos_hdr *paxos_hdr,
                             struct app_lcore_params_worker *lp) {
 
     RTE_LOG(DEBUG, P4XOS, "Worker %u: Received NEW_COMMAND\n", lp->worker_id);
+    if (lp->has_holes)
+        return DROP_ORIGINAL_PACKET;
 
     proposer_propose(lp->proposer, (const char*)&paxos_hdr->value, PAXOS_VALUE_SIZE);
     if (try_accept(lp, paxos_hdr) == SUCCESS) {

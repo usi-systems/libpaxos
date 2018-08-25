@@ -148,6 +148,19 @@ proposer_prepare(struct proposer* p, paxos_prepare* out)
 	*out = (paxos_prepare) {inst->iid, inst->ballot};
 }
 
+
+void
+proposer_prepare_instance(struct proposer* p, iid_t iid, paxos_prepare* out)
+{
+	int rv;
+	ballot_t bal = proposer_next_ballot(p, 0);
+	struct instance* inst = instance_new(iid, bal, p->acceptors);
+	khiter_t k = kh_put_instance(p->prepare_instances, iid, &rv);
+	assert(rv > 0);
+	kh_value(p->prepare_instances, k) = inst;
+	*out = (paxos_prepare) {inst->iid, inst->ballot};
+}
+
 int
 proposer_receive_promise(struct proposer* p, paxos_promise* ack,
 	paxos_prepare* out)

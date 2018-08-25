@@ -111,29 +111,22 @@ void app_init_learner(void) {
 
         rte_timer_init(&lp->recv_timer);
 
-        // rte_timer_init(&lp->deliver_timer);
-        //
-        // ret = rte_timer_reset(&lp->deliver_timer, freq, PERIODICAL, lcore,
-        //                    learner_call_deliver, lp);
-        // if (ret < 0) {
-        //      printf("timer is in the RUNNING state\n");
-        // }
-        //
-        // rte_timer_init(&lp->check_hole_timer);
-        // ret = rte_timer_reset(&lp->check_hole_timer, freq, PERIODICAL, lcore,
-        //                       learner_check_holes, lp);
-        // if (ret < 0) {
-        //     printf("timer is in the RUNNING state\n");
-        // }
+        rte_timer_init(&lp->deliver_timer);
+        ret = rte_timer_reset(&lp->deliver_timer, freq, PERIODICAL, lcore,
+                           learner_call_deliver, lp);
+        if (ret < 0) {
+             printf("timer is in the RUNNING state\n");
+        }
 
-        // ret = rte_timer_reset(&lp->recv_timer[lp->lcore_id], app.hz*3, SINGLE,
-        //                         lp->lcore_id, get_chosen, lp);
-        // if (ret < 0) {
-        //     printf("Worker %u timer is in the RUNNING state\n", lcore);
-        // }
+        rte_timer_init(&lp->check_hole_timer);
+        ret = rte_timer_reset(&lp->check_hole_timer, freq, PERIODICAL, lcore,
+                              learner_check_holes_cb, lp);
+        if (ret < 0) {
+            printf("timer is in the RUNNING state\n");
+        }
 
+        lp->proposer = proposer_new(lcore, app.p4xos_conf.num_acceptors);
         if (app.p4xos_conf.leader) {
-            lp->proposer = proposer_new(lcore, app.p4xos_conf.num_acceptors);
             rte_timer_init(&lp->preexecute_timer);
             ret = rte_timer_reset(&lp->preexecute_timer, freq, SINGLE, lcore,
                                     pre_execute_prepare, lp);

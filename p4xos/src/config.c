@@ -822,7 +822,7 @@ int app_parse_args(int argc, char **argv) {
         arg_inc_inst = 1;
         app.p4xos_conf.inc_inst = 1;
       }
-      if (!strcmp(lgopts[option_index].name, "run_prepare")) {
+      if (!strcmp(lgopts[option_index].name, "run-prepare")) {
         arg_run_prepare = 1;
         app.p4xos_conf.run_prepare = 1;
       }

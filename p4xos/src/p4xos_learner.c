@@ -93,35 +93,28 @@ void learner_call_deliver(__rte_unused struct rte_timer *timer,
     }
 }
 
-void learner_check_holes(__rte_unused struct rte_timer *timer,
-                         __rte_unused void *arg) {
-    struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
-    if (lp->has_holes) {
-        paxos_accepted out;
-        while (learner_deliver_next(lp->learner, &out)) {
-            lp->deliver(lp->worker_id, out.iid, out.value.paxos_value_val,
-            out.value.paxos_value_len, lp->deliver_arg);
-            RTE_LOG(DEBUG, P4XOS, "%s Finished instance %u\n", __func__, out.iid);
-            paxos_accepted_destroy(&out);
-        }
-        lp->has_holes = 0;
-    }
+void learner_check_holes(struct app_lcore_params_worker *lp) {
     uint32_t from, to;
     if (learner_has_holes(lp->learner, &from, &to)) {
         lp->has_holes = 1;
         RTE_LOG(WARNING, P4XOS, "Learner %u Holes from %u to %u\n", lp->worker_id,
         from, to);
         uint32_t prepare_size = to - from;
-        if (prepare_size > APP_DEFAULT_NIC_TX_PTHRESH) {
-            prepare_size = APP_DEFAULT_NIC_TX_PTHRESH;
-        }
         if (app.p4xos_conf.run_prepare) {
             send_prepare(lp, from, prepare_size, lp->default_value, lp->default_value_len);
         } else {
             fill_holes(lp, from, prepare_size, lp->default_value,
                         lp->default_value_len);
         }
+    } else {
+        lp->has_holes = 0;
     }
+}
+
+void learner_check_holes_cb(__rte_unused struct rte_timer *timer,
+                         __rte_unused void *arg) {
+    struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
+    learner_check_holes(lp);
 }
 
 
@@ -163,7 +156,7 @@ void send_prepare(struct app_lcore_params_worker *lp, uint32_t inst,
 
     for (i = 0; i < prepare_size; i++) {
         paxos_prepare out;
-        learner_prepare(lp->learner, &out, inst + i);
+        proposer_prepare_instance(lp->proposer, inst + i, &out);
         RTE_LOG(DEBUG, P4XOS, "Worker %u Send Prepare instance %u ballot %u\n",
                 lp->worker_id, out.iid, out.ballot);
         prepare_paxos_message(pkts[i], port, &app.p4xos_conf.mine,

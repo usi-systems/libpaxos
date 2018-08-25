@@ -48,11 +48,12 @@ void proposer_set_instance_id(struct proposer* p, iid_t iid);
 void proposer_prepare(struct proposer* p, paxos_prepare* out);
 int proposer_receive_promise(struct proposer* p, paxos_promise* ack,
 	paxos_prepare* out);
+void proposer_prepare_instance(struct proposer* p, iid_t iid, paxos_prepare* out);
 
 // phase 2
 int proposer_accept(struct proposer* p, paxos_accept* out);
 int proposer_receive_accepted(struct proposer* p, paxos_accepted* ack);
-int proposer_receive_preempted(struct proposer* p, paxos_preempted* ack, 
+int proposer_receive_preempted(struct proposer* p, paxos_preempted* ack,
 	paxos_prepare* out);
 
 // periodic acceptor state
