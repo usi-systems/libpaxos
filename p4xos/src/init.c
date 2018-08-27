@@ -109,14 +109,13 @@ void app_init_learner(void) {
         lp->artificial_drop = app.p4xos_conf.drop;
         uint64_t freq = app.hz;
 
-        rte_timer_init(&lp->recv_timer);
-
-        rte_timer_init(&lp->deliver_timer);
-        ret = rte_timer_reset(&lp->deliver_timer, freq, PERIODICAL, lcore,
-                           learner_call_deliver, lp);
-        if (ret < 0) {
-             printf("timer is in the RUNNING state\n");
-        }
+        // rte_timer_init(&lp->recv_timer);
+        // rte_timer_init(&lp->deliver_timer);
+        // ret = rte_timer_reset(&lp->deliver_timer, freq, PERIODICAL, lcore,
+        //                    learner_call_deliver, lp);
+        // if (ret < 0) {
+        //      printf("timer is in the RUNNING state\n");
+        // }
 
         rte_timer_init(&lp->check_hole_timer);
         ret = rte_timer_reset(&lp->check_hole_timer, freq, PERIODICAL, lcore,
@@ -124,6 +123,9 @@ void app_init_learner(void) {
         if (ret < 0) {
             printf("timer is in the RUNNING state\n");
         }
+
+        rte_timer_init(&lp->checkpoint_timer);
+
 
         lp->proposer = proposer_new(lcore, app.p4xos_conf.num_acceptors);
         if (app.p4xos_conf.leader) {
@@ -589,6 +591,7 @@ void app_init(void) {
   app_init_nics();
   uint32_t global_log_level = rte_log_get_global_level();
   rte_log_set_level(RTE_LOGTYPE_P4XOS, global_log_level);
+  paxos_config.verbosity = global_log_level - 5;
 
   printf("Initialization completed.\n");
 }

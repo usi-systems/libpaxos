@@ -242,7 +242,7 @@
 
 #define STAT_PERIOD 1		/* get stat every 1/STAT_PERIOD (s) */
 #define RESUBMIT_TIMEOUT 1 /* Client resubmit every 1/RESUBMIT_TIMEOUT (s) */
-#define LEADER_CHECK_TIMEOUT 5 /* Client check closed prepare/accept every 1/LEADER_CHECK_TIMEOUT (s) */
+#define LEADER_CHECK_TIMEOUT 20 /* Client check closed prepare/accept every 1/LEADER_CHECK_TIMEOUT (s) */
 #define MAX_N_CONCURRENT_REQUEST 8
 
 #ifdef __cplusplus
@@ -375,6 +375,7 @@ struct app_lcore_params_worker {
 	struct rte_timer deliver_timer;
 	struct rte_timer check_hole_timer;
 	struct rte_timer recv_timer;
+	struct rte_timer checkpoint_timer;
 	struct rte_timer request_timer[MAX_N_CONCURRENT_REQUEST];
 	char* default_value;
 	uint32_t default_value_len;

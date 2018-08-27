@@ -100,10 +100,6 @@ static inline int promise_handler(struct paxos_hdr *paxos_hdr,
         return SUCCESS;
     }
 
-    if (lp->has_holes)
-    {
-        learner_check_holes(lp);
-    }
     return try_accept(lp, paxos_hdr);
 }
 
@@ -276,8 +272,7 @@ int replica_handler(struct rte_mbuf *pkt_in, void *arg) {
     }
     size_t data_size = sizeof(struct paxos_hdr);
     prepare_hw_checksum(pkt_in, data_size);
-    rte_timer_reset(&lp->recv_timer, app.hz, SINGLE, lp->lcore_id,
-                    timer_send_checkpoint, lp);
+
     return ret;
 }
 

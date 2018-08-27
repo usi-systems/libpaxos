@@ -49,6 +49,7 @@ int learner_receive_promise(struct learner* l, paxos_promise* promise,
     paxos_accept* accept);
 int learner_receive_preempted(struct learner* l, paxos_preempted* ack,
     paxos_prepare* out);
+iid_t learner_get_instance_id(struct learner* l);
 
 #ifdef __cplusplus
 }

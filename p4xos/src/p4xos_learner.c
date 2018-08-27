@@ -46,6 +46,8 @@
 #include "paxos.h"
 #include "net_util.h"
 
+#define MAX_PREPARE_SIZE 8
+
 
 int learner_checkpoint_handler(struct paxos_hdr *paxos_hdr, void *arg) {
     struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
@@ -69,14 +71,12 @@ int learner_checkpoint_handler(struct paxos_hdr *paxos_hdr, void *arg) {
 
 void timer_send_checkpoint(struct rte_timer *timer, void *arg) {
     struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
-    RTE_LOG(DEBUG, P4XOS, "Worker %u timeout. Sent checkpoint instance %u\n",
-        lp->worker_id, lp->highest_chosen_inst);
-    send_checkpoint_message(lp->worker_id, lp->highest_chosen_inst);
+    uint32_t highest_delivered = learner_get_instance_id(lp->learner) - 1;
+    RTE_LOG(DEBUG, P4XOS, "Worker %u checkpoint timer timeout.\n", lp->worker_id);
+    send_checkpoint_message(lp->worker_id, highest_delivered);
     if (app.p4xos_conf.leader) {
         proposer_preexecute(lp);
     }
-    rte_timer_reset(timer, app.hz, SINGLE, lp->lcore_id,
-       timer_send_checkpoint, lp);
 }
 
 
@@ -93,6 +93,7 @@ void learner_call_deliver(__rte_unused struct rte_timer *timer,
     }
 }
 
+
 void learner_check_holes(struct app_lcore_params_worker *lp) {
     uint32_t from, to;
     if (learner_has_holes(lp->learner, &from, &to)) {
@@ -100,6 +101,8 @@ void learner_check_holes(struct app_lcore_params_worker *lp) {
         RTE_LOG(WARNING, P4XOS, "Learner %u Holes from %u to %u\n", lp->worker_id,
         from, to);
         uint32_t prepare_size = to - from;
+        if (prepare_size > MAX_PREPARE_SIZE)
+            prepare_size = MAX_PREPARE_SIZE;
         if (app.p4xos_conf.run_prepare) {
             send_prepare(lp, from, prepare_size, lp->default_value, lp->default_value_len);
         } else {
@@ -110,6 +113,7 @@ void learner_check_holes(struct app_lcore_params_worker *lp) {
         lp->has_holes = 0;
     }
 }
+
 
 void learner_check_holes_cb(__rte_unused struct rte_timer *timer,
                          __rte_unused void *arg) {
@@ -229,24 +233,30 @@ void send_accept(struct app_lcore_params_worker *lp, paxos_accept *accept) {
 }
 
 
-void send_checkpoint_message(uint8_t worker_id, uint32_t inst) {
+void send_checkpoint_message(uint8_t worker_id, uint32_t highest_delivered) {
+    RTE_LOG(DEBUG, P4XOS, "Worker %u sent checkpoint instance %u\n",
+        worker_id, highest_delivered);
     uint16_t port = app.p4xos_conf.tx_port;
     uint32_t lcore;
     if (app_get_lcore_for_nic_tx(port, &lcore) < 0) {
         rte_panic("Error: get lcore tx\n");
         return;
     }
-    struct app_lcore_params_io *lp = &app.lcore_params[lcore].io;
+    struct app_lcore_params_io *lp_io = &app.lcore_params[lcore].io;
 
-    uint32_t n_mbufs = lp->tx.mbuf_out[port].n_mbufs;
+    uint32_t n_mbufs = lp_io->tx.mbuf_out[port].n_mbufs;
     struct rte_mbuf *pkt = rte_pktmbuf_alloc(app.lcore_params[lcore].pool);
     if (pkt != NULL) {
         prepare_paxos_message(pkt, port, &app.p4xos_conf.mine,
-                        &app.p4xos_conf.acceptor_addr,
-                        LEARNER_CHECKPOINT, inst, 0, worker_id,
+                        // &app.p4xos_conf.acceptor_addr,
+                        &app.p4xos_conf.primary_replica,
+                        LEARNER_CHECKPOINT, highest_delivered, 0, worker_id,
                         app.p4xos_conf.node_id, 0, 0, NULL, 0);
     }
-    lp->tx.mbuf_out[port].array[n_mbufs] = pkt;
-    lp->tx.mbuf_out[port].n_mbufs++;
-    // app_send_burst(port, lp->tx.mbuf_out[port].array, n_mbufs);
+    lp_io->tx.mbuf_out[port].array[n_mbufs] = pkt;
+    lp_io->tx.mbuf_out[port].n_mbufs++;
+
+    struct app_lcore_params_worker *lp = app_get_worker(worker_id);
+    rte_timer_reset(&lp->checkpoint_timer, app.hz, SINGLE, lp->lcore_id,
+                    timer_send_checkpoint, lp);
 }

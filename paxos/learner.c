@@ -125,6 +125,12 @@ learner_set_instance_id(struct learner* l, iid_t iid)
 	l->highest_iid_closed = iid;
 }
 
+iid_t
+learner_get_instance_id(struct learner* l)
+{
+	return l->current_iid;
+}
+
 void
 learner_receive_accepted(struct learner* l, paxos_accepted* ack)
 {
