@@ -154,18 +154,18 @@ void send_prepare(struct app_lcore_params_worker *lp, uint32_t inst,
     ret = rte_pktmbuf_alloc_bulk(app.lcore_params[lcore].pool, pkts, prepare_size);
 
     if (ret < 0) {
-        RTE_LOG(INFO, USER1, "Not enough entries in the mempools for ACCEPT\n");
+        RTE_LOG(INFO, P4XOS, "Not enough entries in the mempools for ACCEPT\n");
         return;
     }
 
     for (i = 0; i < prepare_size; i++) {
         paxos_prepare out;
         proposer_prepare_instance(lp->proposer, inst + i, &out);
-        RTE_LOG(DEBUG, P4XOS, "Worker %u Send Prepare instance %u ballot %u\n",
+        RTE_LOG(INFO, P4XOS, "Worker %u Send Prepare instance %u ballot %u\n",
                 lp->worker_id, out.iid, out.ballot);
         prepare_paxos_message(pkts[i], port, &app.p4xos_conf.mine,
-            &app.p4xos_conf.acceptor_addr, PAXOS_PREPARE, out.iid,
-            out.ballot, lp->worker_id, app.p4xos_conf.node_id, 0, 0, value, size);
+            &app.p4xos_conf.primary_replica, PAXOS_PREPARE, out.iid,
+            out.ballot, lp->worker_id, app.p4xos_conf.node_id, 0, out.iid, value, size);
 
         mbuf_idx = lp->mbuf_out[port].n_mbufs;
         lp->mbuf_out[port].array[mbuf_idx++] = pkts[i];

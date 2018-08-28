@@ -51,6 +51,7 @@ int learner_receive_preempted(struct learner* l, paxos_preempted* ack,
     paxos_prepare* out);
 iid_t learner_get_instance_id(struct learner* l);
 iid_t learner_get_highest_instance(struct learner* l);
+void learner_receive_chosen(struct learner* l, paxos_accepted* ack);
 
 #ifdef __cplusplus
 }

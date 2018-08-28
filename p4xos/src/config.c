@@ -87,7 +87,7 @@ static const char usage[] =
     "    --reset-inst: Reset leader instance (default value is %u)           \n"
     "    --inc-inst : Proposer increases instance after receiving a response \n"
     "				(default value is %u)                                    \n"
-    "    --run_prepare : Run prepare phase in learner recovery               \n"
+    "    --run-prepare : Run prepare phase in learner recovery               \n"
     "				(default value is %u)                                    \n"
     "    --drop : Artificial drop packets (default value is %u)              \n"
     "    --leader : set node as Paxos leader (default value is %u)           \n"

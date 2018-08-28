@@ -93,6 +93,8 @@ void set_paxos_hdr(struct paxos_hdr *px, uint8_t msgtype, uint32_t inst,
     px->rnd = rte_cpu_to_be_16(rnd);
     px->vrnd = rte_cpu_to_be_16(0);
     px->acptid = rte_cpu_to_be_16(acptid);
+    uint16_t log_index = (uint16_t)(inst & 0xff);
+    px->log_index = rte_cpu_to_be_16(log_index);
     px->reserved = 0;
     char *pval = (char *) &px->value;
     if (size > 0 && value != NULL) {

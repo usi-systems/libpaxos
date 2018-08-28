@@ -63,7 +63,7 @@ int prepare_handler(struct paxos_hdr *paxos_hdr, void *arg)
                 out.u.promise.value.paxos_value_len);
         }
     } else {
-        RTE_LOG(INFO, P4XOS, "Leader Prepare Failed\n");
+        RTE_LOG(INFO, P4XOS, "Worker %u rejected prepare iid %u\n", lp->worker_id, prepare.iid);
         paxos_hdr->msgtype = LEARNER_PREPARE;
         iid_t highest_inst = learner_get_highest_instance(lp->learner);
         paxos_hdr->inst = rte_cpu_to_be_32(highest_inst);

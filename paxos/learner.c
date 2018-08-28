@@ -68,6 +68,7 @@ static struct instance* learner_get_instance(struct learner* l, iid_t iid);
 static struct instance* learner_get_current_instance(struct learner* l);
 static struct instance* learner_get_instance_or_create(struct learner* l,
 	iid_t iid);
+static struct instance* learner_create_instance(struct learner* l, iid_t iid);
 static void learner_delete_instance(struct learner* l, struct instance* inst);
 static struct instance* instance_new(int acceptors);
 static void instance_free(struct instance* i, int acceptors);
@@ -154,6 +155,26 @@ learner_receive_accepted(struct learner* l, paxos_accepted* ack)
 	struct instance* inst;
 	inst = learner_get_instance_or_create(l, ack->iid);
 
+	instance_update(inst, ack, l->acceptors);
+
+	if (instance_has_quorum(inst, l->acceptors)
+		&& (inst->iid > l->highest_iid_closed))
+		l->highest_iid_closed = inst->iid;
+}
+
+void
+learner_receive_chosen(struct learner* l, paxos_accepted* ack)
+{
+	if (ack->iid < l->current_iid) {
+		paxos_log_debug("Dropped chosen for iid %u. Already delivered.", ack->iid);
+		return;
+	}
+
+	struct instance* inst;
+	inst = learner_create_instance(l, ack->iid);
+	ack->aid = 1;
+	instance_update(inst, ack, l->acceptors);
+	ack->aid = 2;
 	instance_update(inst, ack, l->acceptors);
 
 	if (instance_has_quorum(inst, l->acceptors)
@@ -378,15 +399,23 @@ learner_get_current_instance(struct learner* l)
 }
 
 static struct instance*
+learner_create_instance(struct learner* l, iid_t iid)
+{
+	struct instance* inst;
+	int rv;
+	khiter_t k = kh_put_instance(l->instances, iid, &rv);
+	assert(rv != -1);
+	inst = instance_new(l->acceptors);
+	kh_value(l->instances, k) = inst;
+	return inst;
+}
+
+static struct instance*
 learner_get_instance_or_create(struct learner* l, iid_t iid)
 {
 	struct instance* inst = learner_get_instance(l, iid);
 	if (inst == NULL) {
-		int rv;
-		khiter_t k = kh_put_instance(l->instances, iid, &rv);
-		assert(rv != -1);
-		inst = instance_new(l->acceptors);
-		kh_value(l->instances, k) = inst;
+		inst = learner_create_instance(l, iid);
 	}
 	return inst;
 }
