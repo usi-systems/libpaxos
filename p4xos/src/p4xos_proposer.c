@@ -58,10 +58,12 @@ static int get_timer_idex(uint32_t request_id)
 static inline int proposer_chosen_handler(struct paxos_hdr *paxos_hdr,
                                  struct app_lcore_params_worker *lp) {
     uint32_t inst = rte_be_to_cpu_32(paxos_hdr->inst);
-    uint32_t request_id = rte_be_to_cpu_32(paxos_hdr->request_id);
-    uint32_t new_request_id = request_id + app.p4xos_conf.osd;
     uint64_t now = 0;
-
+    uint32_t request_id = rte_be_to_cpu_32(paxos_hdr->request_id);
+    if (request_id <= 0) {
+        RTE_LOG(INFO, P4XOS, "Invalid request_id\n");
+        return DROP_ORIGINAL_PACKET;
+    }
     if (app.p4xos_conf.measure_latency) {
         uint64_t previous = rte_be_to_cpu_64(paxos_hdr->igress_ts);
         if (previous > lp->start_ts) {
@@ -83,9 +85,8 @@ static inline int proposer_chosen_handler(struct paxos_hdr *paxos_hdr,
     lp->nb_delivery++;
     /* New Request */
     paxos_hdr->msgtype = app.p4xos_conf.msgtype;
-    paxos_hdr->request_id = rte_cpu_to_be_32(new_request_id);
     if (app.p4xos_conf.measure_latency) {
-        if (unlikely(request_id % app.p4xos_conf.ts_interval == 0))
+        if (unlikely(inst % app.p4xos_conf.ts_interval == 0))
         {
             if (likely(now == 0)) {
                 now = rte_get_timer_cycles();
@@ -99,7 +100,8 @@ static inline int proposer_chosen_handler(struct paxos_hdr *paxos_hdr,
 #ifdef RESUBMIT
     uint32_t idx = get_timer_idex(request_id);
     lp->resubmit_params[idx]->igress_ts = now;
-    lp->resubmit_params[idx]->request_id = new_request_id;
+    lp->resubmit_params[idx]->request_id += app.p4xos_conf.osd;
+    paxos_hdr->request_id = rte_cpu_to_be_32(lp->resubmit_params[idx]->request_id);
     rte_timer_reset(&lp->request_timer[idx], app.hz/RESUBMIT_TIMEOUT,
         SINGLE, lp->lcore_id, proposer_resubmit, lp->resubmit_params[idx]);
 #endif
@@ -120,10 +122,13 @@ int proposer_handler(struct rte_mbuf *pkt_in, void *arg) {
 
     print_paxos_hdr(paxos_hdr);
     uint8_t msgtype = paxos_hdr->msgtype;
-
+    int ret;
     switch (msgtype) {
         case PAXOS_CHOSEN: {
-        proposer_chosen_handler(paxos_hdr, lp);
+        ret = proposer_chosen_handler(paxos_hdr, lp);
+        if (ret != SUCCESS) {
+            return ret;
+        }
         set_ip_addr(ip, app.p4xos_conf.mine.sin_addr.s_addr,
             app.p4xos_conf.paxos_leader.sin_addr.s_addr);
         break;

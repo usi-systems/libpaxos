@@ -187,14 +187,13 @@ void fill_holes(struct app_lcore_params_worker *lp, uint32_t inst,
     ret = rte_pktmbuf_alloc_bulk(app.lcore_params[lcore].pool, pkts, prepare_size);
 
     if (ret < 0) {
-        RTE_LOG(INFO, USER1, "Not enough entries in the mempools for ACCEPT\n");
-        return;
+        rte_panic("Not enough entries in the mempools for PAXOS_ACCEPT\n");
     }
 
     for (i = 0; i < prepare_size; i++) {
         prepare_paxos_message(pkts[i], port, &app.p4xos_conf.mine,
-                        &app.p4xos_conf.paxos_leader, PAXOS_ACCEPT, inst + i, 0,
-                        lp->worker_id, app.p4xos_conf.node_id, 0, 0, value, size);
+                        &app.p4xos_conf.acceptor_addr, PAXOS_ACCEPT, inst + i, 0,
+                        lp->worker_id, app.p4xos_conf.node_id, 0, inst + i, value, size);
 
         mbuf_idx = lp->mbuf_out[port].n_mbufs;
         lp->mbuf_out[port].array[mbuf_idx++] = pkts[i];
@@ -210,8 +209,7 @@ void send_accept(struct app_lcore_params_worker *lp, paxos_accept *accept) {
     }
     struct rte_mbuf *pkt = rte_pktmbuf_alloc(app.lcore_params[lcore].pool);
     if (pkt == NULL) {
-        RTE_LOG(INFO, USER1, "Not enough entries in the mempools for ACCEPT\n");
-        return;
+        rte_panic("Not enough entries in the mempools for PAXOS_ACCEPT\n");
     }
 
     char *value = accept->value.paxos_value_val;
@@ -251,7 +249,7 @@ void send_checkpoint_message(uint8_t worker_id, uint32_t highest_delivered) {
                         // &app.p4xos_conf.acceptor_addr,
                         &app.p4xos_conf.primary_replica,
                         LEARNER_CHECKPOINT, highest_delivered, 0, worker_id,
-                        app.p4xos_conf.node_id, 0, 0, NULL, 0);
+                        app.p4xos_conf.node_id, 0, highest_delivered, NULL, 0);
     }
     lp_io->tx.mbuf_out[port].array[n_mbufs] = pkt;
     lp_io->tx.mbuf_out[port].n_mbufs++;

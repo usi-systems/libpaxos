@@ -39,10 +39,12 @@
 #include <rte_udp.h>
 
 #include "paxos.h"
+#include "learner.h"
 #include "acceptor.h"
 #include "main.h"
 #include "dpp_paxos.h"
 #include "net_util.h"
+
 
 int prepare_handler(struct paxos_hdr *paxos_hdr, void *arg)
 {
@@ -61,7 +63,10 @@ int prepare_handler(struct paxos_hdr *paxos_hdr, void *arg)
                 out.u.promise.value.paxos_value_len);
         }
     } else {
-        return DROP_ORIGINAL_PACKET;
+        RTE_LOG(INFO, P4XOS, "Leader Prepare Failed\n");
+        paxos_hdr->msgtype = LEARNER_PREPARE;
+        iid_t highest_inst = learner_get_highest_instance(lp->learner);
+        paxos_hdr->inst = rte_cpu_to_be_32(highest_inst);
     }
     return SUCCESS;
 }

@@ -153,12 +153,20 @@ void
 proposer_prepare_instance(struct proposer* p, iid_t iid, paxos_prepare* out)
 {
 	int rv;
-	ballot_t bal = proposer_next_ballot(p, 0);
-	struct instance* inst = instance_new(iid, bal, p->acceptors);
-	khiter_t k = kh_put_instance(p->prepare_instances, iid, &rv);
-	assert(rv > 0);
-	kh_value(p->prepare_instances, k) = inst;
-	*out = (paxos_prepare) {inst->iid, inst->ballot};
+	khiter_t k = kh_get_instance(p->prepare_instances, iid);
+	if (k == kh_end(p->prepare_instances)) {
+		paxos_log_debug("instance %u not pending", iid);
+		ballot_t bal = proposer_next_ballot(p, 0);
+		struct instance* inst = instance_new(iid, bal, p->acceptors);
+		khiter_t k = kh_put_instance(p->prepare_instances, iid, &rv);
+		assert(rv > 0);
+		kh_value(p->prepare_instances, k) = inst;
+		*out = (paxos_prepare) {inst->iid, inst->ballot};
+		return;
+	}
+	// else
+	struct instance* inst = kh_value(p->prepare_instances, k);
+	proposer_preempt(p, inst, out);
 }
 
 int

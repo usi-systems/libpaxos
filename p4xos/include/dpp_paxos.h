@@ -44,8 +44,8 @@
 #define NEW_COMMAND        0x08
 #define FAST_ACCEPT        0x09
 #define CHECKPOINT         0x0A
+#define LEARNER_PREPARE    0x20
 #define LEARNER_CHECKPOINT 0x22
-
 
 #ifdef __cplusplus
 extern "C" {
@@ -117,7 +117,6 @@ void set_paxos_hdr(struct paxos_hdr *px, uint8_t msgtype, uint32_t inst,
 int prepare_handler(struct paxos_hdr *paxos_hdr, void *arg);
 int accept_handler(struct paxos_hdr *paxos_hdr, void *arg);
 int learner_checkpoint_handler(struct paxos_hdr *paxos_hdr, void *arg);
-
 
 #ifdef __cplusplus
 }  /* end extern "C" */
