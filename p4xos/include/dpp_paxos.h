@@ -46,6 +46,7 @@
 #define CHECKPOINT         0x0A
 #define LEARNER_PREPARE    0x20
 #define LEARNER_CHECKPOINT 0x22
+#define SET_INSTANCE 0x30
 
 #ifdef __cplusplus
 extern "C" {

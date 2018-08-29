@@ -164,7 +164,7 @@ void send_prepare(struct app_lcore_params_worker *lp, uint32_t inst,
         RTE_LOG(INFO, P4XOS, "Worker %u Send Prepare instance %u ballot %u\n",
                 lp->worker_id, out.iid, out.ballot);
         prepare_paxos_message(pkts[i], port, &app.p4xos_conf.mine,
-            &app.p4xos_conf.primary_replica, PAXOS_PREPARE, out.iid,
+            &app.p4xos_conf.primary_replica, LEARNER_PREPARE, out.iid,
             out.ballot, lp->worker_id, app.p4xos_conf.node_id, 0, out.iid, value, size);
 
         mbuf_idx = lp->mbuf_out[port].n_mbufs;
