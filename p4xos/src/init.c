@@ -118,7 +118,7 @@ void app_init_learner(void) {
         // }
 
         rte_timer_init(&lp->check_hole_timer);
-        ret = rte_timer_reset(&lp->check_hole_timer, freq, PERIODICAL, lcore,
+        ret = rte_timer_reset(&lp->check_hole_timer, freq/CHECK_HOLE_PERIOD, PERIODICAL, lcore,
                               learner_check_holes_cb, lp);
         if (ret < 0) {
             printf("timer is in the RUNNING state\n");

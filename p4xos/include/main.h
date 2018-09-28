@@ -241,8 +241,10 @@
 #define TIMER_RESOLUTION_CYCLES 16000000ULL /* around 10ms at 1.6 Ghz */
 
 #define STAT_PERIOD 20		/* get stat every 1/STAT_PERIOD (s) */
-#define RESUBMIT_TIMEOUT 10 /* Client resubmit every 1/RESUBMIT_TIMEOUT (s) */
-#define LEADER_CHECK_TIMEOUT 20 /* Client check closed prepare/accept every 1/LEADER_CHECK_TIMEOUT (s) */
+#define RESUBMIT_TIMEOUT 10 /* Clients resubmit every 1/RESUBMIT_TIMEOUT (s) */
+#define LEADER_CHECK_TIMEOUT 20 /* Leader checks closed prepare/accept every 1/LEADER_CHECK_TIMEOUT (s) */
+#define CHECK_HOLE_PERIOD 20 /* learners check hole every 1/CHECK_HOLE_PERIOD (s) */
+#define CHECKPOINT_TIMEOUT 10 /* learners checkpoint timeout 1/CHECKPOINT_TIMEOUT (s) */
 #define MAX_N_CONCURRENT_REQUEST 8
 
 #ifdef __cplusplus

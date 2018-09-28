@@ -255,6 +255,6 @@ void send_checkpoint_message(uint8_t worker_id, uint32_t highest_delivered) {
     lp_io->tx.mbuf_out[port].n_mbufs++;
 
     struct app_lcore_params_worker *lp = app_get_worker(worker_id);
-    rte_timer_reset(&lp->checkpoint_timer, app.hz, SINGLE, lp->lcore_id,
+    rte_timer_reset(&lp->checkpoint_timer, app.hz/CHECKPOINT_TIMEOUT, SINGLE, lp->lcore_id,
                     timer_send_checkpoint, lp);
 }

@@ -160,6 +160,16 @@ new_command_handler(struct paxos_hdr *paxos_hdr,
     }
 }
 
+static inline int
+proposer_set_instance_handler(struct paxos_hdr *paxos_hdr,
+                            struct app_lcore_params_worker *lp) {
+
+    RTE_LOG(DEBUG, P4XOS, "Worker %u: Received SET_INSTANCE\n", lp->worker_id);
+    uint32_t inst = rte_be_to_cpu_32(paxos_hdr->inst);
+    proposer_set_instance_id(lp->proposer, inst);
+    return proposer_prepare_allocated(lp, paxos_hdr);
+}
+
 static inline int learner_chosen_handler(struct paxos_hdr *paxos_hdr,
                                          struct app_lcore_params_worker *lp) {
     int vsize = PAXOS_VALUE_SIZE;
@@ -276,6 +286,14 @@ int replica_handler(struct rte_mbuf *pkt_in, void *arg) {
         }
         case LEARNER_CHECKPOINT: {
             return learner_checkpoint_handler(paxos_hdr, lp);
+        break;
+        }
+        case SET_INSTANCE: {
+            ret = proposer_set_instance_handler(paxos_hdr, lp);
+            if (ret == SUCCESS) {
+                set_ip_addr(ip, app.p4xos_conf.mine.sin_addr.s_addr,
+                    app.p4xos_conf.acceptor_addr.sin_addr.s_addr);
+            }
         break;
         }
 
