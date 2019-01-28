@@ -39,6 +39,7 @@
 #include <rte_ring.h>
 #include <rte_string_fns.h>
 #include <rte_tcp.h>
+#include <rte_hexdump.h>
 
 #include "acceptor.h"
 #include "learner.h"
@@ -509,6 +510,9 @@ static void app_init_nics(void) {
 
     /* Init port */
     printf("Initializing NIC port %u ...\n", port);
+    struct ether_addr addr;
+    rte_eth_macaddr_get(port, &addr);
+    rte_hexdump(stdout, "MAC address of ", &addr, sizeof(struct ether_addr));
     rte_eth_dev_info_get(port, &dev_info);
     if (dev_info.tx_offload_capa & DEV_TX_OFFLOAD_MBUF_FAST_FREE) {
         local_port_conf.txmode.offloads |= DEV_TX_OFFLOAD_MBUF_FAST_FREE;

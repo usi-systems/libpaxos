@@ -44,8 +44,7 @@ git clone git://dpdk.org/dpdk
 cd dpdk
 export RTE_SDK=$LIBDIR/dpdk
 export RTE_TARGET=x86_64-native-linuxapp-gcc
-git checkout v18.02
-make config T=$RTE_TARGET
-sed -i 's/HPET=n/HPET=y/g' build/.config
-make
-mv build $RTE_TARGET
+git checkout v18.08
+make config T=$RTE_TARGET O=$RTE_TARGET
+sed -i 's/HPET=n/HPET=y/g' $RTE_SDK/$RTE_TARGET/.config
+make O=$RTE_TARGET
