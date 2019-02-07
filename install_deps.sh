@@ -33,7 +33,7 @@ sudo cp -r include/leveldb /usr/local/include/
 sudo ldconfig
 
 # Install RocksdB Dependency
-sudo apt-get install -y libgflags-dev libsnappy-dev zlib1g-dev libbz2-dev liblz4-dev
+sudo apt-get install -y libgflags-dev libsnappy-dev zlib1g-dev libbz2-dev liblz4-dev libzstd-dev
 cd $LIBDIR && git clone https://github.com/facebook/rocksdb.git
 cd rocksdb
 git checkout v5.12.2 -b stable
