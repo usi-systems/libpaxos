@@ -6,16 +6,18 @@ mkdir -p $LIBDIR
 if [ -f /etc/debian_version ]; then
     OS="Debian"
     VER=$(cat /etc/debian_version)
-    sudo apt-get install -y libevent-dev
+    sudo apt-get update && sudo apt-get install -y build-essential git cmake libevent-dev
 elif [ -f /etc/redhat-release ]; then
     OS="Red Hat"
     VER=$(cat /etc/redhat-release)
     sudo yum install -y libevent libevent-devel
 fi
 
-cd $LIBDIR && wget https://github.com/msgpack/msgpack-c/releases/download/cpp-1.4.1/msgpack-1.4.1.tar.gz
-mkdir -p msgpack/build && tar -xf msgpack-1.4.1.tar.gz -C msgpack --strip-components 1
-cd msgpack/build
+cd $LIBDIR && git clone https://github.com/msgpack/msgpack-c.git msgpack
+cd msgpack
+git checkout -b 1.4.1 cpp-1.4.1
+mkdir -p build
+cd build
 cmake ..
 make
 sudo make install
@@ -25,13 +27,13 @@ sudo ldconfig
 cd $LIBDIR && git clone https://github.com/google/leveldb.git
 cd leveldb
 git checkout v1.20
-sudo make
+make
 sudo cp --preserve=links out-shared/libleveldb.* /usr/local/lib
 sudo cp -r include/leveldb /usr/local/include/
 sudo ldconfig
 
 # Install RocksdB Dependency
-sudo apt-get install libgflags-dev libsnappy-dev zlib1g-dev libbz2-dev liblz4-dev libzstd-dev
+sudo apt-get install -y libgflags-dev libsnappy-dev zlib1g-dev libbz2-dev liblz4-dev
 cd $LIBDIR && git clone https://github.com/facebook/rocksdb.git
 cd rocksdb
 git checkout v5.12.2 -b stable
@@ -39,6 +41,7 @@ make static_lib
 sudo make install
 
 # Install DPDK Dependency
+sudo apt-get install -y libnuma-dev
 cd $LIBDIR
 git clone git://dpdk.org/dpdk
 cd dpdk
