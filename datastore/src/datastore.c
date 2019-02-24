@@ -54,7 +54,9 @@ void display_rocksdb_statistics(struct rocksdb_params *lp)
 
 void lcore_cleanup(struct rocksdb_lcore_params *lp)
 {
-    rocksdb_checkpoint_object_destroy(lp->cp);
+    if (rocksdb_configurations.enable_checkpoint) {
+        rocksdb_checkpoint_object_destroy(lp->cp);
+    }
     rocksdb_backup_engine_close(lp->be);
     rocksdb_close(lp->db);
 }

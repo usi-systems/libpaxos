@@ -73,26 +73,27 @@ int init_rocksdb(struct rocksdb_params *lp) {
             return -1;
         }
 
-        lp->worker[i].cp = rocksdb_checkpoint_object_create(lp->worker[i].db, &err);
-        if (err != NULL) {
-            fprintf(stderr, "Cannot create checkpoint object: %s\n", err);
-            return -1;
+        if (rocksdb_configurations.enable_checkpoint) {
+            lp->worker[i].cp = rocksdb_checkpoint_object_create(lp->worker[i].db, &err);
+            if (err != NULL) {
+                fprintf(stderr, "Cannot create checkpoint object: %s\n", err);
+                return -1;
+            }
+            // Clean checkpoint directory
+            char cmd[256];
+            snprintf(cmd, 256, "exec rm -rf %s/checkpoints", rocksdb_configurations.db_paths[i]);
+            ret = system(cmd);
+            if (ret < 0) {
+                printf("Cannot remove Checkpoint dir\n");
+                return -1;
+            }
+            snprintf(cmd, 256, "mkdir -p %s/checkpoints", rocksdb_configurations.db_paths[i]);
+            ret = system(cmd);
+            if (ret < 0) {
+                printf("Cannot remove Checkpoint dir\n");
+                return -1;
+            }
         }
-        // Clean checkpoint directory
-        char cmd[256];
-        snprintf(cmd, 256, "exec rm -rf %s/checkpoints", rocksdb_configurations.db_paths[i]);
-        ret = system(cmd);
-        if (ret < 0) {
-            printf("Cannot remove Checkpoint dir\n");
-            return -1;
-        }
-        snprintf(cmd, 256, "mkdir -p %s/checkpoints", rocksdb_configurations.db_paths[i]);
-        ret = system(cmd);
-        if (ret < 0) {
-            printf("Cannot remove Checkpoint dir\n");
-            return -1;
-        }
-
     }
     lp->flops = rocksdb_flushoptions_create();
     lp->readoptions = rocksdb_readoptions_create();
