@@ -106,6 +106,7 @@ struct p4xos_configuration {
 	uint32_t ts_interval;
 	uint32_t rate;
 	uint32_t preexec_window;
+    char *app_config;
 };
 
 size_t get_paxos_offset(void);

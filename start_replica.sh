@@ -10,14 +10,28 @@ LOG_LEVEL=7
 BURST_SIZE=1
 OSD=16
 TS_INTERVAL=1
-CP_INTERVAL=0
-
+cpi=0
+cli_addr=192.168.4.95
+leader_ip=192.168.4.98
+acceptor_ip=224.0.0.103
+src_addr=192.168.4.98
+res_port=0
+max_inst=1000000
+node_id=1
+resp=--resp
+leader=--leader
+baseline=--baseline
+num_ac=3
 mkdir -p /tmp/checkpoints
 sudo rm -rf /tmp/checkpoints/*
 
-sudo ${LIBPAXOS_BIN}/dppaxos/dpdk_replica -c ff -n 4  --socket-mem 512 --file-prefix pg --log-level ${LOG_LEVEL} -- \
---rx "(0,0,0)(1,0,0)" --tx "(0,1)(1,1)" --w "4,5,6,7" --pos-lb 43 \
---lpm "192.168.4.95/32=>0;192.168.4.96/32=>0;192.168.4.97/32=>0;192.168.4.98/32=>1;224.0.0.103/32=>1;224.0.0.104/32=>2;224.0.0.105/32=>1;224.0.0.106/32=>2;" \
---bsz "(${BURST_SIZE},${BURST_SIZE}), (${BURST_SIZE},${BURST_SIZE}), (${BURST_SIZE},${BURST_SIZE})" \
---msgtype 2 --osd ${OSD} --multi-dbs \
---inc-inst --cp-interval ${CP_INTERVAL} --dst 224.0.0.103 --ts-interval ${TS_INTERVAL}
+CMD="${LIBPAXOS_BIN}/dppaxos/dpdk_replica -c ff -n 4  --socket-mem 512 --file-prefix pg --log-level ${LOG_LEVEL} -- \
+--rx \"(0,0,0)\" --tx \"(0,1)\" --w \"4,5,6,7\" --pos-lb 43 \
+--lpm \"192.168.4.0/24=>${res_port};224.0.0.0/4=>1;\" \
+--bsz \"(${BURST_SIZE},${BURST_SIZE}), (${BURST_SIZE},${BURST_SIZE}), (${BURST_SIZE},${BURST_SIZE})\" \
+--multi-dbs --dst 224.0.0.103:9081 --cliaddr ${cli_addr}:27461 \
+--pri ${leader_ip}:9081 --acc-addr ${acceptor_ip}:9081 ${run_prepare}\
+--src ${src_addr}:37452 --port ${res_port} --num-ac ${num_ac} --cp-interval ${cpi} \
+--max ${max_inst} ${baseline} --node-id ${node_id} ${resp} ${leader}"
+
+echo $CMD

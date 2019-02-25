@@ -655,6 +655,12 @@ parse_arg_ip_address(const char *arg, struct sockaddr_in *addr)
     return 0;
 }
 
+static int parse_app_config(const char *arg, char **config_file)
+{
+    *config_file = strdup(arg);
+    return 0;
+}
+
 /* Parse the argument given in the command line of the application */
 int app_parse_args(int argc, char **argv) {
   int opt, ret;
@@ -678,6 +684,7 @@ int app_parse_args(int argc, char **argv) {
       {"cliaddr", 1, 0, 0},     {"pri", 1, 0, 0},
       {"acc-addr", 1, 0, 0},    {"learner-addr", 1, 0, 0},
       {"cp-interval", 1, 0, 0}, {"ts-interval", 1, 0, 0},
+      {"app-config", 1, 0, 0},
       {NULL, 0, 0, 0}};
   uint32_t arg_w = 0;
   uint32_t arg_rx = 0;
@@ -711,6 +718,7 @@ int app_parse_args(int argc, char **argv) {
   uint8_t arg_leader = 0;
   uint8_t arg_checkpoint_interval = 0;
   uint8_t arg_ts_interval = 0;
+  uint32_t arg_app_config = 0;
   argvopt = argv;
 
   while ((opt = getopt_long(argc, argvopt, "", lgopts, &option_index)) != EOF) {
@@ -935,6 +943,14 @@ int app_parse_args(int argc, char **argv) {
         ret = parse_arg_ip_address(optarg, &(app.p4xos_conf.learner_addr));
         if (ret) {
           printf("Incorrect value for --learner-addr argument (%d)\n", ret);
+          return -1;
+        }
+      }
+      if (!strcmp(lgopts[option_index].name, "app-config")) {
+        arg_app_config = 1;
+        ret = parse_app_config(optarg, &app.p4xos_conf.app_config);
+        if (ret) {
+          printf("Incorrect value for --app-config argument (%d)\n", ret);
           return -1;
         }
       }
@@ -1407,12 +1423,14 @@ void app_print_params(void) {
          "Max Instance: %u\n"
          "Proposer TX port: %u\n"
          "Respond to Client: %u\n"
-         "Outstanding packets: %u\n",
+         "Outstanding packets: %u\n"
+         "Application config-file %s\n",
          app.p4xos_conf.num_acceptors, app.p4xos_conf.msgtype,
          app.p4xos_conf.node_id, app.p4xos_conf.multi_dbs,
          app.p4xos_conf.leader,
          app.p4xos_conf.max_inst, app.p4xos_conf.tx_port,
-         app.p4xos_conf.respond_to_client, app.p4xos_conf.osd);
+         app.p4xos_conf.respond_to_client, app.p4xos_conf.osd,
+         app.p4xos_conf.app_config);
   char str[INET_ADDRSTRLEN];
   inet_ntop(AF_INET, &(app.p4xos_conf.paxos_leader.sin_addr), str, INET_ADDRSTRLEN);
   printf("Leader address: %s:%d\n", str, ntohs(app.p4xos_conf.paxos_leader.sin_port));

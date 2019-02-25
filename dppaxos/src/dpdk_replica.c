@@ -217,11 +217,13 @@ int main(int argc, char **argv) {
   signal(SIGKILL, int_handler);
 
   /* Parse application arguments (after the EAL ones) */
-  ret = parse_rocksdb_configuration(argc, argv);
-  if (ret < 0) {
-    rocksdb_print_usage();
-    return -1;
+
+  if (!app.p4xos_conf.baseline && app.p4xos_conf.app_config)
+  {
+      populate_configuration(app.p4xos_conf.app_config, &rocksdb_configurations);
+      print_parameters();
   }
+
   rocks.num_workers = app_get_lcores_worker();
   /* Init */
   app_init();
@@ -230,11 +232,12 @@ int main(int argc, char **argv) {
   app_print_params();
   print_parameters();
 
-  init_rocksdb(&rocks);
   if (app.p4xos_conf.baseline)
     app_set_deliver_callback(baseline_deliver, &rocks);
-  else
-    app_set_deliver_callback(deliver, &rocks);
+  else {
+      init_rocksdb(&rocks);
+      app_set_deliver_callback(deliver, &rocks);
+  }
 
   app_set_worker_callback(replica_handler);
   app_set_stat_callback(stat_cb, &rocks);
