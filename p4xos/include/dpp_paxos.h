@@ -12,8 +12,7 @@
 #define P4XOS_PORT 9081
 
 #define APP_DEFAULT_IP_SRC_ADDR "192.168.4.95:48153"
-#define APP_DEFAULT_IP_DST_ADDR "192.168.4.98:9081"
-#define APP_DEFAULT_IP_BACKUP_DST_ADDR "192.168.4.98:9082"
+#define APP_DEFAULT_IP_LEADER_ADDR "192.168.4.98:9081"
 #define APP_DEFAULT_IP_ACCEPTOR_ADDR "224.0.0.103:9081"
 #define APP_DEFAULT_IP_LEARNER_ADDR "224.0.0.104:9081"
 #define APP_DEFAULT_MESSAGE_TYPE 0x0003
@@ -54,6 +53,7 @@ extern "C" {
 
 
 enum PAXOS_RETURN_CODE {
+  PAXOS_PACKET = 1,
   SUCCESS = 0,
   TO_DROP = -1,
   NO_MAJORITY = -2,
@@ -89,7 +89,6 @@ struct p4xos_configuration {
 	struct sockaddr_in client;
 	struct sockaddr_in mine;
 	struct sockaddr_in paxos_leader;
-	struct sockaddr_in primary_replica;
 	struct sockaddr_in acceptor_addr;
 	struct sockaddr_in learner_addr;
 	uint32_t osd;

@@ -69,7 +69,7 @@ int learner_checkpoint_handler(struct paxos_hdr *paxos_hdr, void *arg) {
 }
 
 
-void timer_send_checkpoint(struct rte_timer *timer, void *arg) {
+void timer_send_checkpoint(__rte_unused struct rte_timer *timer, void *arg) {
     struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
     uint32_t highest_delivered = learner_get_instance_id(lp->learner) - 1;
     RTE_LOG(DEBUG, P4XOS, "Worker %u checkpoint timer timeout.\n", lp->worker_id);
@@ -164,7 +164,7 @@ void send_prepare(struct app_lcore_params_worker *lp, uint32_t inst,
         RTE_LOG(INFO, P4XOS, "Worker %u Send Prepare instance %u ballot %u\n",
                 lp->worker_id, out.iid, out.ballot);
         prepare_paxos_message(pkts[i], port, &app.p4xos_conf.mine,
-            &app.p4xos_conf.primary_replica, LEARNER_PREPARE, out.iid,
+            &app.p4xos_conf.paxos_leader, LEARNER_PREPARE, out.iid,
             out.ballot, lp->worker_id, app.p4xos_conf.node_id, 0, out.iid, value, size);
 
         mbuf_idx = lp->mbuf_out[port].n_mbufs;
@@ -247,7 +247,7 @@ void send_checkpoint_message(uint8_t worker_id, uint32_t highest_delivered) {
     if (pkt != NULL) {
         prepare_paxos_message(pkt, port, &app.p4xos_conf.mine,
                         // &app.p4xos_conf.acceptor_addr,
-                        &app.p4xos_conf.primary_replica,
+                        &app.p4xos_conf.paxos_leader,
                         LEARNER_CHECKPOINT, highest_delivered, 0, worker_id,
                         app.p4xos_conf.node_id, 0, highest_delivered, NULL, 0);
     }

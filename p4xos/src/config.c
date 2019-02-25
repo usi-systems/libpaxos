@@ -114,10 +114,8 @@ static const char usage[] =
     "                (default value is %s)                                   \n"
     "    --learner-addr \"IP\" : learner multicast IP address                \n"
     "                (default value is %s)                                   \n"
-    "    --pri \"IP\" : leader IP address                                    \n"
-    "                (default value is %s)                                   \n"
-    "    --dst \"IP\" : destination IP address proposers use to generate     \n"
-    "                packets (default value is %s)                           \n";
+    "    --leader-addr \"IP\" : leader IP address                            \n"
+    "                (default value is %s)                                   \n";
 
 void app_print_usage(void) {
   printf(
@@ -135,7 +133,7 @@ void app_print_usage(void) {
       APP_DEFAULT_OUTSTANDING, APP_DEFAULT_MAX_INST, APP_DEFAULT_SENDING_RATE,
       APP_PREEXEC_WINDOW,
       APP_DEFAULT_IP_SRC_ADDR, APP_DEFAULT_IP_SRC_ADDR, APP_DEFAULT_IP_ACCEPTOR_ADDR,
-      APP_DEFAULT_IP_LEARNER_ADDR, APP_DEFAULT_IP_DST_ADDR, APP_DEFAULT_IP_BACKUP_DST_ADDR
+      APP_DEFAULT_IP_LEARNER_ADDR, APP_DEFAULT_IP_LEADER_ADDR
     );
 }
 
@@ -680,8 +678,8 @@ int app_parse_args(int argc, char **argv) {
       {"resp", 0, 0, 0},        {"latency", 0, 0, 0},
       {"leader", 0, 0, 0},      {"window", 1, 0, 0},
       {"max", 1, 0, 0},         {"rate", 1, 0, 0},
-      {"src", 1, 0, 0},         {"dst", 1, 0, 0},
-      {"cliaddr", 1, 0, 0},     {"pri", 1, 0, 0},
+      {"src", 1, 0, 0},         {"leader-addr", 1, 0, 0},
+      {"cliaddr", 1, 0, 0},
       {"acc-addr", 1, 0, 0},    {"learner-addr", 1, 0, 0},
       {"cp-interval", 1, 0, 0}, {"ts-interval", 1, 0, 0},
       {"app-config", 1, 0, 0},
@@ -695,9 +693,8 @@ int app_parse_args(int argc, char **argv) {
   uint32_t arg_pos_lb = 0;
   uint32_t arg_num_ac = 0;
   uint32_t src_addr = 0;
-  uint32_t dst_addr = 0;
+  uint32_t leader_addr = 0;
   uint32_t cli_addr = 0;
-  uint32_t pri_addr = 0;
   uint32_t acc_addr = 0;
   uint32_t learner_addr = 0;
   uint32_t arg_max_inst = 0;
@@ -718,7 +715,6 @@ int app_parse_args(int argc, char **argv) {
   uint8_t arg_leader = 0;
   uint8_t arg_checkpoint_interval = 0;
   uint8_t arg_ts_interval = 0;
-  uint32_t arg_app_config = 0;
   argvopt = argv;
 
   while ((opt = getopt_long(argc, argvopt, "", lgopts, &option_index)) != EOF) {
@@ -906,11 +902,11 @@ int app_parse_args(int argc, char **argv) {
           return -1;
         }
       }
-      if (!strcmp(lgopts[option_index].name, "dst")) {
-        dst_addr = 1;
+      if (!strcmp(lgopts[option_index].name, "leader-addr")) {
+        leader_addr = 1;
         ret = parse_arg_ip_address(optarg, &(app.p4xos_conf.paxos_leader));
         if (ret) {
-          printf("Incorrect value for --dst argument (%d)\n", ret);
+          printf("Incorrect value for --leader-addr argument (%d)\n", ret);
           return -1;
         }
       }
@@ -919,14 +915,6 @@ int app_parse_args(int argc, char **argv) {
         ret = parse_arg_ip_address(optarg, &(app.p4xos_conf.client));
         if (ret) {
           printf("Incorrect value for --cliaddr argument (%d)\n", ret);
-          return -1;
-        }
-      }
-      if (!strcmp(lgopts[option_index].name, "pri")) {
-        pri_addr = 1;
-        ret = parse_arg_ip_address(optarg, &(app.p4xos_conf.primary_replica));
-        if (ret) {
-          printf("Incorrect value for --pri argument (%d)\n", ret);
           return -1;
         }
       }
@@ -947,7 +935,6 @@ int app_parse_args(int argc, char **argv) {
         }
       }
       if (!strcmp(lgopts[option_index].name, "app-config")) {
-        arg_app_config = 1;
         ret = parse_app_config(optarg, &app.p4xos_conf.app_config);
         if (ret) {
           printf("Incorrect value for --app-config argument (%d)\n", ret);
@@ -1000,12 +987,8 @@ int app_parse_args(int argc, char **argv) {
     parse_arg_ip_address(APP_DEFAULT_IP_SRC_ADDR, &(app.p4xos_conf.mine));
   }
 
-  if (dst_addr == 0) {
-    parse_arg_ip_address(APP_DEFAULT_IP_DST_ADDR, &(app.p4xos_conf.paxos_leader));
-  }
-
-  if (pri_addr == 0) {
-      parse_arg_ip_address(APP_DEFAULT_IP_BACKUP_DST_ADDR, &(app.p4xos_conf.primary_replica));
+  if (leader_addr == 0) {
+    parse_arg_ip_address(APP_DEFAULT_IP_LEADER_ADDR, &(app.p4xos_conf.paxos_leader));
   }
 
   if (acc_addr == 0) {

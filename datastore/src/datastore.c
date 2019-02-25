@@ -63,9 +63,6 @@ void lcore_cleanup(struct rocksdb_lcore_params *lp)
 
 void cleanup(struct rocksdb_params *lp)
 {
-    // cleanup
-    printf("Successfully Clean up\n");
-
     rocksdb_writeoptions_destroy(lp->writeoptions);
     rocksdb_readoptions_destroy(lp->readoptions);
     rocksdb_options_destroy(lp->options);
@@ -73,4 +70,6 @@ void cleanup(struct rocksdb_params *lp)
     for (; i < lp->num_workers; i++) {
         lcore_cleanup(&lp->worker[i]);
     }
+    // cleanup
+    printf("Successfully Clean up\n");
 }

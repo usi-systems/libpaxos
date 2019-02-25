@@ -204,18 +204,21 @@ static inline int learner_chosen_handler(struct paxos_hdr *paxos_hdr,
 
 
 int replica_handler(struct rte_mbuf *pkt_in, void *arg) {
+    int ret;
     struct app_lcore_params_worker *lp = (struct app_lcore_params_worker *)arg;
+
+    ret = pre_process(pkt_in);
+    if (ret < 0) {
+        RTE_LOG(DEBUG, P4XOS, "Non Paxos Packet\n");
+    }
+
+    if (ret != PAXOS_PACKET)
+        return ret;
+
     paxos_stats(pkt_in, lp);
-    int ret = SUCCESS;
     size_t ip_offset = sizeof(struct ether_hdr);
     struct ipv4_hdr *ip =
     rte_pktmbuf_mtod_offset(pkt_in, struct ipv4_hdr *, ip_offset);
-
-    char src[INET_ADDRSTRLEN];
-    char dst[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET, &(ip->src_addr), src, INET_ADDRSTRLEN);
-    inet_ntop(AF_INET, &(ip->dst_addr), dst, INET_ADDRSTRLEN);
-    RTE_LOG(DEBUG, P4XOS, "%s => %s\n", src, dst);
 
     size_t paxos_offset = get_paxos_offset();
     struct paxos_hdr *paxos_hdr =
@@ -226,11 +229,11 @@ int replica_handler(struct rte_mbuf *pkt_in, void *arg) {
     uint8_t msgtype = paxos_hdr->msgtype;
     switch (msgtype) {
     case PAXOS_RESET: {
-        RTE_LOG(DEBUG, P4XOS, "Worker %u Reset instance %u\n", lp->worker_id,
-                                            rte_be_to_cpu_32(paxos_hdr->inst));
+        RTE_LOG(DEBUG, P4XOS, "Worker %u Reset instance %u\n",
+                    lp->worker_id, rte_be_to_cpu_32(paxos_hdr->inst));
         return TO_DROP;
         }
-        case NEW_COMMAND: {
+        case NEW_COMMAND:
             app.p4xos_conf.client.sin_addr.s_addr = ip->src_addr;
             ret = new_command_handler(paxos_hdr, lp);
             if (ret == SUCCESS) {
@@ -238,7 +241,6 @@ int replica_handler(struct rte_mbuf *pkt_in, void *arg) {
                     app.p4xos_conf.acceptor_addr.sin_addr.s_addr);
             }
         break;
-        }
         case PAXOS_PREPARE: {
             ret = prepare_handler(paxos_hdr, lp);
             if (ret == SUCCESS) {

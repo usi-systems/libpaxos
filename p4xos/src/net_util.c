@@ -19,10 +19,8 @@
 #include <rte_debug.h>
 #include <rte_eal.h>
 #include <rte_ethdev.h>
-#include <rte_ether.h>
 #include <rte_hexdump.h>
 #include <rte_interrupts.h>
-#include <rte_ip.h>
 #include <rte_launch.h>
 #include <rte_lcore.h>
 #include <rte_log.h>
@@ -35,6 +33,11 @@
 #include <rte_prefetch.h>
 #include <rte_random.h>
 #include <rte_ring.h>
+
+#include <rte_ether.h>
+#include <rte_arp.h>
+#include <rte_ip.h>
+#include <rte_icmp.h>
 #include <rte_tcp.h>
 #include <rte_udp.h>
 
@@ -198,4 +201,103 @@ void prepare_paxos_message(struct rte_mbuf *created_pkt, uint16_t port,
 void set_ip_addr(struct ipv4_hdr *ip, uint32_t src, uint32_t dst) {
   ip->dst_addr = dst;
   ip->src_addr = src;
+}
+
+void print_ips(uint32_t *src_ip, uint32_t *dst_ip)
+{
+    char src[INET_ADDRSTRLEN];
+    char dst[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, src_ip, src, INET_ADDRSTRLEN);
+    inet_ntop(AF_INET, dst_ip, dst, INET_ADDRSTRLEN);
+    RTE_LOG(DEBUG, P4XOS, "%s -> %s\n", src, dst);
+}
+
+int handle_arp_packet(struct rte_mbuf *pkt, struct ether_hdr *eth_hdr, size_t offset)
+{
+    struct arp_hdr *arp_hdr;
+    arp_hdr = rte_pktmbuf_mtod_offset(pkt, struct arp_hdr *, offset);
+    print_ips(&arp_hdr->arp_data.arp_sip, &arp_hdr->arp_data.arp_tip);
+    if (arp_hdr->arp_data.arp_tip == app.p4xos_conf.mine.sin_addr.s_addr) {
+        if (arp_hdr->arp_op == rte_cpu_to_be_16(ARP_OP_REQUEST)) {
+            RTE_LOG(DEBUG, P4XOS, "ARP Request\n");
+            arp_hdr->arp_op = rte_cpu_to_be_16(ARP_OP_REPLY);
+            /* Switch src and dst data and set bonding MAC */
+            ether_addr_copy(&eth_hdr->s_addr, &eth_hdr->d_addr);
+            rte_eth_macaddr_get(pkt->port, &eth_hdr->s_addr);
+            ether_addr_copy(&arp_hdr->arp_data.arp_sha, &arp_hdr->arp_data.arp_tha);
+            arp_hdr->arp_data.arp_tip = arp_hdr->arp_data.arp_sip;
+            ether_addr_copy(&eth_hdr->s_addr, &arp_hdr->arp_data.arp_sha);
+            arp_hdr->arp_data.arp_sip = app.p4xos_conf.mine.sin_addr.s_addr;
+            return SUCCESS;
+        }
+    }
+
+    return TO_DROP;
+}
+
+int
+handle_icmp_packet(struct rte_mbuf *pkt, struct ether_hdr *eth_hdr,
+        struct ipv4_hdr *ipv4_hdr, size_t offset)
+{
+    struct icmp_hdr *icmp_hdr = rte_pktmbuf_mtod_offset(pkt, struct icmp_hdr *, offset);
+    RTE_LOG(DEBUG, P4XOS, "ICMP Type: %02x\n", icmp_hdr->icmp_type);
+    if (icmp_hdr->icmp_type == IP_ICMP_ECHO_REQUEST) {
+        if (ipv4_hdr->dst_addr == app.p4xos_conf.mine.sin_addr.s_addr) {
+            icmp_hdr->icmp_type = IP_ICMP_ECHO_REPLY;
+            ether_addr_copy(&eth_hdr->s_addr, &eth_hdr->d_addr);
+            rte_eth_macaddr_get(pkt->port, &eth_hdr->s_addr);
+            ipv4_hdr->dst_addr = ipv4_hdr->src_addr;
+            ipv4_hdr->src_addr = app.p4xos_conf.mine.sin_addr.s_addr;
+            return SUCCESS;
+        }
+    }
+    return TO_DROP;
+}
+
+int handle_udp_packet(struct rte_mbuf *pkt, __rte_unused struct ether_hdr *ether_hdr,
+        __rte_unused struct ipv4_hdr *ipv4_hdr, size_t offset)
+{
+    struct udp_hdr *udp_hdr = rte_pktmbuf_mtod_offset(pkt, struct udp_hdr *, offset);
+    if (rte_be_to_cpu_16(udp_hdr->dst_port) == P4XOS_PORT)
+        return PAXOS_PACKET;
+    else
+        return NON_PAXOS_PACKET;
+}
+
+int
+handle_ip_packet(struct rte_mbuf *pkt, struct ether_hdr *eth_hdr, size_t offset)
+{
+    struct ipv4_hdr *ipv4_hdr;
+    ipv4_hdr = rte_pktmbuf_mtod_offset(pkt, struct ipv4_hdr *, offset);
+    size_t l4_offset = offset + sizeof(struct ipv4_hdr);
+    print_ips(&ipv4_hdr->src_addr, &ipv4_hdr->dst_addr);
+
+    switch (ipv4_hdr->next_proto_id) {
+        case IPPROTO_UDP:
+            return handle_udp_packet(pkt, eth_hdr, ipv4_hdr, l4_offset);
+        case IPPROTO_ICMP:
+            return handle_icmp_packet(pkt, eth_hdr, ipv4_hdr, l4_offset);
+        default:
+            RTE_LOG(DEBUG, P4XOS, "IP Proto: %d\n", ipv4_hdr->next_proto_id);
+            return NO_HANDLER;
+    }
+}
+
+
+int
+pre_process(struct rte_mbuf *pkt)
+{
+    struct ether_hdr *eth_hdr = rte_pktmbuf_mtod_offset(pkt, struct ether_hdr *, 0);
+    size_t l3_offset = sizeof(struct ether_hdr);
+    uint16_t ether_type = rte_be_to_cpu_16(eth_hdr->ether_type);
+    switch (ether_type) {
+        case ETHER_TYPE_ARP:
+            return handle_arp_packet(pkt, eth_hdr, l3_offset);
+        case ETHER_TYPE_IPv4:
+            return handle_ip_packet(pkt, eth_hdr, l3_offset);
+        default:
+            RTE_LOG(DEBUG, P4XOS, "Ether Proto: 0x%04x\n", ether_type);
+            return NO_HANDLER;
+    }
+    return TO_DROP;
 }

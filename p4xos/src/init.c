@@ -59,35 +59,48 @@ static void app_assign_worker_ids(void) {
     }
 
     lp->worker_id = worker_id;
+    /* maps worker <-> lcore */
+    app.map_worker_lcore[worker_id] = lcore;
+    app.map_lcore_worker[lcore] = worker_id;
+
     worker_id++;
   }
 }
 
 void app_init_leader(void) {
-  uint32_t lcore;
+    uint32_t lcore;
+    uint64_t freq = rte_get_timer_hz();
+    for (lcore = 0; lcore < APP_MAX_LCORES; lcore++) {
+        struct app_lcore_params_worker *lp = &app.lcore_params[lcore].worker;
 
-  for (lcore = 0; lcore < APP_MAX_LCORES; lcore++) {
-    struct app_lcore_params_worker *lp = &app.lcore_params[lcore].worker;
-
-    if (app.lcore_params[lcore].type != e_APP_LCORE_WORKER) {
-      continue;
+        if (app.lcore_params[lcore].type != e_APP_LCORE_WORKER) {
+            continue;
+        }
+        lp->cur_inst = 1;
+        lp->proposer = proposer_new(lcore, app.p4xos_conf.num_acceptors);
+        rte_timer_init(&lp->preexecute_timer);
+        int ret = rte_timer_reset(&lp->preexecute_timer, freq, SINGLE, lcore,
+                            pre_execute_prepare, lp);
+        if (ret < 0) {
+            printf("timer is in the RUNNING state\n");
+        }
+        rte_timer_init(&lp->prepare_timer);
+        rte_timer_init(&lp->accept_timer);
     }
-    lp->cur_inst = 1;
-  }
 }
 
 void app_init_acceptor(void) {
-  uint32_t lcore;
+    uint32_t lcore;
 
-  for (lcore = 0; lcore < APP_MAX_LCORES; lcore++) {
-    struct app_lcore_params_worker *lp = &app.lcore_params[lcore].worker;
+    for (lcore = 0; lcore < APP_MAX_LCORES; lcore++) {
+        struct app_lcore_params_worker *lp = &app.lcore_params[lcore].worker;
 
-    if (app.lcore_params[lcore].type != e_APP_LCORE_WORKER) {
-      continue;
+        if (app.lcore_params[lcore].type != e_APP_LCORE_WORKER) {
+            continue;
+        }
+        lp->acceptor = acceptor_new(app.p4xos_conf.node_id);
+        lp->accepted_count = 0;
     }
-    lp->acceptor = acceptor_new(app.p4xos_conf.node_id);
-    lp->accepted_count = 0;
-  }
 }
 
 void app_init_learner(void) {
@@ -106,7 +119,6 @@ void app_init_learner(void) {
         lp->lcore_id = lcore;
         lp->learner = learner_new(app.p4xos_conf.num_acceptors);
         learner_set_instance_id(lp->learner, 0);
-        lp->cur_inst = 0;
         lp->artificial_drop = app.p4xos_conf.drop;
         uint64_t freq = app.hz;
 
@@ -126,20 +138,6 @@ void app_init_learner(void) {
         }
 
         rte_timer_init(&lp->checkpoint_timer);
-
-
-        lp->proposer = proposer_new(lcore, app.p4xos_conf.num_acceptors);
-        if (app.p4xos_conf.leader) {
-            rte_timer_init(&lp->preexecute_timer);
-            ret = rte_timer_reset(&lp->preexecute_timer, freq, SINGLE, lcore,
-                                    pre_execute_prepare, lp);
-            if (ret < 0) {
-                printf("timer is in the RUNNING state\n");
-            }
-
-            rte_timer_init(&lp->prepare_timer);
-            rte_timer_init(&lp->accept_timer);
-        }
     }
 }
 
@@ -792,7 +790,7 @@ app_set_register_cb(uint16_t port, recv_cb event_cb)
         if (app.lcore_params[lcore].type != e_APP_LCORE_WORKER) {
             continue;
         }
-            lp->app_port = port;
-            lp->app_recvfrom = event_cb;
-        }
+        lp->app_port = port;
+        lp->app_recvfrom = event_cb;
+    }
 }

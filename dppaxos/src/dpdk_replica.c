@@ -36,7 +36,7 @@ static void baseline_deliver(unsigned int worker_id,
   }
 }
 
-static void deliver(unsigned int worker_id, unsigned int __rte_unused inst,
+static void rocksdb_deliver(unsigned int worker_id, unsigned int __rte_unused inst,
                     __rte_unused char *val, __rte_unused size_t size,
                     __rte_unused void *arg) {
     if (rocks.num_workers == 1) {
@@ -137,52 +137,6 @@ get_file_size(FILE *fp)
 }
 
 
-int recovery_cb(char *buffer, size_t len, uint32_t worker_id, struct sockaddr_in *from)
-{
-    struct request *ap = (struct request*)buffer;
-    printf("Request type %u\n", ap->type);
-    if (ap->type == BACKUP_REQ) {
-        handle_backup(rocks.worker[worker_id].db, rocks.worker[worker_id].be);
-        char filename[] = "/tmp/backup.tar";
-        char cmd[256];
-        snprintf(cmd, 256, "tar cvf %s %s/backup", filename, rocksdb_configurations.db_paths[worker_id]);
-        int ret = system(cmd);
-        if (ret < 0) {
-            printf("Cannot create tar file for backup\n");
-            return -1;
-        }
-        #define MAXBUFLEN 1024
-        char data[MAXBUFLEN];
-        FILE *fp = fopen(filename, "r");
-        if (fp == NULL) {
-            RTE_LOG(WARNING, P4XOS, "Open file %s has errors\n", filename);
-            return -1;
-        }
-        size_t data_len = fread(data, sizeof(char), MAXBUFLEN, fp);
-        while (data_len > 0)
-        {
-            net_sendto(worker_id, data, data_len, &app.p4xos_conf.primary_replica);
-            data_len = fread(data, sizeof(char), MAXBUFLEN, fp);
-        }
-        fclose(fp);
-
-        return 0;
-    }
-    // else if (ap->type == BACKUP_RES) {
-    //     uint32_t buffer_size = rte_be_to_cpu_32(ap->req.backup_res.bufsize);
-    //
-    //     char filename[] = "/tmp/backup.tar";
-    //     FILE *fp = fopen(filename,"ab");
-    //     if (fp) {
-    //         fwrite(ap->req.backup_res.buffer, buffer_size, 1, fp);
-    //         printf("Write %u bytes to file %s\n", buffer_size, filename);
-    //     }
-    //     fclose(fp);
-    //     return -1;
-    // }
-    return 0;
-}
-
 static void
 int_handler(int sig_num)
 {
@@ -193,28 +147,29 @@ int_handler(int sig_num)
 
 
 int main(int argc, char **argv) {
-  uint32_t lcore;
-  int ret;
+    uint32_t lcore;
+    int ret;
 
-  /* Init EAL */
-  ret = rte_eal_init(argc, argv);
-  if (ret < 0)
-    return -1;
-  argc -= ret;
-  argv += ret;
+    /* Init EAL */
+    ret = rte_eal_init(argc, argv);
+    if (ret < 0)
+        return -1;
 
-  /* Parse application arguments (after the EAL ones) */
-  ret = app_parse_args(argc, argv);
-  if (ret < 0) {
-    app_print_usage();
-    return -1;
-  }
-  argc -= ret;
-  argv += ret;
+    argc -= ret;
+    argv += ret;
 
-  /* catch ctrl-c so we can print on exit */
-  signal(SIGINT, int_handler);
-  signal(SIGKILL, int_handler);
+    /* Parse application arguments (after the EAL ones) */
+    ret = app_parse_args(argc, argv);
+    if (ret < 0) {
+        app_print_usage();
+        return -1;
+    }
+    argc -= ret;
+    argv += ret;
+
+    /* catch ctrl-c so we can print on exit */
+    signal(SIGINT, int_handler);
+    signal(SIGKILL, int_handler);
 
   /* Parse application arguments (after the EAL ones) */
 
@@ -224,31 +179,36 @@ int main(int argc, char **argv) {
       print_parameters();
   }
 
-  rocks.num_workers = app_get_lcores_worker();
-  /* Init */
-  app_init();
-  app_init_learner();
-  app_init_acceptor();
-  app_print_params();
-  print_parameters();
+  if ((rocks.num_workers = app_get_lcores_worker()) < 1) {
+      rte_panic("No core is assigned to workers");
+      return -1;
+  }
+
+    /* Init */
+    app_init();
+    app_init_learner();
+    app_init_acceptor();
+    if (app.p4xos_conf.leader) {
+        app_init_leader();
+    }
+    app_print_params();
+    print_parameters();
 
   if (app.p4xos_conf.baseline)
     app_set_deliver_callback(baseline_deliver, &rocks);
   else {
       init_rocksdb(&rocks);
-      app_set_deliver_callback(deliver, &rocks);
+      app_set_deliver_callback(rocksdb_deliver, &rocks);
   }
 
   app_set_worker_callback(replica_handler);
   app_set_stat_callback(stat_cb, &rocks);
 
-  app_set_register_cb(app.p4xos_conf.primary_replica.sin_port, recovery_cb);
   uint32_t i;
-  uint32_t n_workers = app_get_lcores_worker();
 
   printf("%-8s\t%-4s\t%-10s\t", "Stats", "bsz", "cpi");
   printf("core%-6d", 0);
-  for (i = 1; i < n_workers; i++) {
+  for (i = 1; i < rocks.num_workers; i++) {
     printf("\tcore%-6d", i);
   }
   printf("\t%-10s\t%-10s\t%-10s\n", "packets", "Gbits", "throughput");
@@ -261,5 +221,6 @@ int main(int argc, char **argv) {
     }
   }
   cleanup(&rocks);
+  free_rocksdb_configurations(&rocksdb_configurations);
   return 0;
 }

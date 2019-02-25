@@ -517,7 +517,6 @@ app_lcore_worker(
         for (j = 0; j < bsz_rd; j++) {
             struct rte_mbuf *pkt;
 
-
             if (likely(j < bsz_rd - 1)) {
                 APP_WORKER_PREFETCH1(
                     rte_pktmbuf_mtod(lp->mbuf_in.array[j + 1], unsigned char *));
@@ -528,208 +527,99 @@ app_lcore_worker(
 
             pkt = lp->mbuf_in.array[j];
 
-            struct arp_hdr *arp_hdr;
+            // if (ret == app.p4xos_conf.paxos_leader.sin_port) {
+            //
+            //     RTE_LOG(DEBUG, P4XOS, "Process packet. Code %d\n", ret);
+            //     ret = lp->process_pkt(pkt, lp);
+            //     if (ret < 0) {
+            //         RTE_LOG(DEBUG, P4XOS, "Process dropped packet. Code %d\n", ret);
+            //         rte_pktmbuf_free(pkt);
+            //         continue;
+            //     }
+            // } else if (ret == lp->app_port) {
+            //     RTE_LOG(DEBUG, P4XOS, "App processes packet. Code %d\n", ret);
+            //     size_t udp_offset = sizeof(struct ether_hdr) + sizeof(struct ipv4_hdr);
+            //     struct udp_hdr *udp =
+            //         rte_pktmbuf_mtod_offset(pkt, struct udp_hdr *, udp_offset);
+            //     size_t data_offset = udp_offset + sizeof(struct udp_hdr);
+            //     char* buffer = rte_pktmbuf_mtod_offset(pkt, char*, data_offset);
+            //     size_t len = rte_be_to_cpu_16(udp->dgram_len) - sizeof(struct udp_hdr);
+            //     struct sockaddr_in from;
+            //     from.sin_family = AF_INET;
+            //     from.sin_port = udp->src_port;
+            //     from.sin_addr.s_addr = ipv4_hdr->src_addr;
+            //     ret = lp->app_recvfrom(buffer, len, lp->worker_id, &from);
+            //     if (ret < 0) {
+            //         RTE_LOG(DEBUG, P4XOS, "App dropped packet. Code %d\n", ret);
+            //         rte_pktmbuf_free(pkt);
+            //         continue;
+            //     }
+            // } else  if (ret < 0) {
+            //     RTE_LOG(DEBUG, P4XOS, "Runtime dropped packet. Code %d\n", ret);
+            //     rte_pktmbuf_free(pkt);
+            //     continue;
+            // }
+
+
+            ret = lp->process_pkt(pkt, lp);
+            if (ret < 0) {
+                RTE_LOG(DEBUG, P4XOS, "Process dropped packet. Code %d\n", ret);
+                rte_pktmbuf_free(pkt);
+                continue;
+            }
+
             struct ipv4_hdr *ipv4_hdr;
-            struct udp_hdr *udp_hdr;
-            struct icmp_hdr *icmp_hdr;
-            uint32_t ip_dst, pos;
+            uint32_t ipv4_dst, pos;
             uint32_t port;
-            int ret;
-            char src[INET_ADDRSTRLEN];
-            char dst[INET_ADDRSTRLEN];
+            ipv4_hdr = rte_pktmbuf_mtod_offset(pkt,
+                                               struct ipv4_hdr *,
+                                               sizeof(struct ether_hdr));
+            ipv4_dst = rte_be_to_cpu_32(ipv4_hdr->dst_addr);
 
-            struct ether_hdr *eth_hdr = rte_pktmbuf_mtod_offset(pkt, struct ether_hdr *, 0);
-            size_t ip_offset = sizeof(struct ether_hdr);
-
-            uint32_t bond_ip = app.p4xos_conf.mine.sin_addr.s_addr;
-            uint16_t BOND_PORT = app.p4xos_conf.tx_port;
-            struct ether_addr d_addr;
-            switch (rte_be_to_cpu_16(eth_hdr->ether_type)) {
-                case ETHER_TYPE_ARP:
-                    arp_hdr = rte_pktmbuf_mtod_offset(pkt, struct arp_hdr *, ip_offset);
-                    inet_ntop(AF_INET, &(arp_hdr->arp_data.arp_sip), src, INET_ADDRSTRLEN);
-                    inet_ntop(AF_INET, &(arp_hdr->arp_data.arp_tip), dst, INET_ADDRSTRLEN);
-                    RTE_LOG(DEBUG, P4XOS, "ARP: %s -> %s\n", src, dst);
-                    if (arp_hdr->arp_data.arp_tip == bond_ip) {
-                        if (arp_hdr->arp_op == rte_cpu_to_be_16(ARP_OP_REQUEST)) {
-                            RTE_LOG(DEBUG, P4XOS, "ARP Request\n");
-                            arp_hdr->arp_op = rte_cpu_to_be_16(ARP_OP_REPLY);
-                            /* Switch src and dst data and set bonding MAC */
-                            ether_addr_copy(&eth_hdr->s_addr, &eth_hdr->d_addr);
-                            rte_eth_macaddr_get(BOND_PORT, &eth_hdr->s_addr);
-                            ether_addr_copy(&arp_hdr->arp_data.arp_sha, &arp_hdr->arp_data.arp_tha);
-                            arp_hdr->arp_data.arp_tip = arp_hdr->arp_data.arp_sip;
-                            rte_eth_macaddr_get(BOND_PORT, &d_addr);
-                            ether_addr_copy(&d_addr, &arp_hdr->arp_data.arp_sha);
-                            arp_hdr->arp_data.arp_sip = bond_ip;
-                            ip_dst = rte_be_to_cpu_32(bond_ip);
-                            ret = 0;
-                        }
-                    }
-                    break;
-                case ETHER_TYPE_IPv4:
-                    ipv4_hdr = rte_pktmbuf_mtod_offset(pkt, struct ipv4_hdr *, ip_offset);
-                    size_t l4_offset = ip_offset + sizeof(struct ipv4_hdr);
-                    inet_ntop(AF_INET, &(ipv4_hdr->src_addr), src, INET_ADDRSTRLEN);
-                    inet_ntop(AF_INET, &(ipv4_hdr->dst_addr), dst, INET_ADDRSTRLEN);
-                    ip_dst = rte_be_to_cpu_32(ipv4_hdr->dst_addr);
-
-                    RTE_LOG(DEBUG, P4XOS, "IPv4: %s -> %s\n", src, dst);
-
-                    switch (ipv4_hdr->next_proto_id) {
-                        case IPPROTO_UDP:
-                            udp_hdr = rte_pktmbuf_mtod_offset(pkt, struct udp_hdr *, l4_offset);
-                            ret = udp_hdr->dst_port;
-                            break;
-                        case IPPROTO_ICMP:
-                            icmp_hdr = rte_pktmbuf_mtod_offset(pkt, struct icmp_hdr *, l4_offset);
-                            RTE_LOG(DEBUG, P4XOS, "ICMP: %s -> %s: Type: %02x\n", src, dst, icmp_hdr->icmp_type);
-                            if (icmp_hdr->icmp_type == IP_ICMP_ECHO_REQUEST) {
-                                if (ipv4_hdr->dst_addr == bond_ip) {
-                                    icmp_hdr->icmp_type = IP_ICMP_ECHO_REPLY;
-                                    ether_addr_copy(&eth_hdr->s_addr, &eth_hdr->d_addr);
-                                    rte_eth_macaddr_get(BOND_PORT, &eth_hdr->s_addr);
-                                    ipv4_hdr->dst_addr = ipv4_hdr->src_addr;
-                                    ipv4_hdr->src_addr = bond_ip;
-                                    ip_dst = rte_be_to_cpu_32(ipv4_hdr->dst_addr);
-                                    ret = 0;
-                                }
-                            }
-                            break;
-                        default:
-                            ret = -1;
-                            RTE_LOG(DEBUG, P4XOS, "IP Proto: %d\n", ipv4_hdr->next_proto_id);
-                            break;
-                    }
-                    break;
-                default:
-                    RTE_LOG(DEBUG, P4XOS, "Ether Proto: 0x%04x\n", rte_be_to_cpu_16(eth_hdr->ether_type));
-                    ret = -1;
-                    break;
-            }
-
-
-            if (ret == app.p4xos_conf.paxos_leader.sin_port) {
-
-                RTE_LOG(DEBUG, P4XOS, "Process packet. Code %d\n", ret);
-                ret = lp->process_pkt(pkt, lp);
-                if (ret < 0) {
-                    RTE_LOG(DEBUG, P4XOS, "Process dropped packet. Code %d\n", ret);
-                    rte_pktmbuf_free(pkt);
-                    continue;
-                }
-            } else if (ret == lp->app_port) {
-                RTE_LOG(DEBUG, P4XOS, "App processes packet. Code %d\n", ret);
-                size_t udp_offset = sizeof(struct ether_hdr) + sizeof(struct ipv4_hdr);
-                struct udp_hdr *udp =
-                    rte_pktmbuf_mtod_offset(pkt, struct udp_hdr *, udp_offset);
-                size_t data_offset = udp_offset + sizeof(struct udp_hdr);
-                char* buffer = rte_pktmbuf_mtod_offset(pkt, char*, data_offset);
-                size_t len = rte_be_to_cpu_16(udp->dgram_len) - sizeof(struct udp_hdr);
-                struct sockaddr_in from;
-                from.sin_family = AF_INET;
-                from.sin_port = udp->src_port;
-                from.sin_addr.s_addr = ipv4_hdr->src_addr;
-                ret = lp->app_recvfrom(buffer, len, lp->worker_id, &from);
-                if (ret < 0) {
-                    RTE_LOG(DEBUG, P4XOS, "App dropped packet. Code %d\n", ret);
-                    rte_pktmbuf_free(pkt);
-                    continue;
-                }
-            } else  if (ret < 0) {
-                RTE_LOG(DEBUG, P4XOS, "Runtime dropped packet. Code %d\n", ret);
+            if (unlikely(rte_lpm_lookup(lp->lpm_table, ipv4_dst, &port) != 0)) {
                 rte_pktmbuf_free(pkt);
                 continue;
             }
 
-
-
-
-
-
-            if (unlikely(rte_lpm_lookup(lp->lpm_table, ip_dst, &port) != 0)) {
-                inet_ntop(AF_INET, &(ip_dst), dst, INET_ADDRSTRLEN);
-                RTE_LOG(DEBUG, P4XOS, "Lookup dst %s dropped packet. Code\n", dst);
-                rte_pktmbuf_free(pkt);
+            RTE_LOG(DEBUG, P4XOS, "Unicast packet. Port %d\n", port);
+            pos = lp->mbuf_out[port].n_mbufs;
+            lp->mbuf_out[port].array[pos++] = pkt;
+            if (likely(pos < bsz_wr)) {
+                lp->mbuf_out[port].n_mbufs = pos;
                 continue;
             }
 
-            uint32_t port_mask;
-            if (IS_IPV4_MCAST(ip_dst)) {
-                port_mask = port;
-                /* Mark all packet's segments as referenced port_num times */
-                // rte_pktmbuf_refcnt_update(pkt, (uint16_t)port_num);
+            int ret = rte_ring_sp_enqueue_bulk(lp->rings_out[port],
+                                       (void **)lp->mbuf_out[port].array,
+                                       bsz_wr, NULL);
 
-                for (port = 0; port_mask > 0; port_mask >>= 1, port++) {
-                    /* Prepare output packet and send it out. */
-                    if ((port_mask & 1) != 0) {
-                        RTE_LOG(DEBUG, P4XOS, "Multicast packet. Port %d\n", port);
-
-                        pos = lp->mbuf_out[port].n_mbufs;
-                        lp->mbuf_out[port].array[pos++] = pkt;
-                        if (likely(pos < bsz_wr)) {
-                            lp->mbuf_out[port].n_mbufs = pos;
-                            continue;
-                        }
-                        ret = rte_ring_sp_enqueue_bulk(lp->rings_out[port],
-                                        (void **)lp->mbuf_out[port].array,
-                                        bsz_wr, NULL);
-
-                        if (unlikely(ret == 0)) {
-                            uint32_t k;
-                            for (k = 0; k < bsz_wr; k ++) {
-                                struct rte_mbuf *pkt_to_free = lp->mbuf_out[port].array[k];
-                                rte_pktmbuf_free(pkt_to_free);
-                            }
-                            lp->rings_out_count_drop[port] += bsz_wr;
-                        }
-
-                        lp->mbuf_out[port].n_mbufs = 0;
-                        lp->mbuf_out_flush[port] = 0;
-                    }
+            if (unlikely(ret == 0)) {
+                uint32_t k;
+                for (k = 0; k < bsz_wr; k ++) {
+                    struct rte_mbuf *pkt_to_free = lp->mbuf_out[port].array[k];
+                    rte_pktmbuf_free(pkt_to_free);
                 }
-            } else {
-                RTE_LOG(DEBUG, P4XOS, "Unicast packet. Port %d\n", port);
-                pos = lp->mbuf_out[port].n_mbufs;
-                lp->mbuf_out[port].array[pos++] = pkt;
-                if (likely(pos < bsz_wr)) {
-                    lp->mbuf_out[port].n_mbufs = pos;
-                    continue;
-                }
-
-                int ret = rte_ring_sp_enqueue_bulk(lp->rings_out[port],
-                                           (void **)lp->mbuf_out[port].array,
-                                           bsz_wr, NULL);
-
-                if (unlikely(ret == 0)) {
-                    uint32_t k;
-                    for (k = 0; k < bsz_wr; k ++) {
-                        struct rte_mbuf *pkt_to_free = lp->mbuf_out[port].array[k];
-                        rte_pktmbuf_free(pkt_to_free);
-                    }
-                    lp->rings_out_count_drop[port] += bsz_wr;
-                }
+                lp->rings_out_count_drop[port] += bsz_wr;
+            }
 
 #if APP_STATS
-                lp->rings_out_iters[port] ++;
-                if (ret > 0) {
-                    lp->rings_out_count[port] += bsz_wr;
-                }
-                if (lp->rings_out_iters[port] == APP_STATS) {
-                    printf("\t\tWorker %u out (NIC port %u): enq success rate = %.2f. Dropped %u\n",
-                        (unsigned) lp->worker_id,
-                        port,
-                        ((double) lp->rings_out_count[port]) / ((double) lp->rings_out_iters[port]),
-                        lp->rings_out_count_drop[port]);
-                    lp->rings_out_iters[port] = 0;
-                    lp->rings_out_count[port] = 0;
-                    lp->rings_out_count_drop[port] = 0;
-                }
-#endif
-
-                lp->mbuf_out[port].n_mbufs = 0;
-                lp->mbuf_out_flush[port] = 0;
+            lp->rings_out_iters[port] ++;
+            if (ret > 0) {
+                lp->rings_out_count[port] += bsz_wr;
             }
+            if (lp->rings_out_iters[port] == APP_STATS) {
+                printf("\t\tWorker %u out (NIC port %u): enq success rate = %.2f. Dropped %u\n",
+                    (unsigned) lp->worker_id,
+                    port,
+                    ((double) lp->rings_out_count[port]) / ((double) lp->rings_out_iters[port]),
+                    lp->rings_out_count_drop[port]);
+                lp->rings_out_iters[port] = 0;
+                lp->rings_out_count[port] = 0;
+                lp->rings_out_count_drop[port] = 0;
+            }
+#endif
+            lp->mbuf_out[port].n_mbufs = 0;
+            lp->mbuf_out_flush[port] = 0;
         }
     }
 }

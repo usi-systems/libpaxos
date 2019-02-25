@@ -444,6 +444,10 @@ struct app_params {
 
 	uint8_t force_quit;
 
+	/* Map worker to lcore */
+	uint32_t map_worker_lcore[APP_MAX_LCORES];
+	uint32_t map_lcore_worker[APP_MAX_LCORES];
+
 } __rte_cache_aligned;
 
 extern struct app_params app;
