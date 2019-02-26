@@ -70,6 +70,7 @@ static void app_assign_worker_ids(void) {
 void app_init_leader(void) {
     uint32_t lcore;
     uint64_t freq = rte_get_timer_hz();
+    int ret;
     for (lcore = 0; lcore < APP_MAX_LCORES; lcore++) {
         struct app_lcore_params_worker *lp = &app.lcore_params[lcore].worker;
 
@@ -79,13 +80,25 @@ void app_init_leader(void) {
         lp->cur_inst = 1;
         lp->proposer = proposer_new(lcore, app.p4xos_conf.num_acceptors);
         rte_timer_init(&lp->preexecute_timer);
-        int ret = rte_timer_reset(&lp->preexecute_timer, freq, SINGLE, lcore,
+        ret = rte_timer_reset(&lp->preexecute_timer, freq, SINGLE, lcore,
                             pre_execute_prepare, lp);
         if (ret < 0) {
             printf("timer is in the RUNNING state\n");
         }
         rte_timer_init(&lp->prepare_timer);
+
+        ret = rte_timer_reset(&lp->prepare_timer, app.hz/LEADER_CHECK_TIMEOUT,
+                                    SINGLE, lcore, check_prepare_timeouts, lp);
+        if (ret < 0) {
+            RTE_LOG(DEBUG, P4XOS, "timer is in the RUNNING state\n");
+        }
+
         rte_timer_init(&lp->accept_timer);
+        ret = rte_timer_reset(&lp->accept_timer, app.hz/LEADER_CHECK_TIMEOUT,
+                                        SINGLE, lcore, check_accept_timeouts, lp);
+        if (ret < 0) {
+            RTE_LOG(DEBUG, P4XOS, "timer is in the RUNNING state\n");
+        }
     }
 }
 

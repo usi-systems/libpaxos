@@ -50,8 +50,7 @@
 
 int proposer_prepare_allocated(struct app_lcore_params_worker *lp,
                                 struct paxos_hdr *out);
-void check_prepare_timeouts(__rte_unused struct rte_timer *timer, void *arg);
-void check_accept_timeouts(__rte_unused struct rte_timer *timer, void *arg);
+
 static inline void respond(struct rte_mbuf *pkt_in);
 double cycles_to_ns(uint64_t cycles, uint64_t hz);
 

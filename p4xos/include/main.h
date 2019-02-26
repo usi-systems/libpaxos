@@ -241,10 +241,10 @@
 #define TIMER_RESOLUTION_CYCLES 16000000ULL /* around 10ms at 1.6 Ghz */
 
 #define STAT_PERIOD 1		/* get stat every 1/STAT_PERIOD (s) */
-#define RESUBMIT_TIMEOUT 10 /* Clients resubmit every 1/RESUBMIT_TIMEOUT (s) */
-#define LEADER_CHECK_TIMEOUT 20 /* Leader checks closed prepare/accept every 1/LEADER_CHECK_TIMEOUT (s) */
-#define CHECK_HOLE_PERIOD 20 /* learners check hole every 1/CHECK_HOLE_PERIOD (s) */
-#define CHECKPOINT_TIMEOUT 10 /* learners checkpoint timeout 1/CHECKPOINT_TIMEOUT (s) */
+#define RESUBMIT_TIMEOUT 1 /* Clients resubmit every 1/RESUBMIT_TIMEOUT (s) */
+#define LEADER_CHECK_TIMEOUT 2 /* Leader checks closed prepare/accept every 1/LEADER_CHECK_TIMEOUT (s) */
+#define CHECK_HOLE_PERIOD 2 /* learners check hole every 1/CHECK_HOLE_PERIOD (s) */
+#define CHECKPOINT_TIMEOUT 2 /* learners checkpoint timeout 1/CHECKPOINT_TIMEOUT (s) */
 #define MAX_N_CONCURRENT_REQUEST 8
 
 #ifdef __cplusplus
@@ -519,7 +519,8 @@ void pre_execute_prepare(__rte_unused struct rte_timer *timer, void *arg);
 void send_to_acceptor(struct app_lcore_params_worker *lp, struct paxos_message *pm);
 void paxos_stats(struct rte_mbuf *pkt_in, struct app_lcore_params_worker *lp);
 void free_resubmit_params(struct resubmit_parm *parm);
-
+void check_prepare_timeouts(__rte_unused struct rte_timer *timer, void *arg);
+void check_accept_timeouts(__rte_unused struct rte_timer *timer, void *arg);
 #ifdef __cplusplus
 }  /* end extern "C" */
 #endif

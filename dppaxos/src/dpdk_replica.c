@@ -122,8 +122,9 @@ static void stat_cb(__rte_unused struct rte_timer *timer,
          "\t%-10u\n",
          total_pkts, bytes_to_gbits(total_bytes), delivered_count);
 
-  if (rocks->total_delivered_count >= app.p4xos_conf.max_inst)
-    app.force_quit = 1;
+  /* Do not stop servers */
+  // if (rocks->total_delivered_count >= app.p4xos_conf.max_inst)
+  //   app.force_quit = 1;
 }
 
 

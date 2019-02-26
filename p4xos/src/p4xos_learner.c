@@ -159,13 +159,11 @@ void send_prepare(struct app_lcore_params_worker *lp, uint32_t inst,
     }
 
     for (i = 0; i < prepare_size; i++) {
-        paxos_prepare out;
-        proposer_prepare_instance(lp->proposer, inst + i, &out);
-        RTE_LOG(INFO, P4XOS, "Worker %u Send Prepare instance %u ballot %u\n",
-                lp->worker_id, out.iid, out.ballot);
+        RTE_LOG(INFO, P4XOS, "Worker %u Send missing instance %u to Leader\n",
+                lp->worker_id, inst + i);
         prepare_paxos_message(pkts[i], port, &app.p4xos_conf.mine,
-            &app.p4xos_conf.paxos_leader, LEARNER_PREPARE, out.iid,
-            out.ballot, lp->worker_id, app.p4xos_conf.node_id, 0, out.iid, value, size);
+            &app.p4xos_conf.paxos_leader, LEARNER_PREPARE, inst + i,
+            0, lp->worker_id, app.p4xos_conf.node_id, 0, inst + i, value, size);
 
         mbuf_idx = lp->mbuf_out[port].n_mbufs;
         lp->mbuf_out[port].array[mbuf_idx++] = pkts[i];

@@ -49,6 +49,8 @@
 
 int proposer_prepare_allocated(struct app_lcore_params_worker *lp,
                                 struct paxos_hdr *out);
+int proposer_prepare_inst_allocated(struct app_lcore_params_worker *lp,
+                                struct paxos_hdr *out);
 void check_prepare_timeouts(__rte_unused struct rte_timer *timer, void *arg);
 void check_accept_timeouts(__rte_unused struct rte_timer *timer, void *arg);
 
@@ -158,6 +160,14 @@ new_command_handler(struct paxos_hdr *paxos_hdr,
     } else {
         return proposer_prepare_allocated(lp, paxos_hdr);
     }
+}
+
+static inline int
+learner_prepare_handler(struct paxos_hdr *paxos_hdr,
+                            struct app_lcore_params_worker *lp) {
+
+    RTE_LOG(DEBUG, P4XOS, "Worker %u: Received LEARNER_PREPARE\n", lp->worker_id);
+    return proposer_prepare_inst_allocated(lp, paxos_hdr);
 }
 
 static inline int
@@ -290,6 +300,14 @@ int replica_handler(struct rte_mbuf *pkt_in, void *arg) {
             return learner_checkpoint_handler(paxos_hdr, lp);
         break;
         }
+        case LEARNER_PREPARE: {
+            ret = learner_prepare_handler(paxos_hdr, lp);
+            if (ret == SUCCESS) {
+                set_ip_addr(ip, app.p4xos_conf.mine.sin_addr.s_addr,
+                    app.p4xos_conf.acceptor_addr.sin_addr.s_addr);
+            }
+        break;
+        }
         case SET_INSTANCE: {
             ret = proposer_set_instance_handler(paxos_hdr, lp);
             if (ret == SUCCESS) {
@@ -362,6 +380,17 @@ int proposer_prepare_allocated(struct app_lcore_params_worker *lp, struct paxos_
 {
     paxos_prepare pr;
     proposer_prepare(lp->proposer, &pr);
+    out->msgtype = PAXOS_PREPARE;
+    out->inst = rte_cpu_to_be_32(pr.iid);
+    out->rnd = rte_cpu_to_be_16(pr.ballot);
+    return SUCCESS;
+}
+
+int proposer_prepare_inst_allocated(struct app_lcore_params_worker *lp, struct paxos_hdr *out)
+{
+    paxos_prepare pr;
+    uint32_t inst = rte_be_to_cpu_32(out->inst);
+    proposer_prepare_instance(lp->proposer, inst, &pr);
     out->msgtype = PAXOS_PREPARE;
     out->inst = rte_cpu_to_be_32(pr.iid);
     out->rnd = rte_cpu_to_be_16(pr.ballot);
